@@ -79,6 +79,55 @@ def _ensure_user_keys(provider_id: int, user_ids: list[int]) -> dict[int, int]:
     return keys_by_user
 
 
+def purge_anthropic_mock() -> dict[str, int]:
+    """Удаляет всю синтетическую Anthropic-активность (api_keys + usage + daily_costs).
+
+    Идентифицируем мок по префиксу external_id ключа: `sk-ant-mock-…`.
+    """
+    deleted = {"keys": 0, "events": 0, "daily_costs": 0}
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT ak.id FROM api_keys ak
+               JOIN providers p ON p.id = ak.provider_id
+               WHERE p.name = 'anthropic'
+                 AND ak.external_id LIKE 'sk-ant-mock-%'"""
+        ).fetchall()
+        key_ids = [r["id"] for r in rows]
+        if not key_ids:
+            # Мог остаться только daily_costs anthropic от старых синков — почистим тоже
+            n_dc = conn.execute(
+                """DELETE FROM daily_costs
+                   WHERE provider_id IN (SELECT id FROM providers WHERE name='anthropic')"""
+            ).rowcount
+            n_ev = conn.execute(
+                """DELETE FROM usage_events
+                   WHERE provider_id IN (SELECT id FROM providers WHERE name='anthropic')
+                     AND user_id IN (SELECT u.id FROM users u WHERE u.email LIKE '%@hmnd.ai')"""
+            ).rowcount
+            conn.commit()
+            deleted["events"] = n_ev
+            deleted["daily_costs"] = n_dc
+            return deleted
+
+        placeholders = ",".join(["?"] * len(key_ids))
+        n_events = conn.execute(
+            f"DELETE FROM usage_events WHERE api_key_id IN ({placeholders})",
+            key_ids,
+        ).rowcount
+        n_daily = conn.execute(
+            """DELETE FROM daily_costs
+               WHERE provider_id IN (SELECT id FROM providers WHERE name='anthropic')"""
+        ).rowcount
+        n_keys = conn.execute(
+            f"DELETE FROM api_keys WHERE id IN ({placeholders})", key_ids
+        ).rowcount
+        conn.commit()
+        deleted["keys"] = n_keys
+        deleted["events"] = n_events
+        deleted["daily_costs"] = n_daily
+    return deleted
+
+
 def synth_anthropic(period_days: int = 30) -> dict[str, Any]:
     """Заполняет usage_events и daily_costs синтетикой по Anthropic.
 

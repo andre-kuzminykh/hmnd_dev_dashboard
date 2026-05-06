@@ -22,8 +22,24 @@ CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-html, body, [data-testid="stAppViewContainer"] * {
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+/* Inter on document; let Streamlit's Material Symbols icons keep their own font. */
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"] {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #06091c;
+}
+[data-testid="stAppViewContainer"] :is(p, h1, h2, h3, h4, h5, h6, label, button, input, textarea, select, span, div),
+[data-testid="stSidebar"] :is(p, h1, h2, h3, h4, h5, h6, label, button, input, textarea, select) {
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+/* Make sure Material Symbols glyph spans keep their icon font (otherwise the
+   icon ligature shows as plain text like "dashboard"). */
+[class*="material-symbols"],
+[class*="MaterialIcon"],
+[data-testid*="Icon"] svg,
+i.material-icons,
+.st-emotion-cache-eqffof span[class*="material"] {
+    font-family: 'Material Symbols Rounded', 'Material Symbols Outlined',
+                 'Material Icons', 'Material Icons Outlined' !important;
 }
 
 [data-testid="stAppViewContainer"] {
@@ -35,28 +51,21 @@ html, body, [data-testid="stAppViewContainer"] * {
     background: #ffffff;
     border-right: 1px solid #e8edf3;
 }
-[data-testid="stSidebar"] [data-testid="stSidebarNav"] li a span {
-    font-weight: 500;
-}
 
 /* Headings */
 h1, h2, h3 { letter-spacing: -0.03em; font-weight: 400; }
 h1 { font-weight: 300; }
 
-/* Brand header in sidebar */
+/* Brand header in sidebar (top-left). */
 .hmnd-brand {
     display: flex; align-items: center; gap: 10px;
-    padding: 6px 4px 18px 4px; border-bottom: 1px solid #e8edf3; margin-bottom: 14px;
+    padding: 6px 4px 14px 4px; border-bottom: 1px solid #e8edf3; margin-bottom: 10px;
 }
-.hmnd-brand .dot {
-    width: 22px; height: 22px; border-radius: 6px;
-    background: linear-gradient(135deg, #4953d8 0%, #06091c 100%);
+.hmnd-brand img {
+    width: 26px; height: 26px; object-fit: contain;
 }
 .hmnd-brand .title {
     font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; color: #06091c;
-}
-.hmnd-brand-sub {
-    font-size: 13px; color: #475569; margin: -8px 4px 14px 4px;
 }
 
 /* KPI card */
@@ -143,14 +152,12 @@ def inject() -> None:
 
 
 def render_brand() -> None:
+    """Top-left HUMANOID logo + name. No subtitle inside sidebar."""
     st.sidebar.markdown(
         """
         <div class="hmnd-brand">
-            <div class="dot"></div>
+            <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="HMND" />
             <div class="title">HUMANOID</div>
-        </div>
-        <div style="font-size:13px;color:#475569;margin-bottom:8px">
-            AIOps Dashboard
         </div>
         """,
         unsafe_allow_html=True,

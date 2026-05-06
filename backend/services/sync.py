@@ -54,8 +54,17 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
                 **synth_anthropic(period_days),
             }
         else:
+            # Mock-режим выключен — почистим любые остатки синтетики, чтобы дашборд
+            # показывал только реальные данные.
+            from data.anthropic_mock import purge_anthropic_mock
+
+            purged = purge_anthropic_mock()
             c = AnthropicConnector(api_key=cfg.anthropic_key, mock=not cfg.anthropic_key)
-            out["reports"]["anthropic"] = asdict(c.sync(period_days))
+            report = c.sync(period_days)
+            report_dict = asdict(report)
+            if any(v for v in purged.values()):
+                report_dict["purged_mock"] = purged
+            out["reports"]["anthropic"] = report_dict
 
     if "github" in providers and cfg.github_enabled:
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)

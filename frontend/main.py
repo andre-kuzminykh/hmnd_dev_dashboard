@@ -1,7 +1,8 @@
 """HMND AIOps Dashboard — entry script.
 
-Uses Streamlit's `st.navigation` to render a custom sidebar so the brand
-sits ABOVE the page list and we can attach Material icons to every entry.
+Uses Streamlit's `st.navigation(position="hidden")` to suppress the auto
+page picker, then renders our own brand + page_link list so the HUMANOID
+logo sits at the top-left of the sidebar above all page entries.
 """
 from __future__ import annotations
 
@@ -18,7 +19,8 @@ import streamlit as st
 from backend.config import load_config
 from data.db import DB_PATH, init_schema
 from data.seed import seed
-from frontend.theme import inject
+from frontend.theme import inject, render_brand
+
 
 st.set_page_config(
     page_title="HMND · AIOps",
@@ -41,21 +43,7 @@ def _bootstrap_db() -> None:
 _bootstrap_db()
 
 
-# Brand sits at the very top of the sidebar, above the auto-rendered nav.
-st.sidebar.markdown(
-    """
-    <div class="hmnd-brand">
-        <div class="dot"></div>
-        <div class="title">HUMANOID</div>
-    </div>
-    <div class="hmnd-brand-sub">AIOps Dashboard</div>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# Page registry. Each section lives in frontend/sections/* and renders its
-# content as a normal Streamlit script (no st.set_page_config).
+# Build page registry (always defined; some hidden behind feature flags).
 overview = st.Page("sections/overview.py",     title="Overview",         icon=":material/dashboard:", default=True)
 costs    = st.Page("sections/costs.py",        title="Costs by People",  icon=":material/payments:")
 seats    = st.Page("sections/seats.py",        title="Seats & Licenses", icon=":material/badge:")
@@ -67,9 +55,18 @@ settings = st.Page("sections/settings.py",     title="Settings",         icon=":
 
 pages = [overview, costs, seats, devs, keys, models, alerts, settings]
 if CFG.github_enabled:
-    repos    = st.Page("sections/repositories.py", title="Repositories", icon=":material/folder:")
-    pr_qual  = st.Page("sections/pr_quality.py",   title="PR Quality",   icon=":material/rule:")
+    repos   = st.Page("sections/repositories.py", title="Repositories", icon=":material/folder:")
+    pr_qual = st.Page("sections/pr_quality.py",   title="PR Quality",   icon=":material/rule:")
     pages = [overview, costs, seats, devs, keys, repos, pr_qual, models, alerts, settings]
 
-nav = st.navigation(pages)
+# Hide the auto-rendered page picker so we can fully control sidebar order.
+nav = st.navigation(pages, position="hidden")
+
+# 1. Brand at the very top-left of the sidebar.
+render_brand()
+
+# 2. Manual page links — appear BELOW the brand, with Material icons.
+for page in pages:
+    st.sidebar.page_link(page)
+
 nav.run()
