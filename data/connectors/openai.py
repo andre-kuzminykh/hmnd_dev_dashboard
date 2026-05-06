@@ -207,7 +207,18 @@ class OpenAIConnector(BaseConnector):
             conn.commit()
         return provider_id, {r["name"]: r["id"] for r in rows}
 
-    def _ensure_model(self, name: str, provider_id: int, model_ids: dict[str, int]) -> int:
+    def _ensure_model(
+        self,
+        name: str,
+        provider_id: int,
+        model_ids: dict[str, int],
+        prices_by_model: dict[int, tuple[float, float, float]] | None = None,
+    ) -> int:
+        """Insert (provider_id, name) into models if absent and add the matching
+        default price row. If `prices_by_model` is provided, it is updated in-place
+        with the new model's price so the caller's per-event cost computation can
+        see prices for models that were just created by this very sync.
+        """
         if name in model_ids:
             return model_ids[name]
         with get_conn() as conn:
@@ -225,7 +236,6 @@ class OpenAIConnector(BaseConnector):
             mid = row["id"]
             price = _model_price_lookup(name)
             if price:
-                # If another process already added a price row, ignore.
                 conn.execute(
                     """INSERT OR IGNORE INTO model_prices(
                             model_id, valid_from, input_per_1k, output_per_1k, cache_read_per_1k)
@@ -234,6 +244,11 @@ class OpenAIConnector(BaseConnector):
                 )
             conn.commit()
         model_ids[name] = mid
+        if prices_by_model is not None:
+            # Always populate the cache so a missing entry no longer means
+            # 'cost = 0' for newly-created models. Unknown prices fall back
+            # to (0,0,0) — caller can still detect them via the dict miss.
+            prices_by_model[mid] = price or (0.0, 0.0, 0.0)
         return mid
 
     def _backfill_prices(self, provider_id: int) -> int:
@@ -377,7 +392,9 @@ class OpenAIConnector(BaseConnector):
                         if not user_id:
                             continue
                         model_name = r.get("model") or "unknown"
-                        model_id = self._ensure_model(model_name, provider_id, model_ids)
+                        model_id = self._ensure_model(
+                            model_name, provider_id, model_ids, prices_by_model
+                        )
                         tokens_in = to_int(r.get("input_tokens"))
                         tokens_out = to_int(r.get("output_tokens"))
                         tokens_cached = to_int(r.get("input_cached_tokens"))
@@ -490,7 +507,9 @@ class OpenAIConnector(BaseConnector):
                             if not user_id:
                                 continue
                             model_name = r.get("model") or endpoint.split("/")[-1]
-                            model_id = self._ensure_model(model_name, provider_id, model_ids)
+                            model_id = self._ensure_model(
+                                model_name, provider_id, model_ids, prices_by_model
+                            )
                             tokens_in = to_int(r.get("input_tokens"))
                             tokens_out = to_int(r.get("output_tokens"))
                             requests_n = max(to_int(r.get("num_model_requests"), default=1), 1)
