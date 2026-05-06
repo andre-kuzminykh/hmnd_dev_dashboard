@@ -107,19 +107,6 @@ def filters_bar() -> Filters:
     else:
         period_days = 30
 
-    # Show the actual UTC window the dashboard is querying, so any
-    # mismatch with the provider's own UI is obvious at a glance.
-    if date_from and date_to:
-        st.markdown(
-            f"""
-            <div class="hmnd-window-info">
-                <span class="label">Window (UTC):</span>
-                <span class="value">{date_from.strftime('%Y-%m-%d %H:%M')} — {date_to.strftime('%Y-%m-%d %H:%M')}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
     return Filters(
         period_days=period_days,
         provider=st.session_state.provider,
