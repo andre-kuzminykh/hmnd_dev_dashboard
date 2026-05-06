@@ -1,0 +1,10 @@
+[Unit]
+Description=HMND nightly sync of OpenAI/Anthropic usage
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=__APP_DIR__/.venv/bin/python -m scripts.sync --days 7

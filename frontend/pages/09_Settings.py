@@ -10,8 +10,9 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 
+from backend.config import load_config
+from backend.services.sync import run_sync
 from data.connectors import AnthropicConnector, GitHubConnector, OpenAIConnector
-from data.seed import seed
 from frontend.components import hero, section
 from frontend.theme import inject, render_brand
 
@@ -20,42 +21,90 @@ st.set_page_config(page_title="Settings · HMND", layout="wide")
 inject()
 render_brand()
 
+CFG = load_config()
+
 hero(
     "F-09 · Settings",
     'Подключение <span class="accent">источников</span>',
-    "Ключи OpenAI/Anthropic/GitHub. Без ключей дашборд работает в mock-режиме на seed-данных.",
+    "Ключи приходят из переменных окружения сервера или .streamlit/secrets.toml.",
 )
 
-# FR-09.1.1.2 — секреты живут в session_state и не пишутся в БД
-session_keys = st.session_state.setdefault("api_keys", {})
 
-section("Credentials")
+def _key_status(key: str) -> str:
+    if not key:
+        return '<span class="hmnd-badge revoke">missing</span>'
+    return '<span class="hmnd-badge keep">loaded · ' + f"{key[:7]}…{key[-4:]}" + "</span>"
+
+
+section("API keys (env / secrets.toml)")
+st.markdown(
+    f"""
+    <div style="font-size:14px;line-height:1.8">
+        <b>OPENAI_API_KEY</b> &nbsp;{_key_status(CFG.openai_key)}<br>
+        <b>ANTHROPIC_API_KEY</b> &nbsp;{_key_status(CFG.anthropic_key)}<br>
+        <b>GITHUB_TOKEN</b> &nbsp;{_key_status(CFG.github_token)} ·
+        feature flag <code>HMND_GITHUB_ENABLED</code> = {"on" if CFG.github_enabled else "off"}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.caption(
+    "Настройка ключей: добавить в systemd unit `Environment=OPENAI_API_KEY=...` или "
+    "положить в `.streamlit/secrets.toml`. После изменения — `sudo systemctl restart hmnd-dashboard`."
+)
+
+section("Connection test")
 c1, c2, c3 = st.columns(3)
 with c1:
-    session_keys["openai"] = st.text_input(
-        "OpenAI API key", session_keys.get("openai", ""), type="password"
-    )
-    if st.button("Test OpenAI"):
-        ok = OpenAIConnector(session_keys["openai"], mock=not session_keys["openai"]).test_connection()
-        st.success("connected (mock)" if not session_keys["openai"] else f"connection: {ok}")
-
+    if st.button("Test OpenAI", use_container_width=True):
+        c = OpenAIConnector(api_key=CFG.openai_key, mock=not CFG.openai_key)
+        ok = c.test_connection()
+        if c.mock:
+            st.info("mock mode (no key)")
+        elif ok:
+            st.success("connected")
+        else:
+            st.error("failed — check key permissions")
 with c2:
-    session_keys["anthropic"] = st.text_input(
-        "Anthropic API key", session_keys.get("anthropic", ""), type="password"
-    )
-    if st.button("Test Anthropic"):
-        ok = AnthropicConnector(session_keys["anthropic"], mock=not session_keys["anthropic"]).test_connection()
-        st.success("connected (mock)" if not session_keys["anthropic"] else f"connection: {ok}")
-
+    if st.button("Test Anthropic", use_container_width=True):
+        c = AnthropicConnector(api_key=CFG.anthropic_key, mock=not CFG.anthropic_key)
+        ok = c.test_connection()
+        if c.mock:
+            st.info("mock mode (no key)")
+        elif ok:
+            st.success("connected")
+        else:
+            st.error("failed — admin key required")
 with c3:
-    session_keys["github"] = st.text_input(
-        "GitHub token", session_keys.get("github", ""), type="password"
-    )
-    if st.button("Test GitHub"):
-        ok = GitHubConnector(session_keys["github"], mock=not session_keys["github"]).test_connection()
-        st.success("connected (mock)" if not session_keys["github"] else f"connection: {ok}")
+    if st.button("Test GitHub", use_container_width=True, disabled=not CFG.github_enabled):
+        c = GitHubConnector(api_key=CFG.github_token, mock=not CFG.github_token)
+        ok = c.test_connection()
+        if c.mock:
+            st.info("mock mode (no token)")
+        elif ok:
+            st.success("connected")
+        else:
+            st.error("failed")
 
-section("Demo data")
-if st.button("Reseed database (drops & regenerates demo data)"):
-    seed()
-    st.success("Database reseeded.")
+section("Sync data")
+days = st.slider("Period (days)", 1, 30, 7)
+if st.button("Run sync now", type="primary"):
+    with st.spinner("Pulling data from connected providers…"):
+        result = run_sync(period_days=days)
+    st.success(f"Daily costs refreshed: {result.get('daily_costs_refreshed')}")
+    st.json(result)
+
+section("Maintenance")
+if st.button("Wipe all data (drop tables, recreate schema)"):
+    from data.db import init_schema, get_conn
+    with get_conn() as conn:
+        for t in [
+            "ai_code_attribution", "alerts", "pull_requests", "commits",
+            "repositories", "daily_costs", "usage_events", "seats",
+            "model_prices", "models", "providers", "users", "teams",
+        ]:
+            conn.execute(f"DELETE FROM {t}")
+        conn.commit()
+    init_schema()
+    st.success("Database wiped.")

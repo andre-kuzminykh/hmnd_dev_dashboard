@@ -2,46 +2,66 @@
 
 Streamlit-дашборд для мониторинга расходов на OpenAI и Anthropic, утилизации сидений, активности разработчиков и доли AI-кода в репозиториях.
 
-## Quickstart
+## Локальный запуск (для проверки)
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env                 # заполнить ключи
+export $(grep -v '^#' .env | xargs)  # подгрузить env-переменные
 
-# 1. Создать БД и засеять демо-данные (генерирует ~30 дней usage_events, PR'ы, alerts)
+# Создать схему БД
 python -m scripts.init_db
 
-# 2. Запустить дашборд
+# (Опционально) подтянуть реальные данные за 7 дней
+python -m scripts.sync --days 7
+
+# Запустить
 streamlit run frontend/app.py
 ```
 
-После старта дашборд доступен на http://localhost:8501.
+Откроется на http://localhost:8501.
+
+## Переменные окружения
+
+| Переменная | Описание |
+|---|---|
+| `OPENAI_API_KEY` | OpenAI Organization Admin key (`sk-admin-...`) |
+| `ANTHROPIC_API_KEY` | Anthropic Admin key (для `/v1/organizations/...`) |
+| `GITHUB_TOKEN` | GitHub PAT (только если `HMND_GITHUB_ENABLED=true`) |
+| `HMND_GITHUB_ENABLED` | `true/false` — показывать страницы Repositories/PR Quality и AI code share KPI |
+| `HMND_DEMO_DATA` | `true` — засеять демо-данные (для разработки) |
+| `HMND_DB_PATH` | путь к SQLite (по умолчанию `./data/hmnd.db`) |
+
+## Деплой на GCP `human-1` (Ubuntu 22.04)
+
+```bash
+git clone <repo> hmnd_dev_dashboard
+cd hmnd_dev_dashboard
+bash deploy/install.sh
+nano .env           # вписать OPENAI_API_KEY, ANTHROPIC_API_KEY
+sudo systemctl restart hmnd-dashboard
+sudo htpasswd -c /etc/nginx/.htpasswd andrey   # пароль на nginx basic-auth
+```
+
+Подробный пошаговый гайд — в `docs/DEPLOY.md`.
 
 ## Структура
 
 ```
 docs/SPEC.md         — Спецификация: Feature → US → BDD → FR/NFR → Tests
+docs/DEPLOY.md       — Пошаговый деплой
 data/                — Слой данных (schema, models, seed, коннекторы)
-backend/             — Слой сервисов (KPI, costs, seats, alerts, ...)
+backend/             — Слой сервисов (KPI, costs, seats, alerts, sync, …)
 frontend/            — Streamlit UI (theme + pages)
-tests/               — Тесты по ID требований из спеки
-scripts/             — init_db, sync, ad-hoc задачи
+tests/               — Тесты по ID требований
+scripts/init_db.py   — создать/пересоздать схему
+scripts/sync.py      — pull данных из OpenAI/Anthropic/GitHub
+deploy/              — systemd units + install.sh
 ```
-
-## Подключение реальных источников
-
-В `Settings` в дашборде вводятся ключи:
-
-- `OPENAI_API_KEY` — Usage API.
-- `ANTHROPIC_API_KEY` — Usage API.
-- `GITHUB_TOKEN` — для PR/commit метаданных.
-
-Без ключей дашборд работает в `mock=True` режиме на seed-данных.
 
 ## Тесты
 
 ```bash
 pytest -q
 ```
-
-Каждый тест подписан ID требования из `docs/SPEC.md`.

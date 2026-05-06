@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from backend.config import load_config
 from backend.services.repos import get_repos_overview
 from frontend.components import badge, filters_bar, hero, section
 from frontend.theme import BLUE, NAVY, inject, render_brand
@@ -21,11 +22,37 @@ st.set_page_config(page_title="Repositories · HMND", layout="wide")
 inject()
 render_brand()
 
+CFG = load_config()
+
 hero(
     "F-05 · Repositories",
     'Доля <span class="accent">AI-кода</span> в репозиториях',
     "Сколько % кода в каждом репозитории создано ИИ. Контроль рискованных компонентов.",
 )
+
+if not CFG.github_enabled:
+    st.markdown(
+        """
+        <div style="
+            border:1px dashed #c7d2fe; border-radius:18px; padding:32px; background:#fcfdff;
+            text-align:center; color:#475569;
+        ">
+            <div style="font-size:13px;color:#4953d8;letter-spacing:.12em;text-transform:uppercase;font-weight:600">
+                Coming soon
+            </div>
+            <div style="font-size:22px;color:#06091c;font-weight:300;margin-top:8px">
+                Подключи GitHub, чтобы увидеть долю AI-кода
+            </div>
+            <p style="margin-top:8px">
+                Открой <b>Settings</b> → введи GitHub Token → запусти Sync. После этого здесь
+                появятся реальные репозитории, коммиты и AI-attribution.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
 
 filters = filters_bar()
 rows = get_repos_overview(filters)

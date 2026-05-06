@@ -13,6 +13,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from backend.config import load_config
 from backend.services.overview import get_overview_kpis, get_daily_spend_series
 from data.db import DB_PATH, init_schema
 from data.seed import seed
@@ -33,12 +34,15 @@ inject()
 render_brand()
 
 
+CFG = load_config()
+
+
 def _bootstrap_db():
+    init_schema()
     if not DB_PATH.exists() or os.environ.get("HMND_FORCE_SEED") == "1":
-        with st.spinner("Initialising demo dataset…"):
-            seed()
-    else:
-        init_schema()
+        if CFG.demo_data:
+            with st.spinner("Initialising demo dataset…"):
+                seed()
 
 
 _bootstrap_db()
@@ -54,7 +58,7 @@ filters = filters_bar()
 kpis = get_overview_kpis(filters)
 
 
-# FR-01.1.1.4 — 7 видимых KPI-карточек (suspicious_count выводим в нижнем ряду)
+# FR-01.1.1.4 — KPI-карточки. AI code share показываем только если GitHub подключён.
 kpi_row([
     {"label": "Total spend",   "value": fmt_money(kpis["total_spend"]),
      "delta": kpis["total_spend_delta"], "note": "vs prev period"},
@@ -65,16 +69,20 @@ kpi_row([
     {"label": "Active users",  "value": str(kpis["active_users"]),
      "delta": kpis["active_users_delta"], "note": "with activity in period"},
 ])
-kpi_row([
+bottom_row = [
     {"label": "Seats used",       "value": str(kpis["seats_used"]),
      "delta": None, "note": "assigned seats"},
     {"label": "Cost per user",    "value": fmt_money(kpis["cost_per_user"]),
      "delta": kpis["cost_per_user_delta"], "note": "average"},
-    {"label": "AI code share",    "value": fmt_pct(kpis["ai_code_share"]),
-     "delta": kpis["ai_code_share_delta"], "note": "merged AI lines / total"},
     {"label": "Suspicious",       "value": str(kpis["suspicious_count"]),
      "delta": None, "note": "open alerts"},
-])
+]
+if CFG.github_enabled:
+    bottom_row.insert(2, {
+        "label": "AI code share", "value": fmt_pct(kpis["ai_code_share"]),
+        "delta": kpis["ai_code_share_delta"], "note": "merged AI lines / total",
+    })
+kpi_row(bottom_row)
 
 # Время & провайдер
 section("Spend over time")
