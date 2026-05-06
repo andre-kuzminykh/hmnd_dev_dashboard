@@ -176,7 +176,58 @@ class OpenAIConnector(BaseConnector):
         # which gives accurate per-user attribution that the costs endpoint
         # cannot provide (it does not support group_by=user_id).
         self._sync_costs_report_only(start_dt, end_dt, report)
+        # F-13.x — calibrate per-event cost_usd to match the provider's own
+        # daily totals from /costs. Default on; turn off with
+        # HMND_CALIBRATE_TO_BILLING=false if you want raw model-priced numbers.
+        if os.environ.get("HMND_CALIBRATE_TO_BILLING", "true").lower() in {"1", "true", "yes", "on"}:
+            self._calibrate_to_reported(start_dt, end_dt, provider_id, report)
         return report
+
+    def _calibrate_to_reported(
+        self, start_dt: datetime, end_dt: datetime, provider_id: int, report: SyncReport
+    ) -> None:
+        """Per-day proportional rescale so SUM(usage_events.cost_usd) == provider_totals.
+
+        Per-user breakdown stays proportional to that user's token share of the
+        day; the total now matches OpenAI's billing UI exactly (modulo sync
+        lag for the current day).
+        """
+        days_calibrated = 0
+        with get_conn() as conn:
+            # Iterate every (provider, day) we have a reported total for in
+            # the sync window — there are at most ~31 of them.
+            rows = conn.execute(
+                """SELECT day, cost_usd FROM provider_totals
+                   WHERE provider_id = ? AND day BETWEEN ? AND ?""",
+                (provider_id, start_dt.date().isoformat(), end_dt.date().isoformat()),
+            ).fetchall()
+            for r in rows:
+                day = r["day"]
+                reported = float(r["cost_usd"] or 0)
+                if reported <= 0:
+                    continue
+                computed_row = conn.execute(
+                    """SELECT COALESCE(SUM(cost_usd), 0) AS s
+                       FROM usage_events
+                       WHERE provider_id = ? AND date(occurred_at) = ?""",
+                    (provider_id, day),
+                ).fetchone()
+                computed = float(computed_row["s"] or 0)
+                if computed <= 0:
+                    continue
+                scale = reported / computed
+                # Skip near-no-op scaling to keep the diff log small.
+                if abs(scale - 1.0) < 0.001:
+                    continue
+                conn.execute(
+                    """UPDATE usage_events SET cost_usd = ROUND(cost_usd * ?, 6)
+                       WHERE provider_id = ? AND date(occurred_at) = ?""",
+                    (scale, provider_id, day),
+                )
+                days_calibrated += 1
+            conn.commit()
+        if days_calibrated:
+            report.errors.append(f"calibrated {days_calibrated} days to provider_totals")
 
     # ---- api keys ----
     def _sync_api_keys(

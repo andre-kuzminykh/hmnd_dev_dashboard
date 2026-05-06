@@ -32,8 +32,8 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        echo "[sync] starting periodic loop";
+        echo "[sync] starting periodic loop (every 15 min)";
         while true; do
           python -m scripts.sync --days 7 || echo "[sync] failed, will retry";
-          sleep 3600;
+          sleep 900;
         done
