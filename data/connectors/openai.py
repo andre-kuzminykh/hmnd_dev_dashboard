@@ -42,16 +42,55 @@ OPENAI_DEFAULT_PRICES: dict[str, tuple[float, float, float]] = {
 }
 
 
+def _load_price_overrides() -> dict[str, tuple[float, float, float]]:
+    """Read HMND_OPENAI_PRICES_OVERRIDE — a JSON object mapping model name
+    (or prefix) to a 3-tuple [input, output, cached] $/1K. Empty dict on
+    invalid JSON.
+
+    Example:
+        HMND_OPENAI_PRICES_OVERRIDE='{"gpt-5.5":[0.002,0.008,0.0005]}'
+    """
+    raw = os.environ.get("HMND_OPENAI_PRICES_OVERRIDE", "").strip()
+    if not raw:
+        return {}
+    try:
+        import json
+        data = json.loads(raw)
+    except Exception:
+        return {}
+    out: dict[str, tuple[float, float, float]] = {}
+    for name, p in data.items():
+        if isinstance(p, (list, tuple)) and len(p) == 3:
+            try:
+                out[name] = (float(p[0]), float(p[1]), float(p[2]))
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
 def _model_price_lookup(name: str) -> tuple[float, float, float] | None:
-    """Find prices for `name` (exact) or its base (e.g. 'gpt-4o-2024-08-06' → 'gpt-4o').
+    """Find prices for `name`. Priority order:
+        1. Exact match in HMND_OPENAI_PRICES_OVERRIDE
+        2. Exact match in OPENAI_DEFAULT_PRICES
+        3. Longest-prefix match in HMND_OPENAI_PRICES_OVERRIDE
+        4. Longest-prefix match in OPENAI_DEFAULT_PRICES
 
     Returns None when no match is found — caller should default to 0.
     """
     if not name:
         return None
+    overrides = _load_price_overrides()
+    # 1) exact override
+    if name in overrides:
+        return overrides[name]
+    # 2) exact default
     if name in OPENAI_DEFAULT_PRICES:
         return OPENAI_DEFAULT_PRICES[name]
-    # Try longest-prefix match (handles versioned models like gpt-4o-2024-08-06)
+    # 3) prefix override (overrides win over defaults at the same prefix length)
+    for base in sorted(overrides.keys(), key=len, reverse=True):
+        if name.startswith(base):
+            return overrides[base]
+    # 4) prefix default
     for base in sorted(OPENAI_DEFAULT_PRICES.keys(), key=len, reverse=True):
         if name.startswith(base):
             return OPENAI_DEFAULT_PRICES[base]
