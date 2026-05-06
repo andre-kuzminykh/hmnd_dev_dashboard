@@ -13,7 +13,7 @@ from frontend.theme import BLUE, NAVY
 CFG = load_config()
 
 hero(
-    "F-05 · Repositories",
+    "Repositories",
     'Share of <span class="accent">AI code</span> per repo',
     "How much of every repository was written by AI. Visibility into risk on critical components.",
 )

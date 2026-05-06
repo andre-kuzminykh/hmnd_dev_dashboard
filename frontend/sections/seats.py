@@ -8,7 +8,7 @@ from backend.services.seats import get_seats_summary, get_seats_table
 from frontend.components import badge, fmt_money, hero, kpi_row, section
 
 hero(
-    "F-03 · Seats & Licenses",
+    "Seats & Licenses",
     'Who <span class="accent">occupies</span> a paid seat',
     "Highlight seats that are paid for but unused, so they can be revoked.",
 )

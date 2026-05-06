@@ -10,7 +10,7 @@ from frontend.components import badge, filters_bar, fmt_money, hero, kpi_row, se
 from frontend.theme import ANTHROPIC, NAVY, OPENAI, PROVIDER_COLORS
 
 hero(
-    "F-11 · API Keys",
+    "API Keys",
     'Spend per <span class="accent">API key</span>',
     "Which keys generate the most traffic and cost. Helps with rotation and cleanup.",
 )

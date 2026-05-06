@@ -46,16 +46,26 @@ def _api_keys_for_provider(provider: str) -> list[dict[str, Any]]:
 
 
 def filters_bar() -> Filters:
-    """FR-13.1.* / FR-13.2.* — provider, period (preset or custom), team, API key."""
-    # init session_state defaults once
+    """FR-13.1.* / FR-13.2.* — provider, period (preset or custom), team, API key.
+
+    Layout: a single row of four selectboxes; an inline date_input appears
+    below only when the period preset is set to 'Custom'.
+    """
     st.session_state.setdefault("preset", DEFAULT_PRESET)
     st.session_state.setdefault("provider", "all")
     st.session_state.setdefault("team", "all")
     st.session_state.setdefault("custom_range", (datetime.utcnow().date(), datetime.utcnow().date()))
     st.session_state.setdefault("api_key_id", None)
 
-    # row 1 — provider | preset | team
-    c1, c2, c3 = st.columns([1, 1.4, 1])
+    keys = _api_keys_for_provider(st.session_state.provider)
+    options = [None] + [k["id"] for k in keys]
+    labels = {None: "All keys"}
+    for k in keys:
+        red = k.get("redacted_value") or ""
+        red_short = (red[:8] + "…" + red[-4:]) if len(red) > 14 else red
+        labels[k["id"]] = f"{k['name']} · {red_short or k['provider']}"
+
+    c1, c2, c3, c4 = st.columns([1, 1.3, 1, 1.5])
     with c1:
         st.selectbox(
             "Provider", PROVIDERS, key="provider",
@@ -67,6 +77,16 @@ def filters_bar() -> Filters:
         st.selectbox(
             "Team", TEAMS, key="team",
             format_func=lambda x: "All teams" if x == "all" else x,
+        )
+    with c4:
+        # If the active provider doesn't include the previously-selected key,
+        # reset to "All keys" so we never silently filter on a key that's no
+        # longer in the dropdown.
+        if st.session_state.api_key_id is not None and st.session_state.api_key_id not in options:
+            st.session_state.api_key_id = None
+        st.selectbox(
+            "API key", options, key="api_key_id",
+            format_func=lambda v: labels.get(v, "All keys"),
         )
 
     date_from = date_to = None
@@ -84,20 +104,6 @@ def filters_bar() -> Filters:
         s, e = preset_range(st.session_state.preset)
         date_from, date_to = s, e
 
-    # row 2 — API key drill-down
-    keys = _api_keys_for_provider(st.session_state.provider)
-    options = [None] + [k["id"] for k in keys]
-    labels = {None: "All keys"}
-    for k in keys:
-        red = k.get("redacted_value") or ""
-        red_short = (red[:8] + "…" + red[-4:]) if len(red) > 14 else red
-        labels[k["id"]] = f"{k['name']} · {red_short or k['provider']}"
-    st.selectbox(
-        "API key", options, key="api_key_id",
-        format_func=lambda v: labels.get(v, "All keys"),
-    )
-
-    # synthesise period_days for backward compat with old call sites
     if date_from and date_to:
         period_days = max((date_to.date() - date_from.date()).days, 1)
     else:
@@ -134,13 +140,19 @@ def kpi_card(label: str, value: str, delta: float | None = None, note: str | Non
 
 
 def kpi_row(items: list[dict[str, Any]], cols: int = 4) -> None:
-    """items: [{label, value, delta?, note?}]"""
+    """Render KPIs in fixed-width columns (default 4) so rows align across the
+    page even when the number of items in the row is less than `cols`.
+    Empty trailing slots are kept as blank columns so each card has the same
+    width as in the row above/below.
+    """
     for i in range(0, len(items), cols):
         chunk = items[i:i + cols]
-        columns = st.columns(len(chunk))
+        columns = st.columns(cols)
         for col, item in zip(columns, chunk):
             with col:
                 st.markdown(kpi_card(**item), unsafe_allow_html=True)
+        # Empty padding columns are already created by st.columns(cols)
+        # — nothing to render in them.
 
 
 def badge(text: str, kind: str) -> str:

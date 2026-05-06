@@ -13,7 +13,7 @@ from frontend.theme import BLUE, NAVY
 CFG = load_config()
 
 hero(
-    "F-04 · Developer Usage",
+    "Developer Usage",
     'Activity of <span class="accent">developers</span>',
     "How much each developer spends, how active they are and what share of code is AI-generated.",
 )

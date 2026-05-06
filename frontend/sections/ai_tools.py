@@ -87,7 +87,7 @@ def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class: str,
 # ----------------- main render -----------------
 
 hero(
-    "F-12 · AI Tools Dashboard",
+    "AI Tools",
     'AI Tools <span class="accent">Overview</span>',
     "Per-tool view across Claude, ChatGPT and Cursor with cross-provider High Spenders.",
 )

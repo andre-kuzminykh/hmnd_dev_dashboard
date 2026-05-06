@@ -8,7 +8,7 @@ from backend.services.alerts import evaluate_alert_rules, list_alerts, update_st
 from frontend.components import badge, hero, section
 
 hero(
-    "F-08 · Alerts",
+    "Alerts",
     'Signals and <span class="accent">rules</span>',
     "Spend spikes, budget overruns, idle paid seats, risky PRs.",
 )

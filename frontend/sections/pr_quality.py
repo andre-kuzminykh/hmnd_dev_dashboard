@@ -11,7 +11,7 @@ from frontend.components import badge, filters_bar, hero
 CFG = load_config()
 
 hero(
-    "F-06 · PR Quality",
+    "PR Quality",
     'Quality of <span class="accent">AI code</span> in PRs',
     "Risk score = AI% × critical files × review × bugs. Find risky merges.",
 )

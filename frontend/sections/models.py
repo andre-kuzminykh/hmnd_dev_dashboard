@@ -10,7 +10,7 @@ from frontend.components import filters_bar, hero, section
 from frontend.theme import NAVY, PROVIDER_COLORS
 
 hero(
-    "F-07 · Models",
+    "Models",
     'Compare <span class="accent">models</span>',
     "Which model burns most cash, who relies on it, where you can downgrade.",
 )

@@ -10,7 +10,7 @@ from frontend.components import badge, filters_bar, hero, section
 from frontend.theme import ANTHROPIC, BLUE, NAVY, OPENAI, PROVIDER_COLORS
 
 hero(
-    "F-02 · Costs by People",
+    "Costs by People",
     'Spend per <span class="accent">person</span>',
     "Find outliers, who burns most tokens, who hits monthly limits.",
 )

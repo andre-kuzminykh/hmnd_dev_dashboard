@@ -13,7 +13,7 @@ from frontend.theme import ANTHROPIC, NAVY, OPENAI, PROVIDER_COLORS
 CFG = load_config()
 
 hero(
-    "F-01 · Executive Overview",
+    "Executive Overview",
     '<span class="accent">AIOps</span> Dashboard',
     "Who uses AI, how much it costs, how efficiently and how much AI-generated code lands in production.",
 )

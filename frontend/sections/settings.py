@@ -11,7 +11,7 @@ from frontend.components import hero, section
 CFG = load_config()
 
 hero(
-    "F-09 · Settings",
+    "Settings",
     'Connect your <span class="accent">sources</span>',
     "Keys come from server env vars or .streamlit/secrets.toml. Never stored in DB.",
 )
