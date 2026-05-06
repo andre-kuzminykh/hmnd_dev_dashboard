@@ -17,10 +17,10 @@ python -m scripts.init_db
 python -m scripts.sync --days 7
 
 # Запустить
-streamlit run frontend/app.py
+streamlit run frontend/app.py --server.port 7501
 ```
 
-Откроется на http://localhost:8501.
+Откроется на http://localhost:7501.
 
 ## Переменные окружения
 
@@ -47,7 +47,7 @@ chmod 600 .env
 docker compose up -d --build
 ```
 
-UI слушает `127.0.0.1:8501` — поставь свой reverse-proxy перед ним.
+UI слушает `127.0.0.1:7501` — поставь свой reverse-proxy перед ним.
 Sync крутится в сайдкаре `hmnd-sync` каждый час.
 
 ### systemd на хост

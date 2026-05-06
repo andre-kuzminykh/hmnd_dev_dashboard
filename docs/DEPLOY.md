@@ -58,16 +58,16 @@ docker compose ps
 docker compose logs -f dashboard      # глянуть, что стартанул; Ctrl+C для выхода
 ```
 
-`docker compose ps` должен показать **healthy** через 30–60 секунд. Дашборд внутри контейнера слушает 8501, наружу пробрасывается только на `127.0.0.1:8501` (на VM).
+`docker compose ps` должен показать **healthy** через 30–60 секунд. Дашборд внутри контейнера слушает 8501, наружу пробрасывается только на `127.0.0.1:7501` (на VM, чтобы не конфликтовать с занятыми портами).
 
 ### A5. Прокинуть наружу
 
 Два пути:
 
-**A5.1 Свой существующий nginx/Caddy.** Просто проксируй на `127.0.0.1:8501`. Готовый snippet:
+**A5.1 Свой существующий nginx/Caddy.** Просто проксируй на `127.0.0.1:7501`. Готовый snippet:
 ```nginx
 location / {
-    proxy_pass http://127.0.0.1:8501/;
+    proxy_pass http://127.0.0.1:7501/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -88,7 +88,7 @@ server {
     auth_basic "HMND Dashboard";
     auth_basic_user_file /etc/nginx/.htpasswd;
     location / {
-        proxy_pass http://127.0.0.1:8501/;
+        proxy_pass http://127.0.0.1:7501/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -282,4 +282,4 @@ Certbot сам обновит nginx-конфиг, добавит TLS-серти�
 - 502 на `http://<IP>/` → дашборд не запустился, смотри `journalctl -u hmnd-dashboard -n 100`.
 - "permission denied" на `.env` → `sudo chown $USER:$USER .env && chmod 600 .env`.
 - "Anthropic admin key required" в Settings → у тебя обычный ключ, не админский. Создать админский в Anthropic Console.
-- `connect: connection refused` на 8501 при curl с VM → systemd unit не стартанул, проверь `systemctl status hmnd-dashboard`.
+- `connect: connection refused` на 7501 при curl с VM → systemd unit не стартанул, проверь `systemctl status hmnd-dashboard`.

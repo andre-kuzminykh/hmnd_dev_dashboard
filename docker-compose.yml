@@ -5,10 +5,11 @@ services:
     container_name: hmnd-dashboard
     restart: unless-stopped
     env_file: .env
-    # По умолчанию слушаем только localhost — закрой за своим reverse-proxy.
-    # Если хочешь публиковать наружу: замени на "0.0.0.0:8501:8501" и открой firewall.
+    # Хост-порт 7501 (контейнер внутри слушает 8501).
+    # Слушаем только localhost — закрой за своим reverse-proxy.
+    # Если хочешь публиковать наружу: замени на "0.0.0.0:7501:8501" и открой firewall на :7501.
     ports:
-      - "127.0.0.1:8501:8501"
+      - "127.0.0.1:7501:8501"
     volumes:
       - ./data:/app/data
     healthcheck:

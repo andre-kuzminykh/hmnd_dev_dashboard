@@ -53,7 +53,7 @@ server {
     auth_basic_user_file /etc/nginx/.htpasswd;
 
     location / {
-        proxy_pass http://127.0.0.1:8501/;
+        proxy_pass http://127.0.0.1:7501/;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
