@@ -2,25 +2,160 @@
 
 > Дано: VM `human-1` в `i-crossbar-433120-v3` / `europe-west1-b`, ты уже подключился через `gcloud compute ssh`.
 
-## Шаг 0 (✋ обязательно) — отозвать утёкшие ключи
+Есть два варианта:
 
-Если ты раньше делился ключами в чате — открой и удали их **прямо сейчас**, потом сгенерируй новые:
-
-- OpenAI: https://platform.openai.com/settings/organization/admin-keys → Delete → Create new admin key (`Read usage`, `Read costs` минимум).
-- Anthropic: https://console.anthropic.com → API Keys → Revoke → создать заново. Для дашборда нужен **Admin** ключ (Settings → Admin Keys), обычный `sk-ant-api03-…` не даёт доступ к usage report.
-
-Скопируй новые ключи в надёжное место (1Password, GCP Secret Manager). На сервер их положишь в `.env` ниже — не вставляй в чат.
+- **Вариант A (Docker)** — изолированный, ничего не ставит на хост кроме Docker. Рекомендуется, если на VM уже что-то крутится.
+- **Вариант B (systemd на хост)** — родной вариант, без Docker.
 
 ---
 
-## Шаг 1 — поставить базовый софт
+## Вариант A · Docker (рекомендуется)
+
+### A0. Отозвать утёкшие ключи (если они светились в чате)
+
+- OpenAI: https://platform.openai.com/settings/organization/admin-keys
+- Anthropic: https://console.anthropic.com → Settings → Organization → API Keys
+
+Сгенерируй заново. Ключи кладём прямо на VM в `.env`, не в чат.
+
+### A1. Поставить Docker
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+# выйди из ssh и зайди заново — иначе docker будет требовать sudo
+exit
+```
+
+Снова подключись: `gcloud compute ssh human-1 ...`.
+
+### A2. Клонировать проект
+
+```bash
+cd ~
+git clone https://github.com/andre-kuzminykh/hmnd_dev_dashboard.git
+cd hmnd_dev_dashboard
+git checkout claude/token-monitoring-dashboard-aDaNV
+```
+
+### A3. Создать `.env`
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Заполни `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`. Сохрани (`Ctrl+O`, `Enter`, `Ctrl+X`):
+```bash
+chmod 600 .env
+```
+
+### A4. Запустить compose
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f dashboard      # глянуть, что стартанул; Ctrl+C для выхода
+```
+
+`docker compose ps` должен показать **healthy** через 30–60 секунд. Дашборд внутри контейнера слушает 8501, наружу пробрасывается только на `127.0.0.1:8501` (на VM).
+
+### A5. Прокинуть наружу
+
+Два пути:
+
+**A5.1 Свой существующий nginx/Caddy.** Просто проксируй на `127.0.0.1:8501`. Готовый snippet:
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8501/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 86400;
+}
+```
+
+**A5.2 Поднять рядом nginx и опубликовать `IP:80`** (если на хосте ничего нет):
+```bash
+sudo apt update && sudo apt install -y nginx apache2-utils
+sudo htpasswd -c /etc/nginx/.htpasswd andrey   # пароль для входа
+sudo tee /etc/nginx/sites-available/hmnd >/dev/null <<'EOF'
+server {
+    listen 80 default_server;
+    server_name _;
+    auth_basic "HMND Dashboard";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    location / {
+        proxy_pass http://127.0.0.1:8501/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 86400;
+    }
+}
+EOF
+sudo ln -sf /etc/nginx/sites-available/hmnd /etc/nginx/sites-enabled/hmnd
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+И открой 80 порт в GCP firewall (с локальной машины):
+```bash
+gcloud compute firewall-rules create allow-hmnd-http \
+  --project=i-crossbar-433120-v3 --direction=INGRESS --action=ALLOW \
+  --rules=tcp:80 --target-tags=http-server --source-ranges=0.0.0.0/0
+gcloud compute instances add-tags human-1 \
+  --tags=http-server --zone=europe-west1-b --project=i-crossbar-433120-v3
+```
+
+### A6. Первый sync
+
+Сайдкар `hmnd-sync` делает sync каждый час. Прогнать руками:
+```bash
+docker compose exec sync python -m scripts.sync --days 30
+# или
+docker compose run --rm sync python -m scripts.sync --days 30
+```
+
+### A7. Полезные команды Docker
+
+```bash
+docker compose ps                        # статус
+docker compose logs -f dashboard         # логи UI
+docker compose logs -f sync              # логи sync
+docker compose restart dashboard
+docker compose down                      # остановить всё (без удаления данных)
+docker compose down -v                   # + удалить named volumes (если будут)
+docker compose pull && docker compose up -d --build   # обновить
+```
+
+Данные SQLite живут в `./data/hmnd.db` на хосте — бекапь/архивируй обычным `cp` или `tar`.
+
+### A8. (опц.) Бекап БД
+
+```bash
+mkdir -p ~/backups
+sqlite3 ~/hmnd_dev_dashboard/data/hmnd.db ".backup '/home/$USER/backups/hmnd-$(date +%F).db'"
+```
+
+---
+
+## Вариант B · systemd на хост (без Docker)
+
+### B0. Отозвать утёкшие ключи (см. A0)
+
+### B1 — поставить базовый софт
 
 ```bash
 sudo apt update
 sudo apt install -y python3.11 python3.11-venv python3-pip git nginx apache2-utils
 ```
 
-## Шаг 2 — клонировать проект
+### B2 — клонировать проект
 
 ```bash
 cd ~
@@ -29,7 +164,7 @@ cd hmnd_dev_dashboard
 git checkout claude/token-monitoring-dashboard-aDaNV   # пока ветка не смержена
 ```
 
-## Шаг 3 — автоустановка через скрипт
+### B3 — автоустановка через скрипт
 
 ```bash
 bash deploy/install.sh
@@ -42,7 +177,7 @@ bash deploy/install.sh
 4. Кладёт два systemd-юнита: `hmnd-dashboard.service` (UI) и `hmnd-sync.timer` (ежечасный sync).
 5. Настраивает nginx-reverse-proxy с basic-auth.
 
-## Шаг 4 — вписать ключи в `.env`
+### B4 — вписать ключи в `.env`
 
 ```bash
 nano ~/hmnd_dev_dashboard/.env
@@ -64,14 +199,14 @@ chmod 600 ~/hmnd_dev_dashboard/.env
 sudo systemctl restart hmnd-dashboard
 ```
 
-## Шаг 5 — поставить пароль на nginx
+### B5 — поставить пароль на nginx
 
 ```bash
 sudo htpasswd -c /etc/nginx/.htpasswd andrey
 # впиши пароль дважды
 ```
 
-## Шаг 6 — открыть порт 80 в GCP firewall
+### B6 — открыть порт 80 в GCP firewall
 
 С локальной машины (не с VM):
 
@@ -89,7 +224,7 @@ gcloud compute instances add-tags human-1 \
 
 > Если хочешь сузить доступ — замени `0.0.0.0/0` на свой IP/24.
 
-## Шаг 7 — проверить
+### B7 — проверить
 
 ```bash
 sudo systemctl status hmnd-dashboard --no-pager
@@ -107,7 +242,7 @@ gcloud compute instances describe human-1 \
 
 Открой `http://<EXTERNAL_IP>` → введи логин/пароль из шага 5 → ты внутри.
 
-## Шаг 8 — первый sync
+### B8 — первый sync
 
 В дашборде: **Settings → Run sync now**, либо CLI:
 
@@ -120,7 +255,7 @@ cd ~/hmnd_dev_dashboard
 
 Страницы **Repositories** и **PR Quality** показывают «coming soon», пока `HMND_GITHUB_ENABLED=false`.
 
-## Шаг 9 — HTTPS (рекомендую)
+### B9 — HTTPS (рекомендую)
 
 Если есть домен `dashboard.hmnd.ai` (DNS A → external IP машины):
 

@@ -33,18 +33,31 @@ streamlit run frontend/app.py
 | `HMND_DEMO_DATA` | `true` — засеять демо-данные (для разработки) |
 | `HMND_DB_PATH` | путь к SQLite (по умолчанию `./data/hmnd.db`) |
 
-## Деплой на GCP `human-1` (Ubuntu 22.04)
+## Деплой
+
+Полные шаги — в [`docs/DEPLOY.md`](docs/DEPLOY.md). Кратко два варианта:
+
+### Docker (рекомендуется, изолированно от хоста)
 
 ```bash
-git clone <repo> hmnd_dev_dashboard
-cd hmnd_dev_dashboard
-bash deploy/install.sh
-nano .env           # вписать OPENAI_API_KEY, ANTHROPIC_API_KEY
-sudo systemctl restart hmnd-dashboard
-sudo htpasswd -c /etc/nginx/.htpasswd andrey   # пароль на nginx basic-auth
+git clone <repo> hmnd_dev_dashboard && cd hmnd_dev_dashboard
+git checkout claude/token-monitoring-dashboard-aDaNV
+cp .env.example .env && nano .env       # OPENAI_API_KEY, ANTHROPIC_API_KEY
+chmod 600 .env
+docker compose up -d --build
 ```
 
-Подробный пошаговый гайд — в `docs/DEPLOY.md`.
+UI слушает `127.0.0.1:8501` — поставь свой reverse-proxy перед ним.
+Sync крутится в сайдкаре `hmnd-sync` каждый час.
+
+### systemd на хост
+
+```bash
+git clone <repo> hmnd_dev_dashboard && cd hmnd_dev_dashboard
+bash deploy/install.sh
+nano .env && sudo systemctl restart hmnd-dashboard
+sudo htpasswd -c /etc/nginx/.htpasswd andrey
+```
 
 ## Структура
 

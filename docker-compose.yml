@@ -1,0 +1,38 @@
+services:
+  dashboard:
+    build: .
+    image: hmnd-dashboard:latest
+    container_name: hmnd-dashboard
+    restart: unless-stopped
+    env_file: .env
+    # По умолчанию слушаем только localhost — закрой за своим reverse-proxy.
+    # Если хочешь публиковать наружу: замени на "0.0.0.0:8501:8501" и открой firewall.
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  # Сайдкар: каждый час подтягивает свежие данные из OpenAI/Anthropic.
+  sync:
+    image: hmnd-dashboard:latest
+    container_name: hmnd-sync
+    restart: unless-stopped
+    depends_on:
+      dashboard:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        echo "[sync] starting periodic loop";
+        while true; do
+          python -m scripts.sync --days 7 || echo "[sync] failed, will retry";
+          sleep 3600;
+        done
