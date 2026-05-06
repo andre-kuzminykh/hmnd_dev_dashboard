@@ -98,6 +98,9 @@ class OpenAIConnector(BaseConnector):
         self._backfill_prices(provider_id)
         keys_by_external = self._sync_api_keys(provider_id, users_by_id, report)
         self._sync_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
+        # Pull non-completion usage so total spend lines up with OpenAI's
+        # billing UI (which sums chat + embeddings + images + audio etc.).
+        self._sync_other_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
         # Org-level totals from /costs endpoint are kept as a sanity log only;
         # per-event cost_usd is now computed from model prices in _sync_usage,
         # which gives accurate per-user attribution that the costs endpoint
@@ -377,6 +380,112 @@ class OpenAIConnector(BaseConnector):
             if not data.get("has_more"):
                 break
             page = data.get("next_page")
+
+    def _sync_other_usage(
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
+        users_by_id: dict[str, int],
+        provider_id: int,
+        model_ids: dict[str, int],
+        keys_by_external: dict[str, int],
+        report: SyncReport,
+    ) -> None:
+        """Pull non-completion usage endpoints so we don't miss embeddings,
+        images, audio etc. when reconciling with OpenAI's billing UI.
+
+        Each endpoint contributes per-bucket events to usage_events using the
+        same model-price formula as completions. Cost may be 0 for endpoints
+        we don't have prices for (e.g. images, audio) — that's fine, the
+        events still show up in counts/tokens; the cross-check string in the
+        sync report will flag the difference vs the org total.
+        """
+        prices_by_model = self._price_cache(provider_id)
+        endpoints = [
+            ("usage/embeddings", ("input_tokens",)),
+            ("usage/moderations", ("input_tokens",)),
+            ("usage/audio_speeches", ("characters",)),
+            ("usage/audio_transcriptions", ("seconds",)),
+            ("usage/images", ()),
+            ("usage/vector_stores", ()),
+            ("usage/code_interpreter_sessions", ()),
+        ]
+        for endpoint, _fields in endpoints:
+            params: dict[str, Any] = {
+                "start_time": int(start_dt.timestamp()),
+                "end_time": int(end_dt.timestamp()),
+                "bucket_width": "1d",
+                "group_by": "user_id,model,api_key_id",
+                "limit": 31,
+            }
+            page = None
+            with get_conn() as conn:
+                conn.execute(
+                    """DELETE FROM usage_events
+                       WHERE provider_id = ?
+                         AND purpose = ?
+                         AND date(occurred_at) >= date(?)
+                         AND date(occurred_at) <= date(?)""",
+                    (
+                        provider_id,
+                        endpoint,
+                        start_dt.date().isoformat(),
+                        end_dt.date().isoformat(),
+                    ),
+                )
+                conn.commit()
+
+            while True:
+                if page:
+                    params["page"] = page
+                data = self._get(endpoint, params)
+                if data is None:
+                    break  # endpoint may not be available on this org tier
+                for bucket in data.get("data", []):
+                    ts = bucket.get("start_time")
+                    if not ts:
+                        continue
+                    bucket_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    rows: list[tuple] = []
+                    with get_conn() as conn:
+                        for r in bucket.get("results", []):
+                            user_ext = r.get("user_id")
+                            user_id = users_by_id.get(user_ext)
+                            if not user_id:
+                                continue
+                            model_name = r.get("model") or endpoint.split("/")[-1]
+                            model_id = self._ensure_model(model_name, provider_id, model_ids)
+                            tokens_in = to_int(r.get("input_tokens"))
+                            tokens_out = to_int(r.get("output_tokens"))
+                            requests_n = max(to_int(r.get("num_model_requests"), default=1), 1)
+                            per_in = tokens_in // requests_n
+                            per_out = tokens_out // requests_n
+                            p_in, p_out, p_cache = prices_by_model.get(model_id, (0.0, 0.0, 0.0))
+                            per_cost = round(
+                                per_in / 1000.0 * p_in + per_out / 1000.0 * p_out, 6
+                            )
+                            ts_str = bucket_dt.strftime("%Y-%m-%d %H:%M:%S")
+                            api_key_ext = r.get("api_key_id")
+                            api_key_id = keys_by_external.get(api_key_ext) if api_key_ext else None
+                            for _ in range(requests_n):
+                                rows.append((
+                                    user_id, provider_id, model_id, api_key_id, ts_str,
+                                    per_in, per_out, 0, per_cost, 0, endpoint,
+                                ))
+                        if rows:
+                            conn.executemany(
+                                """INSERT INTO usage_events(
+                                    user_id, provider_id, model_id, api_key_id, occurred_at,
+                                    tokens_in, tokens_out, tokens_cached, cost_usd,
+                                    is_error, purpose
+                                ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                                rows,
+                            )
+                            report.inserted += len(rows)
+                        conn.commit()
+                if not data.get("has_more"):
+                    break
+                page = data.get("next_page")
 
     def _sync_costs_report_only(
         self, start_dt: datetime, end_dt: datetime, report: SyncReport

@@ -118,6 +118,16 @@ h1 { font-weight: 300; }
 .hmnd-badge.revoke   { color:#991b1b; background:#fee2e2; border:1px solid #fecaca; }
 .hmnd-badge.keep     { color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; }
 
+/* Window indicator below filter bar — shows the actual UTC range. */
+.hmnd-window-info {
+    margin: -4px 0 14px 4px; font-size: 12px; color: #475569;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 10px; background: #f1f5f9; border-radius: 999px;
+    border: 1px solid #e2e8f0;
+}
+.hmnd-window-info .label { color:#64748b; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; font-size: 11px; }
+.hmnd-window-info .value { color:#06091c; font-weight: 500; font-variant-numeric: tabular-nums; }
+
 /* F-12 AI Tools — provider chips and freshness header */
 .hmnd-fresh { font-size:13px; color:#475569; margin: 4px 0 14px 0; display:flex; gap:14px; flex-wrap:wrap; }
 .hmnd-fresh .item { display:inline-flex; align-items:center; gap:6px; }
