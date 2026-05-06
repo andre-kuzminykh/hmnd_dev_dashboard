@@ -61,11 +61,9 @@ def filters_bar() -> Filters:
     options = [None] + [k["id"] for k in keys]
     labels = {None: "All keys"}
     for k in keys:
-        red = k.get("redacted_value") or ""
-        red_short = (red[:8] + "…" + red[-4:]) if len(red) > 14 else red
-        labels[k["id"]] = f"{k['name']} · {red_short or k['provider']}"
+        labels[k["id"]] = k["name"] or k["provider"]
 
-    c1, c2, c3, c4 = st.columns([1, 1.3, 1, 1.5])
+    c1, c2, c3, c4 = st.columns([1, 1.2, 1, 1])
     with c1:
         st.selectbox(
             "Provider", PROVIDERS, key="provider",

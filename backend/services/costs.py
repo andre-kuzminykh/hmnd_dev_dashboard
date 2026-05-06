@@ -104,14 +104,17 @@ def heatmap_user_day(filters: Filters | None = None, now: datetime | None = None
     f = filters or Filters()
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
-    sql = """
+    k_clause, k_params = api_key_clause(f.api_key_id, "ue")
+    sql = f"""
         SELECT u.full_name AS user_name,
                date(ue.occurred_at) AS day,
                SUM(ue.tokens_in + ue.tokens_out) AS tokens
         FROM usage_events ue
         JOIN users u ON u.id = ue.user_id
         WHERE ue.occurred_at BETWEEN ? AND ?
+        {k_clause}
         GROUP BY u.id, day
     """
+    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + k_params
     with get_conn() as conn:
-        return [dict(r) for r in conn.execute(sql, (start.isoformat(sep=" "), end.isoformat(sep=" "))).fetchall()]
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]

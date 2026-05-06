@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from data.db import get_conn
-from backend.analytics import Filters, safe_div
+from backend.analytics import Filters, api_key_clause, safe_div
 
 
 def get_models_breakdown(filters: Filters | None = None, now: datetime | None = None) -> list[dict[str, Any]]:
@@ -13,8 +13,9 @@ def get_models_breakdown(filters: Filters | None = None, now: datetime | None = 
     f = filters or Filters()
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
+    k_clause, k_params = api_key_clause(f.api_key_id, "ue")
 
-    sql = """
+    sql = f"""
         SELECT m.id AS model_id,
                m.name AS model,
                p.name AS provider,
@@ -27,26 +28,26 @@ def get_models_breakdown(filters: Filters | None = None, now: datetime | None = 
         JOIN models m ON m.id = ue.model_id
         JOIN providers p ON p.id = ue.provider_id
         WHERE ue.occurred_at BETWEEN ? AND ?
+        {k_clause}
         GROUP BY m.id
         ORDER BY cost DESC
     """
+    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + k_params
+    top_users_sql = f"""
+        SELECT u.full_name AS user_name, ROUND(SUM(ue.cost_usd), 2) AS cost
+        FROM usage_events ue
+        JOIN users u ON u.id = ue.user_id
+        WHERE ue.model_id = ? AND ue.occurred_at BETWEEN ? AND ?
+        {k_clause}
+        GROUP BY u.id
+        ORDER BY cost DESC
+        LIMIT 3
+    """
     with get_conn() as conn:
-        rows = [dict(r) for r in conn.execute(sql, (start.isoformat(sep=" "), end.isoformat(sep=" ")))]
-        # top-3 пользователей на каждую модель
-        top_users_sql = """
-            SELECT u.full_name AS user_name, ROUND(SUM(ue.cost_usd), 2) AS cost
-            FROM usage_events ue
-            JOIN users u ON u.id = ue.user_id
-            WHERE ue.model_id = ? AND ue.occurred_at BETWEEN ? AND ?
-            GROUP BY u.id
-            ORDER BY cost DESC
-            LIMIT 3
-        """
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
         for r in rows:
-            top = conn.execute(
-                top_users_sql,
-                (r["model_id"], start.isoformat(sep=" "), end.isoformat(sep=" ")),
-            ).fetchall()
+            top_params = [r["model_id"], start.isoformat(sep=" "), end.isoformat(sep=" ")] + k_params
+            top = conn.execute(top_users_sql, top_params).fetchall()
             r["main_users"] = [t["user_name"] for t in top]
             r["error_rate"] = (
                 round(safe_div(r["errors"], r["requests"]) * 100, 2)

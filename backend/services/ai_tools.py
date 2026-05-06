@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from data.db import get_conn
+from backend.analytics import Filters, api_key_clause
 
 
 # ---- Risk / flag classifiers (FR-12.1.3.2, FR-12.1.5.2) ----
@@ -107,26 +108,30 @@ def get_ai_tools_overview(period_days: int = 5) -> dict[str, Any]:
 
 # ---- Per-provider users (FR-12.1.2.1, FR-12.1.3.1) ----
 
-def get_users_for_provider(provider: str, period_days: int = 30) -> list[dict[str, Any]]:
+def get_users_for_provider(provider: str, period_days: int = 30,
+                           api_key_id: int | None = None) -> list[dict[str, Any]]:
     end = datetime.utcnow()
     start = end - timedelta(days=period_days)
     s = start.strftime("%Y-%m-%d %H:%M:%S")
     e = end.strftime("%Y-%m-%d %H:%M:%S")
+    k_clause, k_params = api_key_clause(api_key_id, "ue")
+    sql = f"""
+        SELECT u.id, u.full_name AS user_name,
+               COUNT(*)                          AS messages,
+               ROUND(SUM(ue.cost_usd), 2)        AS cost,
+               SUM(ue.tokens_in)                 AS tokens_in,
+               SUM(ue.tokens_out)                AS tokens_out
+        FROM usage_events ue
+        JOIN users u ON u.id = ue.user_id
+        JOIN providers p ON p.id = ue.provider_id
+        WHERE p.name = ? AND ue.occurred_at BETWEEN ? AND ?
+        {k_clause}
+        GROUP BY u.id
+        ORDER BY messages DESC
+    """
+    params = [provider, s, e] + k_params
     with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT u.id, u.full_name AS user_name,
-                      COUNT(*)                          AS messages,
-                      ROUND(SUM(ue.cost_usd), 2)        AS cost,
-                      SUM(ue.tokens_in)                 AS tokens_in,
-                      SUM(ue.tokens_out)                AS tokens_out
-               FROM usage_events ue
-               JOIN users u ON u.id = ue.user_id
-               JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name = ? AND ue.occurred_at BETWEEN ? AND ?
-               GROUP BY u.id
-               ORDER BY messages DESC""",
-            (provider, s, e),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     out = []
     for r in rows:
         out.append({
@@ -145,24 +150,28 @@ def get_users_for_provider(provider: str, period_days: int = 30) -> list[dict[st
 
 # ---- High Spenders (FR-12.1.5.*) ----
 
-def get_high_spenders(period_days: int = 30, threshold_usd: float = 200) -> list[dict[str, Any]]:
+def get_high_spenders(period_days: int = 30, threshold_usd: float = 200,
+                      api_key_id: int | None = None) -> list[dict[str, Any]]:
     end = datetime.utcnow()
     start = end - timedelta(days=period_days)
     s = start.strftime("%Y-%m-%d %H:%M:%S")
     e = end.strftime("%Y-%m-%d %H:%M:%S")
+    k_clause, k_params = api_key_clause(api_key_id, "ue")
+    sql = f"""
+        SELECT u.id, u.full_name AS user_name,
+               COUNT(*)                       AS messages,
+               ROUND(SUM(ue.cost_usd), 2)     AS spend
+        FROM usage_events ue
+        JOIN users u ON u.id = ue.user_id
+        WHERE ue.occurred_at BETWEEN ? AND ?
+        {k_clause}
+        GROUP BY u.id
+        HAVING spend >= ?
+        ORDER BY spend DESC
+    """
+    params = [s, e] + k_params + [threshold_usd]
     with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT u.id, u.full_name AS user_name,
-                      COUNT(*)                       AS messages,
-                      ROUND(SUM(ue.cost_usd), 2)     AS spend
-               FROM usage_events ue
-               JOIN users u ON u.id = ue.user_id
-               WHERE ue.occurred_at BETWEEN ? AND ?
-               GROUP BY u.id
-               HAVING spend >= ?
-               ORDER BY spend DESC""",
-            (s, e, threshold_usd),
-        ).fetchall()
+        rows = conn.execute(sql, params).fetchall()
     out = []
     for r in rows:
         spend = float(r["spend"] or 0)

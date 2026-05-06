@@ -14,7 +14,7 @@ from backend.services.ai_tools import (
     get_provider_freshness,
     get_users_for_provider,
 )
-from frontend.components import badge, fmt_int, fmt_money, hero, kpi_row, section
+from frontend.components import badge, filters_bar, fmt_int, fmt_money, hero, kpi_row, section
 
 
 def _fmt_int(v) -> str:
@@ -94,6 +94,8 @@ hero(
 _provider_chips()
 _freshness_header()
 
+filters = filters_bar()
+
 
 tab_overview, tab_claude, tab_gpt, tab_cursor, tab_high = st.tabs(
     ["Overview", "Claude Users", "ChatGPT Users", "Cursor", "⚠ High Spenders"]
@@ -123,7 +125,8 @@ with tab_overview:
 
 
 with tab_claude:
-    rows = get_users_for_provider("anthropic", period_days=30)
+    rows = get_users_for_provider("anthropic", period_days=filters.period_days,
+                                   api_key_id=filters.api_key_id)
     total_msgs = sum(r["messages"] for r in rows)
     code_users = [r for r in rows if r.get("sessions")]
     cc_lines = sum((r["lines_added"] or 0) for r in rows)
@@ -176,7 +179,8 @@ with tab_claude:
 
 
 with tab_gpt:
-    rows = get_users_for_provider("openai", period_days=30)
+    rows = get_users_for_provider("openai", period_days=filters.period_days,
+                                   api_key_id=filters.api_key_id)
     total_msgs = sum(r["messages"] for r in rows)
     total_spend = sum(r["cost"] for r in rows)
     high = [r for r in rows if r["cost"] >= 200]
@@ -232,7 +236,9 @@ with tab_cursor:
 
 
 with tab_high:
-    spenders = get_high_spenders(period_days=30, threshold_usd=200)
+    spenders = get_high_spenders(period_days=filters.period_days,
+                                  threshold_usd=200,
+                                  api_key_id=filters.api_key_id)
     combined = sum(r["spend"] for r in spenders)
     top = spenders[0] if spenders else None
     kpi_row([

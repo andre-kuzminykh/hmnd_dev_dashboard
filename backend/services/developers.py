@@ -14,6 +14,14 @@ def get_developer_usage(filters: Filters | None = None, now: datetime | None = N
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
     t_clause, t_params = team_clause(f.team, "t")
+    # When an api_key drill-down is active, only the AI usage subqueries are
+    # filtered. Repos / PRs / attribution come from GitHub data and are not
+    # tied to API keys.
+    key_filter_sql = ""
+    key_filter_params: list[Any] = []
+    if f.api_key_id:
+        key_filter_sql = " AND ue.api_key_id = ? "
+        key_filter_params = [f.api_key_id]
 
     sql = f"""
         SELECT
@@ -21,11 +29,14 @@ def get_developer_usage(filters: Filters | None = None, now: datetime | None = N
             u.full_name AS user_name,
             COALESCE(t.name, '—') AS team,
             (SELECT COUNT(*) FROM usage_events ue
-             WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?) AS ai_requests,
+             WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?
+             {key_filter_sql}) AS ai_requests,
             (SELECT COALESCE(SUM(ue.tokens_in + ue.tokens_out), 0)
-             FROM usage_events ue WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?) AS tokens,
+             FROM usage_events ue WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?
+             {key_filter_sql}) AS tokens,
             (SELECT COALESCE(SUM(ue.cost_usd), 0)
-             FROM usage_events ue WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?) AS cost,
+             FROM usage_events ue WHERE ue.user_id = u.id AND ue.occurred_at BETWEEN ? AND ?
+             {key_filter_sql}) AS cost,
             (SELECT COUNT(DISTINCT c.repo_id) FROM commits c
              WHERE c.author_id = u.id AND c.authored_at BETWEEN ? AND ?) AS repos_touched,
             (SELECT COUNT(*) FROM pull_requests pr
@@ -43,8 +54,13 @@ def get_developer_usage(filters: Filters | None = None, now: datetime | None = N
     """
     s = start.isoformat(sep=" ")
     e = end.isoformat(sep=" ")
-    # 8 подзапросов с BETWEEN ? AND ? = 16 параметров.
-    params = [s, e] * 8 + t_params
+    # 3 usage_events subqueries (with optional api_key clause) + 5 GitHub subqueries.
+    params: list[Any] = []
+    for _ in range(3):
+        params += [s, e] + key_filter_params
+    for _ in range(5):
+        params += [s, e]
+    params += t_params
     with get_conn() as conn:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     for r in rows:
