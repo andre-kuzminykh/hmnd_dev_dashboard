@@ -1,0 +1,134 @@
+"""F-01 Executive Overview — KPI и временные ряды."""
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import Any
+
+from data.db import get_conn
+from backend.analytics import Filters, pct_delta, provider_clause, safe_div, team_clause
+
+
+def _kpis_in_window(conn, start: datetime, end: datetime, f: Filters) -> dict[str, Any]:
+    p_clause, p_params = provider_clause(f.provider, "p")
+    t_clause, t_params = team_clause(f.team, "t")
+
+    # FR-01.1.1.1 — основной набор метрик
+    sql = f"""
+        SELECT
+            COALESCE(SUM(ue.cost_usd), 0)        AS total_spend,
+            COALESCE(SUM(ue.tokens_in), 0)       AS tokens_in,
+            COALESCE(SUM(ue.tokens_out), 0)      AS tokens_out,
+            COALESCE(COUNT(DISTINCT ue.user_id), 0) AS active_users
+        FROM usage_events ue
+        JOIN users u    ON u.id = ue.user_id
+        LEFT JOIN teams t ON t.id = u.team_id
+        JOIN providers p ON p.id = ue.provider_id
+        WHERE ue.occurred_at BETWEEN ? AND ?
+        {p_clause}
+        {t_clause}
+    """
+    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params
+    row = conn.execute(sql, params).fetchone()
+    return dict(row)
+
+
+def _seats_used(conn, f: Filters) -> int:
+    p_clause, p_params = provider_clause(f.provider, "p")
+    sql = f"""
+        SELECT COUNT(*) AS seats_used
+        FROM seats s
+        JOIN providers p ON p.id = s.provider_id
+        WHERE s.assigned = 1 {p_clause}
+    """
+    return conn.execute(sql, p_params).fetchone()["seats_used"]
+
+
+def _ai_code_share(conn, start: datetime, end: datetime) -> float:
+    """ai_code_pct по всем PR в окне."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(att.ai_lines),0) AS ai_lines,
+               COALESCE(SUM(att.total_lines),0) AS total_lines
+        FROM ai_code_attribution att
+        LEFT JOIN pull_requests pr ON pr.id = att.pr_id
+        WHERE COALESCE(pr.merged_at, att.detected_at) BETWEEN ? AND ?
+        """,
+        (start.isoformat(sep=" "), end.isoformat(sep=" ")),
+    ).fetchone()
+    pct = safe_div(row["ai_lines"], row["total_lines"], default=0.0) * 100
+    return round(pct, 1)
+
+
+def _suspicious_count(conn) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) AS n FROM alerts WHERE status='new'"
+    ).fetchone()["n"]
+
+
+def get_overview_kpis(filters: Filters | None = None, now: datetime | None = None) -> dict[str, Any]:
+    """FR-01.1.1.1, FR-01.1.1.2, FR-01.1.1.3.
+
+    Возвращает dict со значениями текущего периода и `_delta` для каждого числового KPI.
+    """
+    f = filters or Filters()
+    now = now or datetime.utcnow()
+    start, end = f.date_range(now)
+    prev_start, prev_end = f.previous_range(now)
+
+    with get_conn() as conn:
+        cur = _kpis_in_window(conn, start, end, f)
+        prev = _kpis_in_window(conn, prev_start, prev_end, f)
+        seats_used = _seats_used(conn, f)
+        ai_share = _ai_code_share(conn, start, end)
+        ai_share_prev = _ai_code_share(conn, prev_start, prev_end)
+        suspicious = _suspicious_count(conn)
+
+    cost_per_user = safe_div(cur["total_spend"], cur["active_users"], default=0.0)
+    cost_per_user_prev = safe_div(prev["total_spend"], prev["active_users"], default=0.0)
+
+    out = {
+        "total_spend": round(cur["total_spend"], 2),
+        "tokens_in": int(cur["tokens_in"]),
+        "tokens_out": int(cur["tokens_out"]),
+        "active_users": int(cur["active_users"]),
+        "seats_used": int(seats_used),
+        "cost_per_user": round(cost_per_user, 2),
+        "ai_code_share": ai_share,
+        "suspicious_count": int(suspicious),
+        # deltas (FR-01.1.1.3)
+        "total_spend_delta": pct_delta(cur["total_spend"], prev["total_spend"]),
+        "tokens_in_delta": pct_delta(cur["tokens_in"], prev["tokens_in"]),
+        "tokens_out_delta": pct_delta(cur["tokens_out"], prev["tokens_out"]),
+        "active_users_delta": pct_delta(cur["active_users"], prev["active_users"]),
+        "seats_used_delta": 0.0,  # snapshot, прошлого окна нет
+        "cost_per_user_delta": pct_delta(cost_per_user, cost_per_user_prev),
+        "ai_code_share_delta": pct_delta(ai_share, ai_share_prev),
+        "suspicious_count_delta": 0.0,
+    }
+    return out
+
+
+def get_daily_spend_series(filters: Filters | None = None, now: datetime | None = None) -> list[dict]:
+    """Time series для линейного графика на Overview."""
+    f = filters or Filters()
+    now = now or datetime.utcnow()
+    start, end = f.date_range(now)
+    p_clause, p_params = provider_clause(f.provider, "p")
+    t_clause, t_params = team_clause(f.team, "t")
+    sql = f"""
+        SELECT date(ue.occurred_at) AS day,
+               p.name AS provider,
+               ROUND(SUM(ue.cost_usd), 2) AS cost
+        FROM usage_events ue
+        JOIN users u ON u.id = ue.user_id
+        LEFT JOIN teams t ON t.id = u.team_id
+        JOIN providers p ON p.id = ue.provider_id
+        WHERE ue.occurred_at BETWEEN ? AND ?
+        {p_clause}
+        {t_clause}
+        GROUP BY day, provider
+        ORDER BY day
+    """
+    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
