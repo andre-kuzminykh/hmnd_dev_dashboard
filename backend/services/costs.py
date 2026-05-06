@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from data.db import get_conn
-from backend.analytics import Filters, provider_clause, team_clause
+from backend.analytics import Filters, api_key_clause, provider_clause, team_clause
 
 
 def _limit_status(cost: float, limit: float) -> str:
@@ -26,6 +26,7 @@ def get_costs_by_user(filters: Filters | None = None, now: datetime | None = Non
     start, end = f.date_range(now)
     p_clause, p_params = provider_clause(f.provider, "p")
     t_clause, t_params = team_clause(f.team, "t")
+    k_clause, k_params = api_key_clause(f.api_key_id, "ue")
 
     sql = f"""
         SELECT
@@ -47,10 +48,11 @@ def get_costs_by_user(filters: Filters | None = None, now: datetime | None = Non
         WHERE ue.occurred_at BETWEEN ? AND ?
         {p_clause}
         {t_clause}
+        {k_clause}
         GROUP BY u.id
         ORDER BY (cost_openai + cost_anthropic) DESC
     """
-    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params
+    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params + k_params
     with get_conn() as conn:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     out = []

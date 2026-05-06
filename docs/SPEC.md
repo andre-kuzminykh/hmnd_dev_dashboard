@@ -400,6 +400,90 @@ And в шапке логотип HMND и название "AIOps Dashboard"
 
 ---
 
+## F-13 — Advanced filters (date range, API key, project)
+
+**Цель:** Привести панель фильтров к уровню OpenAI Usage UI: верхним уровнем выбирается провайдер, дата задаётся календарём с пресетами, есть drill-down по API-ключу и (когда подключим) по проекту. Все аналитические сервисы должны принимать эти фильтры единообразно.
+
+### US-13.1 — Date range with presets
+
+> *As a* любой пользователь
+> *I want* выбирать произвольный промежуток дат или один из пресетов одной кнопкой
+> *so that* быстро сравнивать «вчера vs сегодня» или «неделя vs прошлая неделя» без правки кода.
+
+#### SC-13.1.1 — Custom range через календарь
+
+```gherkin
+Given открыта любая аналитическая страница
+When пользователь выбирает диапазон 2026-04-15 — 2026-04-22 в date_input
+Then KPI и графики пересчитываются по событиям с occurred_at в этом диапазоне
+And фильтр period сбрасывается в значение "Custom"
+```
+
+**Требования:**
+
+- **FR-13.1.1.1** — `Filters.date_from`, `Filters.date_to: Optional[datetime]`. Когда оба заданы — приоритет над `period_days`.
+- **FR-13.1.1.2** — `Filters.date_range(now)` возвращает явный диапазон если задан, иначе вычисляет от `period_days`.
+- **FR-13.1.1.3** — UI кладёт диапазон в `st.session_state.date_range` и помечает period-пресет как `Custom`.
+
+#### SC-13.1.2 — Пресеты одной кнопкой
+
+```gherkin
+When пользователь нажимает "Last 7 days"
+Then фильтр period_days переключается на 7
+And date_from/date_to очищаются
+And все страницы пересчитывают данные за 7 дней
+```
+
+**Требования:**
+
+- **FR-13.1.2.1** — Пресеты: `Today`, `Yesterday`, `Week to date`, `Month to date`, `Last 7 days`, `Last 14 days`, `Last 30 days`, `Last 90 days`, `Custom`.
+- **FR-13.1.2.2** — `Today/Yesterday` ставят date_from=date_to (один день).
+- **FR-13.1.2.3** — `Week to date` от понедельника текущей недели до сегодня.
+- **FR-13.1.2.4** — `Month to date` от первого числа текущего месяца до сегодня.
+
+### US-13.2 — Provider primary + API key drill-down
+
+> *As a* finance/ops пользователь
+> *I want* сначала выбирать провайдера, потом конкретный API ключ и видеть весь дашборд только по этому срезу
+> *so that* находить «кто жжёт через ключ X» в любой панели.
+
+#### SC-13.2.1 — API key dropdown
+
+```gherkin
+Given в БД есть api_keys для провайдера 'openai'
+When пользователь в filters bar выбирает ключ 'n8n_artem'
+Then все KPI / таблицы / графики на странице фильтруются по этому api_key_id
+And в session_state хранится {api_key_id: <id>}
+```
+
+**Требования:**
+
+- **FR-13.2.1.1** — `Filters.api_key_id: Optional[int]`. Все сервисы добавляют `WHERE api_key_id = ?` если задан.
+- **FR-13.2.1.2** — Список ключей в dropdown берётся из `api_keys` для выбранного провайдера; элементы сортируются по `last_used_at desc`.
+- **FR-13.2.1.3** — Item label: `name · redacted`.
+
+### US-13.3 — Project drill-down
+
+> *As a* admin
+> *I want* фильтровать данные по OpenAI project'у
+> *so that* видеть отдельно расход CEO Brain / n8n_artem / typingmind.
+
+#### SC-13.3.1 — Project filter
+
+```gherkin
+Given OpenAI sync подтянул проекты через /v1/organization/projects
+When пользователь выбирает проект "CEO Brain"
+Then фильтр применяется ко всем расчётам
+```
+
+**Требования:**
+
+- **FR-13.3.1.1** — Таблица `projects (id, provider_id, external_id, name)` + колонка `project_id` на `usage_events` и `api_keys`.
+- **FR-13.3.1.2** — `Filters.project_id: Optional[int]`. Все сервисы добавляют `WHERE project_id = ?`.
+- **FR-13.3.1.3** — Sync OpenAI пулит `/v1/organization/projects` и группирует usage по `group_by=project_id`.
+
+---
+
 ## Сводная карта тестов → требования
 
 Каждый тест в `tests/` именуется `test_<req_id_lower>` и проверяет ровно одно требование.
@@ -431,6 +515,13 @@ And в шапке логотип HMND и название "AIOps Dashboard"
 | `tests/test_ai_tools.py::test_fr_12_1_5_1_high_spenders_sort` | FR-12.1.5.1 |
 | `tests/test_ai_tools.py::test_fr_12_1_5_2_risk_classification` | FR-12.1.5.2 |
 | `tests/test_ai_tools.py::test_fr_12_1_5_3_dollar_per_msg` | FR-12.1.5.3 |
+| `tests/test_filters.py::test_fr_13_1_1_1_explicit_dates_priority` | FR-13.1.1.1 |
+| `tests/test_filters.py::test_fr_13_1_1_2_date_range_explicit_or_computed` | FR-13.1.1.2 |
+| `tests/test_filters.py::test_fr_13_1_2_2_today_yesterday_presets` | FR-13.1.2.2 |
+| `tests/test_filters.py::test_fr_13_1_2_3_week_to_date` | FR-13.1.2.3 |
+| `tests/test_filters.py::test_fr_13_1_2_4_month_to_date` | FR-13.1.2.4 |
+| `tests/test_filters.py::test_fr_13_2_1_1_api_key_filter_in_costs` | FR-13.2.1.1 |
+| `tests/test_filters.py::test_fr_13_3_1_2_project_filter_field` | FR-13.3.1.2 |
 
 ## Архитектура слоёв
 

@@ -16,6 +16,9 @@ OPENAI_DEFAULT_PRICES: dict[str, tuple[float, float, float]] = {
     "gpt-4o":                  (0.0025,   0.01,    0.00125),
     "gpt-4o-mini":             (0.00015,  0.0006,  0.000075),
     "gpt-4o-realtime-preview": (0.005,    0.02,    0.0025),
+    "gpt-4.1":                 (0.002,    0.008,   0.0005),
+    "gpt-4.1-mini":            (0.0004,   0.0016,  0.0001),
+    "gpt-4.1-nano":            (0.0001,   0.0004,  0.000025),
     "gpt-4-turbo":             (0.01,     0.03,    0.0),
     "gpt-4":                   (0.03,     0.06,    0.0),
     "gpt-3.5-turbo":           (0.0005,   0.0015,  0.0),
@@ -287,12 +290,20 @@ class OpenAIConnector(BaseConnector):
         нормальные `COUNT(*)` в models breakdown и аккуратные суммы в KPI.
         """
         with get_conn() as conn:
+            # Use date() comparisons so we wipe FULL days, not the half-day windows
+            # implied by datetime-precise bounds. Otherwise re-syncing the same
+            # period with a slightly-different now() leaks rows from buckets
+            # that started before the new lower bound (each OpenAI bucket starts
+            # at 00:00 UTC), producing duplicates on every re-run.
             conn.execute(
-                "DELETE FROM usage_events WHERE provider_id = ? AND occurred_at BETWEEN ? AND ?",
+                """DELETE FROM usage_events
+                   WHERE provider_id = ?
+                     AND date(occurred_at) >= date(?)
+                     AND date(occurred_at) <= date(?)""",
                 (
                     provider_id,
-                    start_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                    end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    start_dt.date().isoformat(),
+                    end_dt.date().isoformat(),
                 ),
             )
             conn.commit()

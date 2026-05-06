@@ -6,47 +6,110 @@ from typing import Any
 
 import streamlit as st
 
-from backend.analytics import Filters
+from backend.analytics import Filters, preset_range
+from data.db import get_conn
 
-PERIODS = {
-    "Today": 1,
-    "7 days": 7,
-    "30 days": 30,
-    "90 days": 90,
-}
+PRESETS = [
+    "Today",
+    "Yesterday",
+    "Week to date",
+    "Month to date",
+    "Last 7 days",
+    "Last 14 days",
+    "Last 30 days",
+    "Last 90 days",
+    "Custom",
+]
+DEFAULT_PRESET = "Last 30 days"
 
 PROVIDERS = ["all", "openai", "anthropic"]
 TEAMS = ["all", "Backend", "Frontend", "Data", "Product"]
 
 
+def _api_keys_for_provider(provider: str) -> list[dict[str, Any]]:
+    sql = """
+        SELECT ak.id, ak.name, ak.redacted_value, ak.last_used_at, p.name AS provider
+        FROM api_keys ak
+        JOIN providers p ON p.id = ak.provider_id
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if provider != "all":
+        sql += " AND p.name = ?"
+        params.append(provider)
+    sql += " ORDER BY (ak.last_used_at IS NULL), ak.last_used_at DESC, ak.name"
+    try:
+        with get_conn() as conn:
+            return [dict(r) for r in conn.execute(sql, params).fetchall()]
+    except Exception:
+        return []
+
+
 def filters_bar() -> Filters:
-    """Top-level фильтры. NFR-01.1.2.1 — состояние в session_state."""
-    s = st.session_state.setdefault(
-        "filters", {"period_label": "30 days", "provider": "all", "team": "all"}
-    )
-    c1, c2, c3 = st.columns([1.2, 1, 1])
+    """FR-13.1.* / FR-13.2.* — provider, period (preset or custom), team, API key."""
+    # init session_state defaults once
+    st.session_state.setdefault("preset", DEFAULT_PRESET)
+    st.session_state.setdefault("provider", "all")
+    st.session_state.setdefault("team", "all")
+    st.session_state.setdefault("custom_range", (datetime.utcnow().date(), datetime.utcnow().date()))
+    st.session_state.setdefault("api_key_id", None)
+
+    # row 1 — provider | preset | team
+    c1, c2, c3 = st.columns([1, 1.4, 1])
     with c1:
-        s["period_label"] = st.selectbox(
-            "Period", list(PERIODS.keys()),
-            index=list(PERIODS.keys()).index(s.get("period_label", "30 days")),
-        )
-    with c2:
-        s["provider"] = st.selectbox(
-            "Provider", PROVIDERS,
-            index=PROVIDERS.index(s.get("provider", "all")),
+        st.selectbox(
+            "Provider", PROVIDERS, key="provider",
             format_func=lambda x: "All providers" if x == "all" else x.capitalize(),
         )
+    with c2:
+        st.selectbox("Period", PRESETS, key="preset")
     with c3:
-        s["team"] = st.selectbox(
-            "Team", TEAMS,
-            index=TEAMS.index(s.get("team", "all")),
+        st.selectbox(
+            "Team", TEAMS, key="team",
             format_func=lambda x: "All teams" if x == "all" else x,
         )
 
+    date_from = date_to = None
+    if st.session_state.preset == "Custom":
+        rng = st.date_input(
+            "Custom date range",
+            value=st.session_state.custom_range,
+            key="custom_range_input",
+        )
+        if isinstance(rng, tuple) and len(rng) == 2 and all(rng):
+            st.session_state.custom_range = rng
+            date_from = datetime.combine(rng[0], datetime.min.time())
+            date_to = datetime.combine(rng[1], datetime.min.time())
+    else:
+        s, e = preset_range(st.session_state.preset)
+        date_from, date_to = s, e
+
+    # row 2 — API key drill-down
+    keys = _api_keys_for_provider(st.session_state.provider)
+    options = [None] + [k["id"] for k in keys]
+    labels = {None: "All keys"}
+    for k in keys:
+        red = k.get("redacted_value") or ""
+        red_short = (red[:8] + "…" + red[-4:]) if len(red) > 14 else red
+        labels[k["id"]] = f"{k['name']} · {red_short or k['provider']}"
+    st.selectbox(
+        "API key", options, key="api_key_id",
+        format_func=lambda v: labels.get(v, "All keys"),
+    )
+
+    # synthesise period_days for backward compat with old call sites
+    if date_from and date_to:
+        period_days = max((date_to.date() - date_from.date()).days, 1)
+    else:
+        period_days = 30
+
     return Filters(
-        period_days=PERIODS[s["period_label"]],
-        provider=s["provider"],
-        team=s["team"],
+        period_days=period_days,
+        provider=st.session_state.provider,
+        team=st.session_state.team,
+        date_from=date_from,
+        date_to=date_to,
+        api_key_id=st.session_state.api_key_id,
     )
 
 
@@ -104,7 +167,7 @@ def section(title: str) -> None:
 
 
 def fmt_money(v: float) -> str:
-    return f"${v:,.0f}" if v >= 100 else f"${v:,.2f}"
+    return f"${v:,.0f}" if abs(v) >= 100 else f"${v:,.2f}"
 
 
 def fmt_int(v: int) -> str:
