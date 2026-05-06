@@ -126,7 +126,24 @@ class OpenAIConnector(BaseConnector):
         model_ids: dict[str, int],
         report: SyncReport,
     ) -> None:
-        """`/usage/completions` группируем по user_id и model, bucket = 1d."""
+        """`/usage/completions` группируем по user_id и model, bucket = 1d.
+
+        Идемпотентность: перед загрузкой удаляем уже существующие события
+        OpenAI в окне, чтобы повторный sync не дублировал записи.
+        Tokens равномерно делим между requests'ами одного bucket'а — это даёт
+        нормальные `COUNT(*)` в models breakdown и аккуратные суммы в KPI.
+        """
+        with get_conn() as conn:
+            conn.execute(
+                "DELETE FROM usage_events WHERE provider_id = ? AND occurred_at BETWEEN ? AND ?",
+                (
+                    provider_id,
+                    start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                    end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                ),
+            )
+            conn.commit()
+
         params: dict[str, Any] = {
             "start_time": int(start_dt.timestamp()),
             "end_time": int(end_dt.timestamp()),
@@ -147,38 +164,39 @@ class OpenAIConnector(BaseConnector):
                 if not ts:
                     continue
                 bucket_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
-                for r in bucket.get("results", []):
-                    user_ext = r.get("user_id")
-                    user_id = users_by_id.get(user_ext)
-                    if not user_id:
-                        continue
-                    model_name = r.get("model") or "unknown"
-                    model_id = self._ensure_model(model_name, provider_id, model_ids)
-                    tokens_in = to_int(r.get("input_tokens"))
-                    tokens_out = to_int(r.get("output_tokens"))
-                    tokens_cached = to_int(r.get("input_cached_tokens"))
-                    requests_n = to_int(r.get("num_model_requests"), default=1) or 1
-                    with get_conn() as conn:
+                with get_conn() as conn:
+                    rows: list[tuple] = []
+                    for r in bucket.get("results", []):
+                        user_ext = r.get("user_id")
+                        user_id = users_by_id.get(user_ext)
+                        if not user_id:
+                            continue
+                        model_name = r.get("model") or "unknown"
+                        model_id = self._ensure_model(model_name, provider_id, model_ids)
+                        tokens_in = to_int(r.get("input_tokens"))
+                        tokens_out = to_int(r.get("output_tokens"))
+                        tokens_cached = to_int(r.get("input_cached_tokens"))
+                        requests_n = max(to_int(r.get("num_model_requests"), default=1), 1)
+                        per_in = tokens_in // requests_n
+                        per_out = tokens_out // requests_n
+                        per_cached = tokens_cached // requests_n
+                        ts_str = bucket_dt.strftime("%Y-%m-%d %H:%M:%S")
                         for _ in range(requests_n):
-                            conn.execute(
-                                """INSERT INTO usage_events(
-                                    user_id, provider_id, model_id, occurred_at,
-                                    tokens_in, tokens_out, tokens_cached, cost_usd,
-                                    is_error, purpose
-                                ) VALUES(?,?,?,?,?,?,?,?,0,'API')""",
-                                (
-                                    user_id,
-                                    provider_id,
-                                    model_id,
-                                    bucket_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                                    tokens_in // max(requests_n, 1),
-                                    tokens_out // max(requests_n, 1),
-                                    tokens_cached // max(requests_n, 1),
-                                    0.0,
-                                ),
-                            )
-                            report.inserted += 1
-                        conn.commit()
+                            rows.append((
+                                user_id, provider_id, model_id, ts_str,
+                                per_in, per_out, per_cached, 0.0, 0, "API",
+                            ))
+                    if rows:
+                        conn.executemany(
+                            """INSERT INTO usage_events(
+                                user_id, provider_id, model_id, occurred_at,
+                                tokens_in, tokens_out, tokens_cached, cost_usd,
+                                is_error, purpose
+                            ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            rows,
+                        )
+                        report.inserted += len(rows)
+                    conn.commit()
             if not data.get("has_more"):
                 break
             page = data.get("next_page")

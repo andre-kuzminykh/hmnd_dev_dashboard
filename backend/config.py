@@ -8,15 +8,26 @@ import os
 from dataclasses import dataclass
 
 
+def _running_inside_streamlit() -> bool:
+    try:
+        from streamlit.runtime import exists  # type: ignore
+        return bool(exists())
+    except Exception:
+        return False
+
+
 def _from_env_or_secrets(name: str, default: str = "") -> str:
-    """Сначала env, затем st.secrets (если Streamlit подгружен)."""
+    """Сначала env, затем st.secrets — но только если мы внутри Streamlit-сессии.
+    В CLI/sync режиме лезть в st.secrets не нужно: оно печатает шумные warnings.
+    """
     val = os.environ.get(name)
     if val:
         return val
+    if not _running_inside_streamlit():
+        return default
     try:
         import streamlit as st  # noqa: WPS433
-
-        if hasattr(st, "secrets") and name in st.secrets:
+        if name in st.secrets:
             return str(st.secrets[name])
     except Exception:
         pass
