@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from .base import BaseConnector, SyncReport
+from .base import BaseConnector, SyncReport, to_float, to_int
 from data.db import get_conn
 
 
@@ -84,9 +84,9 @@ class AnthropicConnector(BaseConnector):
             for r in bucket.get("results", []):
                 model_name = r.get("model") or "unknown"
                 model_id = self._ensure_model(model_name, provider_id, model_ids)
-                tokens_in = r.get("input_tokens", 0) + r.get("cache_creation_input_tokens", 0)
-                tokens_out = r.get("output_tokens", 0)
-                tokens_cached = r.get("cache_read_input_tokens", 0)
+                tokens_in = to_int(r.get("input_tokens")) + to_int(r.get("cache_creation_input_tokens"))
+                tokens_out = to_int(r.get("output_tokens"))
+                tokens_cached = to_int(r.get("cache_read_input_tokens"))
                 with get_conn() as conn:
                     conn.execute(
                         """INSERT INTO usage_events(
@@ -119,7 +119,7 @@ class AnthropicConnector(BaseConnector):
         if code == 200 and data:
             for bucket in data.get("data", []):
                 day = (bucket.get("starting_at") or "")[:10]
-                cost = sum((r.get("amount") or {}).get("value", 0) for r in bucket.get("results", []))
+                cost = sum(to_float((r.get("amount") or {}).get("value")) for r in bucket.get("results", []))
                 if not day:
                     continue
                 with get_conn() as conn:

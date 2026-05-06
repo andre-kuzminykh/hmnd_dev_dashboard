@@ -1,4 +1,4 @@
-# HMND AI Governance Dashboard
+# HMND AIOps Dashboard
 
 Streamlit-дашборд для мониторинга расходов на OpenAI и Anthropic, утилизации сидений, активности разработчиков и доли AI-кода в репозиториях.
 

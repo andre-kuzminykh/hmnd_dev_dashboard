@@ -142,7 +142,7 @@ def render_brand() -> None:
             <div class="title">HUMANOID</div>
         </div>
         <div style="font-size:13px;color:#475569;margin-bottom:8px">
-            AI Governance Dashboard
+            AIOps Dashboard
         </div>
         """,
         unsafe_allow_html=True,

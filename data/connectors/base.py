@@ -4,6 +4,28 @@ from dataclasses import dataclass, field
 from datetime import date
 
 
+def to_float(x, default: float = 0.0) -> float:
+    """OpenAI/Anthropic иногда возвращают числа как строки; коэрсим без падения."""
+    if x is None or x == "":
+        return default
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return default
+
+
+def to_int(x, default: int = 0) -> int:
+    if x is None or x == "":
+        return default
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        try:
+            return int(float(x))
+        except (TypeError, ValueError):
+            return default
+
+
 @dataclass
 class SyncReport:
     provider: str

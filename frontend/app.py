@@ -24,7 +24,7 @@ from frontend.theme import BLUE, NAVY, inject, render_brand
 
 
 st.set_page_config(
-    page_title="HMND · AI Governance",
+    page_title="HMND · AIOps",
     page_icon="https://i.ibb.co/nsfMVMGM/1.png",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -50,7 +50,7 @@ _bootstrap_db()
 
 hero(
     "F-01 · Executive Overview",
-    'AI <span class="accent">Governance</span> Dashboard',
+    '<span class="accent">AIOps</span> Dashboard',
     "Кто использует ИИ, сколько это стоит, насколько эффективно и сколько AI-кода реально попадает в production.",
 )
 

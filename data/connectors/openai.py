@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from .base import BaseConnector, SyncReport
+from .base import BaseConnector, SyncReport, to_float, to_int
 from data.db import get_conn
 
 
@@ -154,10 +154,10 @@ class OpenAIConnector(BaseConnector):
                         continue
                     model_name = r.get("model") or "unknown"
                     model_id = self._ensure_model(model_name, provider_id, model_ids)
-                    tokens_in = r.get("input_tokens", 0)
-                    tokens_out = r.get("output_tokens", 0)
-                    tokens_cached = r.get("input_cached_tokens", 0)
-                    requests_n = r.get("num_model_requests", 1)
+                    tokens_in = to_int(r.get("input_tokens"))
+                    tokens_out = to_int(r.get("output_tokens"))
+                    tokens_cached = to_int(r.get("input_cached_tokens"))
+                    requests_n = to_int(r.get("num_model_requests"), default=1) or 1
                     with get_conn() as conn:
                         for _ in range(requests_n):
                             conn.execute(
@@ -212,7 +212,7 @@ class OpenAIConnector(BaseConnector):
                     continue
                 cost = 0.0
                 for r in bucket.get("results", []):
-                    cost += (r.get("amount") or {}).get("value", 0) or 0
+                    cost += to_float((r.get("amount") or {}).get("value"))
                 # пишем в daily_costs на «организационного» юзера id=NULL не позволит схема,
                 # поэтому маппим на первого юзера из users_by_id; либо обновим existing rows.
                 with get_conn() as conn:

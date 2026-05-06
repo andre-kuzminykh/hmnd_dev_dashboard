@@ -1,4 +1,4 @@
-# HMND AI Governance Dashboard — Specification
+# HMND AIOps Dashboard — Specification
 
 > Источник правды для разработки. Иерархия: **Feature → User Story → BDD Scenario → Requirements (FR/NFR) → Tests → Implementation by layers (Data / Backend / Frontend)**.
 
@@ -300,7 +300,7 @@ And в UI отображается статус "connected"
 Given любая страница дашборда
 When пользователь смотрит на левый сайдбар
 Then видно меню: Overview, Costs, Seats, Developers, Repositories, PR Quality, Models, Alerts, Settings
-And в шапке логотип HMND и название "AI Governance Dashboard"
+And в шапке логотип HMND и название "AIOps Dashboard"
 ```
 
 **Требования:**
