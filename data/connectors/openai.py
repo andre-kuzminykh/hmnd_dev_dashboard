@@ -8,6 +8,48 @@ from .base import BaseConnector, SyncReport, to_float, to_int
 from data.db import get_conn
 
 
+# Hard-coded $/1K-token prices for the most common OpenAI models.
+# Used to compute cost_usd per usage event when the org's costs endpoint
+# can't be group_by-ed at user_id level.
+# Format: model_name -> (input_per_1k, output_per_1k, cache_read_per_1k)
+OPENAI_DEFAULT_PRICES: dict[str, tuple[float, float, float]] = {
+    "gpt-4o":                  (0.0025,   0.01,    0.00125),
+    "gpt-4o-mini":             (0.00015,  0.0006,  0.000075),
+    "gpt-4o-realtime-preview": (0.005,    0.02,    0.0025),
+    "gpt-4-turbo":             (0.01,     0.03,    0.0),
+    "gpt-4":                   (0.03,     0.06,    0.0),
+    "gpt-3.5-turbo":           (0.0005,   0.0015,  0.0),
+    "gpt-5":                   (0.005,    0.015,   0.0025),
+    "gpt-5.1":                 (0.005,    0.015,   0.0025),
+    "gpt-5.1-mini":            (0.0008,   0.0024,  0.0004),
+    "o1":                      (0.015,    0.06,    0.0075),
+    "o1-mini":                 (0.003,    0.012,   0.0015),
+    "o1-preview":              (0.015,    0.06,    0.0075),
+    "o3":                      (0.002,    0.008,   0.001),
+    "o3-mini":                 (0.0011,   0.0044,  0.00055),
+    "o4-mini":                 (0.0011,   0.0044,  0.00055),
+    "text-embedding-3-small":  (0.00002,  0.0,     0.0),
+    "text-embedding-3-large":  (0.00013,  0.0,     0.0),
+    "text-embedding-ada-002":  (0.0001,   0.0,     0.0),
+}
+
+
+def _model_price_lookup(name: str) -> tuple[float, float, float] | None:
+    """Find prices for `name` (exact) or its base (e.g. 'gpt-4o-2024-08-06' → 'gpt-4o').
+
+    Returns None when no match is found — caller should default to 0.
+    """
+    if not name:
+        return None
+    if name in OPENAI_DEFAULT_PRICES:
+        return OPENAI_DEFAULT_PRICES[name]
+    # Try longest-prefix match (handles versioned models like gpt-4o-2024-08-06)
+    for base in sorted(OPENAI_DEFAULT_PRICES.keys(), key=len, reverse=True):
+        if name.startswith(base):
+            return OPENAI_DEFAULT_PRICES[base]
+    return None
+
+
 class OpenAIConnector(BaseConnector):
     name = "openai"
     BASE = "https://api.openai.com/v1/organization"
@@ -49,9 +91,15 @@ class OpenAIConnector(BaseConnector):
 
         users_by_id = self._sync_users(report)
         provider_id, model_ids = self._ensure_provider_and_models(report)
+        # Backfill default prices for models created by previous sync runs
+        self._backfill_prices(provider_id)
         keys_by_external = self._sync_api_keys(provider_id, users_by_id, report)
         self._sync_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
-        self._sync_costs(start_dt, end_dt, provider_id, report)
+        # Org-level totals from /costs endpoint are kept as a sanity log only;
+        # per-event cost_usd is now computed from model prices in _sync_usage,
+        # which gives accurate per-user attribution that the costs endpoint
+        # cannot provide (it does not support group_by=user_id).
+        self._sync_costs_report_only(start_dt, end_dt, report)
         return report
 
     # ---- api keys ----
@@ -135,9 +183,55 @@ class OpenAIConnector(BaseConnector):
                 (provider_id, name, name.split("-")[0]),
             )
             mid = cur.lastrowid
+            price = _model_price_lookup(name)
+            if price:
+                conn.execute(
+                    """INSERT INTO model_prices(model_id, valid_from,
+                                                input_per_1k, output_per_1k, cache_read_per_1k)
+                       VALUES(?, '2026-01-01', ?, ?, ?)""",
+                    (mid, *price),
+                )
             conn.commit()
         model_ids[name] = mid
         return mid
+
+    def _backfill_prices(self, provider_id: int) -> int:
+        """For OpenAI models that exist without a price row, insert defaults."""
+        inserted = 0
+        with get_conn() as conn:
+            rows = conn.execute(
+                """SELECT m.id, m.name FROM models m
+                   LEFT JOIN model_prices mp ON mp.model_id = m.id
+                   WHERE m.provider_id = ? AND mp.id IS NULL""",
+                (provider_id,),
+            ).fetchall()
+            for r in rows:
+                price = _model_price_lookup(r["name"])
+                if not price:
+                    continue
+                conn.execute(
+                    """INSERT INTO model_prices(model_id, valid_from,
+                                                input_per_1k, output_per_1k, cache_read_per_1k)
+                       VALUES(?, '2026-01-01', ?, ?, ?)""",
+                    (r["id"], *price),
+                )
+                inserted += 1
+            conn.commit()
+        return inserted
+
+    def _price_cache(self, provider_id: int) -> dict[int, tuple[float, float, float]]:
+        with get_conn() as conn:
+            rows = conn.execute(
+                """SELECT model_id, input_per_1k, output_per_1k, cache_read_per_1k
+                   FROM model_prices mp
+                   JOIN models m ON m.id = mp.model_id
+                   WHERE m.provider_id = ?""",
+                (provider_id,),
+            ).fetchall()
+        return {
+            r["model_id"]: (r["input_per_1k"], r["output_per_1k"], r["cache_read_per_1k"])
+            for r in rows
+        }
 
     def _sync_users(self, report: SyncReport) -> dict[str, int]:
         """`/v1/organization/users` → upsert по email."""
@@ -210,6 +304,8 @@ class OpenAIConnector(BaseConnector):
             "group_by": "user_id,model,api_key_id",
             "limit": 31,
         }
+        # Preload prices once per sync (one query, then in-memory lookup).
+        prices_by_model = self._price_cache(provider_id)
         page = None
         while True:
             if page:
@@ -239,13 +335,22 @@ class OpenAIConnector(BaseConnector):
                         per_in = tokens_in // requests_n
                         per_out = tokens_out // requests_n
                         per_cached = tokens_cached // requests_n
+                        # Compute cost per event using model prices.
+                        p_in, p_out, p_cache = prices_by_model.get(model_id, (0.0, 0.0, 0.0))
+                        billed_in = max(per_in - per_cached, 0)
+                        per_cost = round(
+                            billed_in / 1000.0 * p_in
+                            + per_cached / 1000.0 * p_cache
+                            + per_out / 1000.0 * p_out,
+                            6,
+                        )
                         ts_str = bucket_dt.strftime("%Y-%m-%d %H:%M:%S")
                         api_key_ext = r.get("api_key_id")
                         api_key_id = keys_by_external.get(api_key_ext) if api_key_ext else None
                         for _ in range(requests_n):
                             rows.append((
                                 user_id, provider_id, model_id, api_key_id, ts_str,
-                                per_in, per_out, per_cached, 0.0, 0, "API",
+                                per_in, per_out, per_cached, per_cost, 0, "API",
                             ))
                     if rows:
                         conn.executemany(
@@ -262,7 +367,36 @@ class OpenAIConnector(BaseConnector):
                 break
             page = data.get("next_page")
 
-    def _sync_costs(
+    def _sync_costs_report_only(
+        self, start_dt: datetime, end_dt: datetime, report: SyncReport
+    ) -> None:
+        """Pull org total from /costs and stash it on the report for cross-check.
+        Does NOT write to daily_costs — those are aggregated from usage_events.
+        """
+        params: dict[str, Any] = {
+            "start_time": int(start_dt.timestamp()),
+            "end_time": int(end_dt.timestamp()),
+            "bucket_width": "1d",
+            "limit": 31,
+        }
+        page = None
+        total = 0.0
+        while True:
+            if page:
+                params["page"] = page
+            data = self._get("costs", params)
+            if data is None:
+                report.errors.append("costs endpoint failed (cross-check skipped)")
+                return
+            for bucket in data.get("data", []):
+                for r in bucket.get("results", []):
+                    total += to_float((r.get("amount") or {}).get("value"))
+            if not data.get("has_more"):
+                break
+            page = data.get("next_page")
+        report.errors.append(f"openai_reported_total_usd={round(total, 2)}")
+
+    def _sync_costs_legacy(
         self, start_dt: datetime, end_dt: datetime, provider_id: int, report: SyncReport
     ) -> None:
         """`/costs` → daily_costs (на уровне организации)."""

@@ -11,26 +11,25 @@ from data.db import get_conn
 
 
 def _refresh_daily_costs(period_days: int) -> int:
-    """Пересчитываем daily_costs на основе usage_events для всех (user, provider, day)."""
-    cutoff = (datetime.utcnow() - timedelta(days=period_days)).strftime("%Y-%m-%d")
-    sql = """
-        INSERT INTO daily_costs(user_id, provider_id, day, cost_usd, tokens_in, tokens_out, requests)
-        SELECT
-            user_id, provider_id, date(occurred_at) AS day,
-            ROUND(SUM(cost_usd), 4),
-            SUM(tokens_in), SUM(tokens_out), COUNT(*)
-        FROM usage_events
-        WHERE date(occurred_at) >= ?
-        GROUP BY user_id, provider_id, day
-        ON CONFLICT(user_id, provider_id, day)
-        DO UPDATE SET
-            cost_usd = excluded.cost_usd,
-            tokens_in = excluded.tokens_in,
-            tokens_out = excluded.tokens_out,
-            requests = excluded.requests
+    """Wipe daily_costs in the period and re-aggregate from usage_events.
+
+    Idempotent regardless of how many times sync runs: every event that
+    survived in usage_events contributes once to daily_costs.
     """
+    cutoff = (datetime.utcnow() - timedelta(days=period_days)).strftime("%Y-%m-%d")
     with get_conn() as conn:
-        cur = conn.execute(sql, (cutoff,))
+        conn.execute("DELETE FROM daily_costs WHERE day >= ?", (cutoff,))
+        cur = conn.execute(
+            """INSERT INTO daily_costs(user_id, provider_id, day,
+                                       cost_usd, tokens_in, tokens_out, requests)
+               SELECT user_id, provider_id, date(occurred_at) AS day,
+                      ROUND(SUM(cost_usd), 4),
+                      SUM(tokens_in), SUM(tokens_out), COUNT(*)
+               FROM usage_events
+               WHERE date(occurred_at) >= ?
+               GROUP BY user_id, provider_id, day""",
+            (cutoff,),
+        )
         rows = cur.rowcount
         conn.commit()
     return rows
