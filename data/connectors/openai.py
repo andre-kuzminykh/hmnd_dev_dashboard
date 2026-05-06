@@ -1,6 +1,7 @@
 """OpenAI Admin API connector — Usage + Costs + Users."""
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -98,9 +99,34 @@ class OpenAIConnector(BaseConnector):
         self._backfill_prices(provider_id)
         keys_by_external = self._sync_api_keys(provider_id, users_by_id, report)
         self._sync_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
-        # Pull non-completion usage so total spend lines up with OpenAI's
-        # billing UI (which sums chat + embeddings + images + audio etc.).
-        self._sync_other_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
+        # Non-completion endpoints (embeddings / images / audio / vector_stores /
+        # code_interpreter / moderations) are gated behind an env flag because
+        # the cost model for some of them (audio: seconds/characters; code
+        # interpreter: sessions) doesn't fit the per-token formula and can
+        # inflate the dashboard spend in misleading ways. Enable explicitly:
+        #   HMND_OPENAI_OTHER_USAGE=true
+        if os.environ.get("HMND_OPENAI_OTHER_USAGE", "").lower() in {"1", "true", "yes", "on"}:
+            self._sync_other_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
+        else:
+            # Sweep any rows previously inserted by _sync_other_usage in case
+            # the flag was on earlier — otherwise the dashboard would still
+            # show the inflated spend after we toggle the flag back off.
+            with get_conn() as conn:
+                cur = conn.execute(
+                    """DELETE FROM usage_events
+                       WHERE provider_id = ?
+                         AND purpose LIKE 'usage/%'
+                         AND date(occurred_at) >= date(?)
+                         AND date(occurred_at) <= date(?)""",
+                    (
+                        provider_id,
+                        start_dt.date().isoformat(),
+                        end_dt.date().isoformat(),
+                    ),
+                )
+                if cur.rowcount:
+                    report.errors.append(f"swept {cur.rowcount} stale 'usage/*' rows")
+                conn.commit()
         # Org-level totals from /costs endpoint are kept as a sanity log only;
         # per-event cost_usd is now computed from model prices in _sync_usage,
         # which gives accurate per-user attribution that the costs endpoint
