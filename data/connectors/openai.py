@@ -165,25 +165,28 @@ class OpenAIConnector(BaseConnector):
                     created_at = k.get("created_at")
                     last_used = k.get("last_used_at")
                     with get_conn() as conn:
-                        row = conn.execute(
-                            "SELECT id FROM api_keys WHERE provider_id=? AND external_id=?",
-                            (provider_id, ext),
-                        ).fetchone()
-                        if row:
-                            kid = row["id"]
+                        # Race-safe upsert keyed on (provider_id, external_id).
+                        cur = conn.execute(
+                            """INSERT OR IGNORE INTO api_keys(
+                                    provider_id, external_id, name, redacted_value,
+                                    owner_user_id, is_admin, created_at, last_used_at)
+                               VALUES(?,?,?,?,?,?,?,?)""",
+                            (provider_id, ext, name, redacted, owner_local, is_admin, created_at, last_used),
+                        )
+                        if cur.rowcount:
+                            report.inserted += 1
+                        else:
+                            # Existing row — refresh mutable fields.
                             conn.execute(
                                 """UPDATE api_keys SET name=?, redacted_value=?, owner_user_id=?,
-                                                       is_admin=?, last_used_at=? WHERE id=?""",
-                                (name, redacted, owner_local, is_admin, last_used, kid),
+                                                       is_admin=?, last_used_at=?
+                                   WHERE provider_id=? AND external_id=?""",
+                                (name, redacted, owner_local, is_admin, last_used, provider_id, ext),
                             )
-                        else:
-                            kid = conn.execute(
-                                """INSERT INTO api_keys(provider_id, external_id, name, redacted_value,
-                                                        owner_user_id, is_admin, created_at, last_used_at)
-                                   VALUES(?,?,?,?,?,?,?,?)""",
-                                (provider_id, ext, name, redacted, owner_local, is_admin, created_at, last_used),
-                            ).lastrowid
-                            report.inserted += 1
+                        kid = conn.execute(
+                            "SELECT id FROM api_keys WHERE provider_id=? AND external_id=?",
+                            (provider_id, ext),
+                        ).fetchone()["id"]
                         conn.commit()
                     keys_by_external[ext] = kid
                 if not data.get("has_more"):
@@ -194,12 +197,10 @@ class OpenAIConnector(BaseConnector):
     # ---- pieces ----
     def _ensure_provider_and_models(self, report: SyncReport) -> tuple[int, dict[str, int]]:
         with get_conn() as conn:
-            row = conn.execute("SELECT id FROM providers WHERE name = 'openai'").fetchone()
-            if row:
-                provider_id = row["id"]
-            else:
-                cur = conn.execute("INSERT INTO providers(name) VALUES('openai')")
-                provider_id = cur.lastrowid
+            conn.execute("INSERT OR IGNORE INTO providers(name) VALUES('openai')")
+            provider_id = conn.execute(
+                "SELECT id FROM providers WHERE name = 'openai'"
+            ).fetchone()["id"]
             rows = conn.execute(
                 "SELECT id, name FROM models WHERE provider_id = ?", (provider_id,)
             ).fetchall()
@@ -210,16 +211,24 @@ class OpenAIConnector(BaseConnector):
         if name in model_ids:
             return model_ids[name]
         with get_conn() as conn:
-            cur = conn.execute(
-                "INSERT INTO models(provider_id, name, family) VALUES(?,?,?)",
+            # INSERT OR IGNORE handles the race where another sync process
+            # (e.g. the hourly sidecar running in parallel with a manual
+            # reset/sync) inserted the same (provider, name) row first.
+            conn.execute(
+                "INSERT OR IGNORE INTO models(provider_id, name, family) VALUES(?,?,?)",
                 (provider_id, name, name.split("-")[0]),
             )
-            mid = cur.lastrowid
+            row = conn.execute(
+                "SELECT id FROM models WHERE provider_id = ? AND name = ?",
+                (provider_id, name),
+            ).fetchone()
+            mid = row["id"]
             price = _model_price_lookup(name)
             if price:
+                # If another process already added a price row, ignore.
                 conn.execute(
-                    """INSERT INTO model_prices(model_id, valid_from,
-                                                input_per_1k, output_per_1k, cache_read_per_1k)
+                    """INSERT OR IGNORE INTO model_prices(
+                            model_id, valid_from, input_per_1k, output_per_1k, cache_read_per_1k)
                        VALUES(?, '2026-01-01', ?, ?, ?)""",
                     (mid, *price),
                 )
@@ -283,17 +292,18 @@ class OpenAIConnector(BaseConnector):
                 full_name = u.get("name") or email
                 role = u.get("role")
                 with get_conn() as conn:
-                    row = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-                    if row:
-                        uid = row["id"]
-                    else:
-                        cur = conn.execute(
-                            """INSERT INTO users(email, full_name, role, monthly_limit_usd, is_active)
-                               VALUES(?,?,?,?,1)""",
-                            (email, full_name, role, 200),
-                        )
-                        uid = cur.lastrowid
+                    # Race-safe upsert: another sync may have inserted the
+                    # same email moments ago. INSERT OR IGNORE keeps us happy.
+                    cur = conn.execute(
+                        """INSERT OR IGNORE INTO users(email, full_name, role, monthly_limit_usd, is_active)
+                           VALUES(?,?,?,?,1)""",
+                        (email, full_name, role, 200),
+                    )
+                    if cur.rowcount:
                         report.inserted += 1
+                    uid = conn.execute(
+                        "SELECT id FROM users WHERE email = ?", (email,)
+                    ).fetchone()["id"]
                     conn.commit()
                 users_by_id[u.get("id", "")] = uid
             if not data.get("has_more"):
