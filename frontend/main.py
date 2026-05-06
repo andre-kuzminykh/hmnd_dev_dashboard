@@ -45,6 +45,7 @@ _bootstrap_db()
 
 # Build page registry (always defined; some hidden behind feature flags).
 overview = st.Page("sections/overview.py",     title="Overview",         icon=":material/dashboard:", default=True)
+ai_tools = st.Page("sections/ai_tools.py",     title="AI Tools",         icon=":material/auto_awesome:")
 costs    = st.Page("sections/costs.py",        title="Costs by People",  icon=":material/payments:")
 seats    = st.Page("sections/seats.py",        title="Seats & Licenses", icon=":material/badge:")
 devs     = st.Page("sections/developers.py",   title="Developer Usage",  icon=":material/code:")
@@ -53,11 +54,11 @@ models   = st.Page("sections/models.py",       title="Models",           icon=":
 alerts   = st.Page("sections/alerts.py",       title="Alerts",           icon=":material/notifications:")
 settings = st.Page("sections/settings.py",     title="Settings",         icon=":material/settings:")
 
-pages = [overview, costs, seats, devs, keys, models, alerts, settings]
+pages = [overview, ai_tools, costs, seats, devs, keys, models, alerts, settings]
 if CFG.github_enabled:
     repos   = st.Page("sections/repositories.py", title="Repositories", icon=":material/folder:")
     pr_qual = st.Page("sections/pr_quality.py",   title="PR Quality",   icon=":material/rule:")
-    pages = [overview, costs, seats, devs, keys, repos, pr_qual, models, alerts, settings]
+    pages = [overview, ai_tools, costs, seats, devs, keys, repos, pr_qual, models, alerts, settings]
 
 # Hide the auto-rendered page picker so we can fully control sidebar order.
 nav = st.navigation(pages, position="hidden")

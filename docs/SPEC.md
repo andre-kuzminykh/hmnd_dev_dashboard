@@ -286,7 +286,96 @@ And в UI отображается статус "connected"
 
 ---
 
-## F-10 — Navigation & Theme
+## F-12 — AI Tools Dashboard
+
+**Цель:** Tool-centric экран для CTO/Eng-Manager: одной страницей с табами свести Claude / ChatGPT / Cursor + cross-provider High Spenders. Параллельный взгляд к F-01 Overview, но в разрезе **инструментов**, а не KPI-карточек.
+
+### US-12.1 — Tabs across tools
+
+> *As an* Engineering manager
+> *I want* видеть AI-расход и активность в разрезе инструментов (Claude / ChatGPT / Cursor) и отдельный таб High Spenders
+> *so that* отвечать на вопросы «кто пользуется чем и сколько тратит» без переключения между страницами.
+
+#### SC-12.1.1 — Overview tab + freshness header
+
+```gherkin
+Given в БД есть usage_events за последние 5 дней по как минимум одному провайдеру
+When пользователь открывает "AI Tools" → Overview tab
+Then над табами рендерится строка freshness: "Claude: <start>–<end> · <source>" по каждому провайдеру
+And в правом верхнем углу видны 3 цветных бейджа: Claude (фиолетовый), ChatGPT (зелёный), Cursor (янтарный)
+And в табе Overview ровно 4 KPI-карточки: Claude Chat Users (5d), Claude Code Users (5d), ChatGPT Active Users, Cursor Active Devs
+```
+
+**Требования:**
+
+- **FR-12.1.1.1** — Сервис `get_provider_freshness()` возвращает dict `{provider → {start_date, end_date, source}}`, где `source ∈ {'real','mock','absent'}`.
+- **FR-12.1.1.2** — Сервис `get_ai_tools_overview(period_days=5)` возвращает 4 ключа: `claude_chat_users`, `claude_code_users`, `chatgpt_active_users`, `cursor_active_devs`. Поля без подключенного источника возвращают `None`.
+- **FR-12.1.1.3** — `source = 'mock'` если у провайдера есть хотя бы один `api_keys.external_id LIKE 'sk-ant-mock-%'` или `'sk-mock-%'`. `source = 'real'` если есть real ключ. `source = 'absent'` если нет ни одного.
+- **NFR-12.1.1.1** — Цветовая палитра: Claude = `#6366f1`, ChatGPT = `#10a37f`, Cursor = `#f59e0b`.
+
+#### SC-12.1.2 — Claude Users tab
+
+```gherkin
+Given Anthropic usage events в БД
+When открыта вкладка Claude Users
+Then 4 KPI: Chat Active Users, Total Messages, Claude Code Users, CC Lines Added
+And список Top 10 by Messages с горизонтальными фиолетовыми баром
+And полная таблица All Claude Users с колонками: Name, Messages, CC Sessions, Lines Added, Commits
+And отсутствующие данные (CC Sessions / Lines / Commits) рисуются как тире
+```
+
+**Требования:**
+
+- **FR-12.1.2.1** — `get_users_for_provider(provider, period_days)` возвращает per-user roll-up: `{user_name, messages, sessions, lines_added, commits, cost}`. `messages = COUNT(usage_events)`.
+- **FR-12.1.2.2** — `sessions / lines_added / commits = None` пока не подключены Claude Code telemetry / GitHub.
+- **FR-12.1.2.3** — UI скрывает пустые ячейки тире (`—`).
+
+#### SC-12.1.3 — ChatGPT Users tab
+
+```gherkin
+Given OpenAI usage events
+When открыта вкладка ChatGPT Users
+Then 4 KPI: Active Users, Total Messages, Total Spend, High Spenders count (≥$200)
+And полная таблица All ChatGPT Users (Name, Messages, Spend, Flag)
+```
+
+**Требования:**
+
+- **FR-12.1.3.1** — `get_users_for_provider("openai", period_days)` возвращает `cost` поле.
+- **FR-12.1.3.2** — Колонка Flag: `High` если spend ≥ $1000, `Medium` если ≥ $500, `Watch` если ≥ $200, иначе пусто.
+
+#### SC-12.1.4 — Cursor placeholder
+
+```gherkin
+Given Cursor не подключен
+When открыта вкладка Cursor
+Then показано пустое состояние "Connect Cursor Teams API"
+And никаких пустых KPI или таблиц не отрисовано
+```
+
+**Требования:**
+
+- **FR-12.1.4.1** — Cursor статус определяется по наличию env `CURSOR_API_TOKEN` (`load_config().cursor_token`); при отсутствии — placeholder.
+
+#### SC-12.1.5 — High Spenders tab
+
+```gherkin
+Given несколько пользователей с расходом ≥ $200 за период
+When открыта вкладка High Spenders
+Then 3 KPI: count, Combined Spend, Top Spender (имя + сумма)
+And горизонтальные бары с цветом по риску: Red ≥ $1000, Amber ≥ $500, Yellow ≥ $200
+And подробная таблица: Name, Messages, Spend, $/msg, Risk
+And строка spend подкрашена тем же цветом, что и бейдж Risk
+```
+
+**Требования:**
+
+- **FR-12.1.5.1** — `get_high_spenders(period_days=30, threshold=200)` cross-provider, отсортировано по `spend desc`.
+- **FR-12.1.5.2** — Risk-классификация: `high` если spend ≥ $1000, `medium` если ≥ $500, `low` если ≥ $200, иначе не попадает.
+- **FR-12.1.5.3** — `dollar_per_msg = spend / messages` округлено до 2 знаков; при `messages == 0` возвращает `None`.
+- **NFR-12.1.5.1** — Цвета риска: red `#ef4444`, amber `#f59e0b`, yellow `#eab308`.
+
+
 
 ### US-10.1 — Бренд и навигация
 
@@ -334,6 +423,14 @@ And в шапке логотип HMND и название "AIOps Dashboard"
 | `tests/test_models.py::test_fr_07_1_1_2_error_rate` | FR-07.1.1.2 |
 | `tests/test_alerts.py::test_fr_08_1_1_1_dedup` | FR-08.1.1.1 |
 | `tests/test_alerts.py::test_fr_08_1_1_2_rules_set` | FR-08.1.1.2 |
+| `tests/test_ai_tools.py::test_fr_12_1_1_1_freshness` | FR-12.1.1.1 |
+| `tests/test_ai_tools.py::test_fr_12_1_1_2_overview_keys` | FR-12.1.1.2 |
+| `tests/test_ai_tools.py::test_fr_12_1_1_3_source_mock` | FR-12.1.1.3 |
+| `tests/test_ai_tools.py::test_fr_12_1_2_1_users_shape` | FR-12.1.2.1 |
+| `tests/test_ai_tools.py::test_fr_12_1_3_2_chatgpt_flag` | FR-12.1.3.2 |
+| `tests/test_ai_tools.py::test_fr_12_1_5_1_high_spenders_sort` | FR-12.1.5.1 |
+| `tests/test_ai_tools.py::test_fr_12_1_5_2_risk_classification` | FR-12.1.5.2 |
+| `tests/test_ai_tools.py::test_fr_12_1_5_3_dollar_per_msg` | FR-12.1.5.3 |
 
 ## Архитектура слоёв
 

@@ -18,6 +18,19 @@ OPENAI = "#10a37f"      # OpenAI teal
 ANTHROPIC = "#cc785c"   # Anthropic terracotta
 PROVIDER_COLORS = {"openai": OPENAI, "anthropic": ANTHROPIC, "OpenAI": OPENAI, "Anthropic": ANTHROPIC}
 
+# F-12 AI Tools view — by tool, not by provider.
+# Claude family stays purple to match the Anthropic console accent;
+# ChatGPT picks the OpenAI teal; Cursor uses an amber that matches their
+# editor's accent. Keep these in sync with NFR-12.1.1.1.
+CLAUDE = "#6366f1"      # purple
+CHATGPT = "#10a37f"     # teal
+CURSOR = "#f59e0b"      # amber
+
+# F-12 risk palette (NFR-12.1.5.1)
+RISK_HIGH = "#ef4444"
+RISK_MEDIUM = "#f59e0b"
+RISK_LOW = "#eab308"
+
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -104,6 +117,41 @@ h1 { font-weight: 300; }
 .hmnd-badge.review   { color:#1e40af; background:#eff6ff; border:1px solid #bfdbfe; }
 .hmnd-badge.revoke   { color:#991b1b; background:#fee2e2; border:1px solid #fecaca; }
 .hmnd-badge.keep     { color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; }
+
+/* F-12 AI Tools — provider chips and freshness header */
+.hmnd-fresh { font-size:13px; color:#475569; margin: 4px 0 14px 0; display:flex; gap:14px; flex-wrap:wrap; }
+.hmnd-fresh .item { display:inline-flex; align-items:center; gap:6px; }
+.hmnd-fresh .item .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+.hmnd-fresh .item.claude .dot   { background:#6366f1; }
+.hmnd-fresh .item.chatgpt .dot  { background:#10a37f; }
+.hmnd-fresh .item.cursor .dot   { background:#f59e0b; }
+.hmnd-fresh .item .label        { font-weight:600; color:#06091c; }
+.hmnd-fresh .item .source-real  { color:#10b981; font-weight:600; }
+.hmnd-fresh .item.claude .source-real  { color:#6366f1; }
+.hmnd-fresh .item.chatgpt .source-real { color:#10a37f; }
+.hmnd-fresh .item.cursor .source-real  { color:#f59e0b; }
+.hmnd-fresh .item .source-mock  { color:#f59e0b; font-weight:600; font-style:italic; }
+.hmnd-fresh .item .source-absent{ color:#94a3b8; font-style:italic; }
+
+.hmnd-providers { display:flex; gap:14px; justify-content:flex-end; margin-top:-32px; font-size:12px; }
+.hmnd-providers .chip { display:inline-flex; align-items:center; gap:5px; color:#475569; font-weight:500; }
+.hmnd-providers .chip .dot { width:8px; height:8px; border-radius:50%; }
+.hmnd-providers .chip.claude .dot  { background:#6366f1; }
+.hmnd-providers .chip.chatgpt .dot { background:#10a37f; }
+.hmnd-providers .chip.cursor .dot  { background:#f59e0b; }
+
+/* Top-N horizontal bars */
+.hmnd-bar-row { display:grid; grid-template-columns: 160px 1fr 70px; gap:12px; align-items:center; padding:6px 0; }
+.hmnd-bar-row .name  { font-size:13px; color:#06091c; }
+.hmnd-bar-row .value { font-size:13px; color:#475569; text-align:right; font-variant-numeric: tabular-nums; }
+.hmnd-bar-row .track { background:#f1f5f9; border-radius:999px; height:10px; overflow:hidden; }
+.hmnd-bar-row .fill  { height:100%; border-radius:999px; }
+.hmnd-bar-row .fill.claude  { background:#6366f1; }
+.hmnd-bar-row .fill.chatgpt { background:#10a37f; }
+.hmnd-bar-row .fill.cursor  { background:#f59e0b; }
+.hmnd-bar-row .fill.risk-high   { background:#ef4444; }
+.hmnd-bar-row .fill.risk-medium { background:#f59e0b; }
+.hmnd-bar-row .fill.risk-low    { background:#eab308; }
 
 /* Hero */
 .hmnd-hero {
