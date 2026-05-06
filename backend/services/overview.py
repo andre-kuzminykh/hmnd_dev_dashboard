@@ -69,6 +69,34 @@ def _suspicious_count(conn) -> int:
     ).fetchone()["n"]
 
 
+def _provider_reported_total(conn, start: datetime, end: datetime, provider: str) -> float | None:
+    """Authoritative org-level spend reported by the provider's billing API.
+    Pulled by the sync into provider_totals; None when no rows exist yet."""
+    if provider == "all":
+        sql = (
+            "SELECT COALESCE(SUM(pt.cost_usd), 0) AS total FROM provider_totals pt "
+            "WHERE pt.day BETWEEN ? AND ?"
+        )
+        params = [start.date().isoformat(), end.date().isoformat()]
+    else:
+        sql = (
+            "SELECT COALESCE(SUM(pt.cost_usd), 0) AS total FROM provider_totals pt "
+            "JOIN providers p ON p.id = pt.provider_id "
+            "WHERE p.name = ? AND pt.day BETWEEN ? AND ?"
+        )
+        params = [provider, start.date().isoformat(), end.date().isoformat()]
+    row = conn.execute(sql, params).fetchone()
+    if row and row["total"] is not None:
+        # Only return when at least one provider_totals row exists for the period.
+        check = conn.execute(
+            "SELECT COUNT(*) AS n FROM provider_totals WHERE day BETWEEN ? AND ?",
+            (start.date().isoformat(), end.date().isoformat()),
+        ).fetchone()
+        if check and check["n"]:
+            return float(row["total"])
+    return None
+
+
 def get_overview_kpis(filters: Filters | None = None, now: datetime | None = None) -> dict[str, Any]:
     """FR-01.1.1.1, FR-01.1.1.2, FR-01.1.1.3.
 
@@ -86,6 +114,7 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         ai_share = _ai_code_share(conn, start, end)
         ai_share_prev = _ai_code_share(conn, prev_start, prev_end)
         suspicious = _suspicious_count(conn)
+        reported_total = _provider_reported_total(conn, start, end, f.provider)
 
     cost_per_user = safe_div(cur["total_spend"], cur["active_users"], default=0.0)
     cost_per_user_prev = safe_div(prev["total_spend"], prev["active_users"], default=0.0)
@@ -99,6 +128,9 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         "cost_per_user": round(cost_per_user, 2),
         "ai_code_share": ai_share,
         "suspicious_count": int(suspicious),
+        # F-13.x — authoritative org total reported by the provider's billing API.
+        # None when sync hasn't populated provider_totals yet.
+        "reported_total": round(reported_total, 2) if reported_total is not None else None,
         # deltas (FR-01.1.1.3)
         "total_spend_delta": pct_delta(cur["total_spend"], prev["total_spend"]),
         "tokens_in_delta": pct_delta(cur["tokens_in"], prev["tokens_in"]),

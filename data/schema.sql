@@ -165,3 +165,16 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 CREATE INDEX IF NOT EXISTS ix_alerts_status ON alerts(status);
 CREATE INDEX IF NOT EXISTS ix_alerts_severity ON alerts(severity);
+
+-- Authoritative spend reported by the provider's own billing endpoint
+-- (OpenAI /v1/organization/costs, Anthropic /v1/organizations/cost_report).
+-- Used on Overview alongside our computed total so any gap from
+-- batch/enterprise/cached pricing differences is transparent.
+CREATE TABLE IF NOT EXISTS provider_totals (
+    id          INTEGER PRIMARY KEY,
+    provider_id INTEGER NOT NULL REFERENCES providers(id),
+    day         TEXT NOT NULL,
+    cost_usd    REAL NOT NULL DEFAULT 0,
+    UNIQUE(provider_id, day)
+);
+CREATE INDEX IF NOT EXISTS ix_provider_totals_day ON provider_totals(day);

@@ -589,9 +589,20 @@ class OpenAIConnector(BaseConnector):
     def _sync_costs_report_only(
         self, start_dt: datetime, end_dt: datetime, report: SyncReport
     ) -> None:
-        """Pull org total from /costs and stash it on the report for cross-check.
-        Does NOT write to daily_costs — those are aggregated from usage_events.
+        """Pull org daily totals from /costs and persist them into
+        provider_totals so the dashboard can show OpenAI's authoritative
+        number alongside our model-priced computation. The report's
+        `openai_reported_total_usd` line keeps the cumulative figure for
+        a glance during the sync run.
         """
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM providers WHERE name = 'openai'"
+            ).fetchone()
+        if not row:
+            return
+        provider_id = row["id"]
+
         params: dict[str, Any] = {
             "start_time": int(start_dt.timestamp()),
             "end_time": int(end_dt.timestamp()),
@@ -600,6 +611,15 @@ class OpenAIConnector(BaseConnector):
         }
         page = None
         total = 0.0
+
+        # Wipe period rows so any model/provider re-pricing is fully reflected.
+        with get_conn() as conn:
+            conn.execute(
+                "DELETE FROM provider_totals WHERE provider_id = ? AND day BETWEEN ? AND ?",
+                (provider_id, start_dt.date().isoformat(), end_dt.date().isoformat()),
+            )
+            conn.commit()
+
         while True:
             if page:
                 params["page"] = page
@@ -608,8 +628,21 @@ class OpenAIConnector(BaseConnector):
                 report.errors.append("costs endpoint failed (cross-check skipped)")
                 return
             for bucket in data.get("data", []):
+                ts = bucket.get("start_time")
+                if not ts:
+                    continue
+                day = datetime.fromtimestamp(ts, tz=timezone.utc).date().isoformat()
+                day_cost = 0.0
                 for r in bucket.get("results", []):
-                    total += to_float((r.get("amount") or {}).get("value"))
+                    day_cost += to_float((r.get("amount") or {}).get("value"))
+                total += day_cost
+                with get_conn() as conn:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO provider_totals(provider_id, day, cost_usd)
+                           VALUES(?,?,?)""",
+                        (provider_id, day, round(day_cost, 4)),
+                    )
+                    conn.commit()
             if not data.get("has_more"):
                 break
             page = data.get("next_page")

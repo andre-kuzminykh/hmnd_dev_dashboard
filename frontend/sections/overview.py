@@ -21,9 +21,15 @@ filters = filters_bar()
 
 kpis = get_overview_kpis(filters)
 
+reported = kpis.get("reported_total")
+total_note = "vs prev period"
+if reported is not None and kpis["total_spend"]:
+    diff_pct = (kpis["total_spend"] - reported) / reported * 100 if reported else 0
+    total_note = f"reported by provider: {fmt_money(reported)}  ·  Δ {diff_pct:+.1f}%"
+
 kpi_row([
     {"label": "Total spend",  "value": fmt_money(kpis["total_spend"]),
-     "delta": kpis["total_spend_delta"], "note": "vs prev period"},
+     "delta": kpis["total_spend_delta"], "note": total_note},
     {"label": "Tokens in",    "value": fmt_int(kpis["tokens_in"]),
      "delta": kpis["tokens_in_delta"], "note": "input tokens"},
     {"label": "Tokens out",   "value": fmt_int(kpis["tokens_out"]),
