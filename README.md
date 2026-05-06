@@ -17,7 +17,7 @@ python -m scripts.init_db
 python -m scripts.sync --days 7
 
 # Запустить
-streamlit run frontend/app.py --server.port 7501
+streamlit run frontend/main.py --server.port 7501
 ```
 
 Откроется на http://localhost:7501.

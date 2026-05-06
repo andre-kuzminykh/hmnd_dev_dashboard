@@ -13,6 +13,11 @@ SUCCESS = "#10b981"
 WARN = "#f59e0b"
 DANGER = "#ef4444"
 
+# Brand-correct provider colors used in charts.
+OPENAI = "#10a37f"      # OpenAI teal
+ANTHROPIC = "#cc785c"   # Anthropic terracotta
+PROVIDER_COLORS = {"openai": OPENAI, "anthropic": ANTHROPIC, "OpenAI": OPENAI, "Anthropic": ANTHROPIC}
+
 CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -49,6 +54,9 @@ h1 { font-weight: 300; }
 }
 .hmnd-brand .title {
     font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 700; color: #06091c;
+}
+.hmnd-brand-sub {
+    font-size: 13px; color: #475569; margin: -8px 4px 14px 4px;
 }
 
 /* KPI card */

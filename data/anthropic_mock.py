@@ -55,6 +55,30 @@ def _ensure_provider_and_models() -> tuple[int, dict[str, int], dict[str, tuple[
     return pid, model_ids, prices
 
 
+def _ensure_user_keys(provider_id: int, user_ids: list[int]) -> dict[int, int]:
+    """Генерим по одному синтетическому ключу на юзера, чтобы заполнить срез API Keys."""
+    keys_by_user: dict[int, int] = {}
+    with get_conn() as conn:
+        for uid in user_ids:
+            ext = f"sk-ant-mock-u{uid:05d}"
+            row = conn.execute(
+                "SELECT id FROM api_keys WHERE provider_id=? AND external_id=?",
+                (provider_id, ext),
+            ).fetchone()
+            if row:
+                kid = row["id"]
+            else:
+                kid = conn.execute(
+                    """INSERT INTO api_keys(provider_id, external_id, name, redacted_value,
+                                            owner_user_id, is_admin)
+                       VALUES(?,?,?,?,?,0)""",
+                    (provider_id, ext, f"mock-key-{uid}", f"sk-ant-mock-…u{uid:05d}", uid),
+                ).lastrowid
+            keys_by_user[uid] = kid
+        conn.commit()
+    return keys_by_user
+
+
 def synth_anthropic(period_days: int = 30) -> dict[str, Any]:
     """Заполняет usage_events и daily_costs синтетикой по Anthropic.
 
@@ -74,6 +98,7 @@ def synth_anthropic(period_days: int = 30) -> dict[str, Any]:
         return {"inserted": 0, "skipped": 1, "note": "no users yet — run OpenAI sync first"}
 
     pid, model_ids, prices = _ensure_provider_and_models()
+    keys_by_user = _ensure_user_keys(pid, [u["id"] for u in users])
 
     with get_conn() as conn:
         conn.execute(
@@ -133,7 +158,7 @@ def synth_anthropic(period_days: int = 30) -> dict[str, Any]:
                 minute = rng.randint(0, 59)
                 ts = day_dt.replace(hour=hour, minute=minute).strftime("%Y-%m-%d %H:%M:%S")
                 rows.append((
-                    u["id"], pid, model_id, ts,
+                    u["id"], pid, model_id, keys_by_user[u["id"]], ts,
                     tokens_in, tokens_out, tokens_cached, round(cost, 4),
                     latency, is_error, rng.choice(["IDE", "API", "Agent", "Chat"]),
                 ))
@@ -146,10 +171,10 @@ def synth_anthropic(period_days: int = 30) -> dict[str, Any]:
                 with get_conn() as conn:
                     conn.executemany(
                         """INSERT INTO usage_events(
-                            user_id, provider_id, model_id, occurred_at,
+                            user_id, provider_id, model_id, api_key_id, occurred_at,
                             tokens_in, tokens_out, tokens_cached, cost_usd,
                             latency_ms, is_error, purpose
-                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                        ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                         rows,
                     )
                     conn.execute(

@@ -53,11 +53,25 @@ CREATE TABLE IF NOT EXISTS seats (
     last_used_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS api_keys (
+    id              INTEGER PRIMARY KEY,
+    provider_id     INTEGER NOT NULL REFERENCES providers(id),
+    external_id     TEXT NOT NULL,         -- openai 'key_xxx' / anthropic 'apikey_xxx'
+    name            TEXT,
+    redacted_value  TEXT,                  -- 'sk-...****1234'
+    owner_user_id   INTEGER REFERENCES users(id),
+    is_admin        INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT,
+    last_used_at    TEXT,
+    UNIQUE(provider_id, external_id)
+);
+
 CREATE TABLE IF NOT EXISTS usage_events (
     id          INTEGER PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id),
     provider_id INTEGER NOT NULL REFERENCES providers(id),
     model_id    INTEGER NOT NULL REFERENCES models(id),
+    api_key_id  INTEGER REFERENCES api_keys(id),
     occurred_at TEXT NOT NULL,
     tokens_in   INTEGER NOT NULL DEFAULT 0,
     tokens_out  INTEGER NOT NULL DEFAULT 0,

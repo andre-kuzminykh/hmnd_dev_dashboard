@@ -1,13 +1,6 @@
 """F-05 Repositories & AI Code %."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -15,19 +8,14 @@ import streamlit as st
 from backend.config import load_config
 from backend.services.repos import get_repos_overview
 from frontend.components import badge, filters_bar, hero, section
-from frontend.theme import BLUE, NAVY, inject, render_brand
-
-
-st.set_page_config(page_title="Repositories · HMND", layout="wide")
-inject()
-render_brand()
+from frontend.theme import BLUE, NAVY
 
 CFG = load_config()
 
 hero(
     "F-05 · Repositories",
-    'Доля <span class="accent">AI-кода</span> в репозиториях',
-    "Сколько % кода в каждом репозитории создано ИИ. Контроль рискованных компонентов.",
+    'Share of <span class="accent">AI code</span> per repo',
+    "How much of every repository was written by AI. Visibility into risk on critical components.",
 )
 
 if not CFG.github_enabled:
@@ -41,18 +29,17 @@ if not CFG.github_enabled:
                 Coming soon
             </div>
             <div style="font-size:22px;color:#06091c;font-weight:300;margin-top:8px">
-                Подключи GitHub, чтобы увидеть долю AI-кода
+                Connect GitHub to see AI code share
             </div>
             <p style="margin-top:8px">
-                Открой <b>Settings</b> → введи GitHub Token → запусти Sync. После этого здесь
-                появятся реальные репозитории, коммиты и AI-attribution.
+                Open <b>Settings</b> → add a GitHub Token → enable
+                <code>HMND_GITHUB_ENABLED=true</code> → run a sync.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
     st.stop()
-
 
 filters = filters_bar()
 rows = get_repos_overview(filters)
@@ -67,14 +54,9 @@ view = df[[
     "repo", "is_critical", "commits", "prs", "lines_added",
     "ai_lines", "ai_code_pct", "risk_badge",
 ]].rename(columns={
-    "repo": "Repo",
-    "is_critical": "Critical",
-    "commits": "Commits",
-    "prs": "PRs",
-    "lines_added": "Lines added",
-    "ai_lines": "AI lines",
-    "ai_code_pct": "AI %",
-    "risk_badge": "Risk",
+    "repo": "Repo", "is_critical": "Critical",
+    "commits": "Commits", "prs": "PRs", "lines_added": "Lines added",
+    "ai_lines": "AI lines", "ai_code_pct": "AI %", "risk_badge": "Risk",
 })
 st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"), unsafe_allow_html=True)
 

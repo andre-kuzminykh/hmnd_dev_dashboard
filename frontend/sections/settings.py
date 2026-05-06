@@ -1,32 +1,19 @@
 """F-09 Settings & Connectors."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import streamlit as st
 
 from backend.config import load_config
 from backend.services.sync import run_sync
 from data.connectors import AnthropicConnector, GitHubConnector, OpenAIConnector
 from frontend.components import hero, section
-from frontend.theme import inject, render_brand
-
-
-st.set_page_config(page_title="Settings · HMND", layout="wide")
-inject()
-render_brand()
 
 CFG = load_config()
 
 hero(
     "F-09 · Settings",
-    'Подключение <span class="accent">источников</span>',
-    "Ключи приходят из переменных окружения сервера или .streamlit/secrets.toml.",
+    'Connect your <span class="accent">sources</span>',
+    "Keys come from server env vars or .streamlit/secrets.toml. Never stored in DB.",
 )
 
 
@@ -41,7 +28,9 @@ st.markdown(
     f"""
     <div style="font-size:14px;line-height:1.8">
         <b>OPENAI_API_KEY</b> &nbsp;{_key_status(CFG.openai_key)}<br>
-        <b>ANTHROPIC_API_KEY</b> &nbsp;{_key_status(CFG.anthropic_key)}<br>
+        <b>ANTHROPIC_API_KEY</b> &nbsp;{_key_status(CFG.anthropic_key)}
+        {" · <span class='hmnd-badge review'>mock mode</span>" if CFG.anthropic_mock else ""}
+        <br>
         <b>GITHUB_TOKEN</b> &nbsp;{_key_status(CFG.github_token)} ·
         feature flag <code>HMND_GITHUB_ENABLED</code> = {"on" if CFG.github_enabled else "off"}
     </div>
@@ -50,8 +39,8 @@ st.markdown(
 )
 
 st.caption(
-    "Настройка ключей: добавить в systemd unit `Environment=OPENAI_API_KEY=...` или "
-    "положить в `.streamlit/secrets.toml`. После изменения — `sudo systemctl restart hmnd-dashboard`."
+    "Edit keys in `.env` (Docker) or `Environment=` in the systemd unit, "
+    "then restart the service: `docker compose up -d` or `sudo systemctl restart hmnd-dashboard`."
 )
 
 section("Connection test")
@@ -70,7 +59,9 @@ with c2:
     if st.button("Test Anthropic", use_container_width=True):
         c = AnthropicConnector(api_key=CFG.anthropic_key, mock=not CFG.anthropic_key)
         ok = c.test_connection()
-        if c.mock:
+        if CFG.anthropic_mock:
+            st.info("mock mode (HMND_ANTHROPIC_MOCK=true)")
+        elif c.mock:
             st.info("mock mode (no key)")
         elif ok:
             st.success("connected")
@@ -101,7 +92,7 @@ if st.button("Wipe all data (drop tables, recreate schema)"):
     with get_conn() as conn:
         for t in [
             "ai_code_attribution", "alerts", "pull_requests", "commits",
-            "repositories", "daily_costs", "usage_events", "seats",
+            "repositories", "daily_costs", "usage_events", "api_keys", "seats",
             "model_prices", "models", "providers", "users", "teams",
         ]:
             conn.execute(f"DELETE FROM {t}")

@@ -49,10 +49,18 @@ def get_conn(db_path: Path | str | None = None) -> sqlite3.Connection:
     return conn
 
 
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def init_schema(db_path: Path | str | None = None) -> None:
     sql = SCHEMA_PATH.read_text(encoding="utf-8")
     with get_conn(db_path) as conn:
         conn.executescript(sql)
+        # idempotent migrations for older DBs
+        _ensure_column(conn, "usage_events", "api_key_id", "INTEGER")
         conn.commit()
 
 

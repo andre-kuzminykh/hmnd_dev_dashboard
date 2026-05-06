@@ -8,7 +8,7 @@ User=__USER__
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 Environment="PATH=__APP_DIR__/.venv/bin"
-ExecStart=__APP_DIR__/.venv/bin/streamlit run frontend/app.py \
+ExecStart=__APP_DIR__/.venv/bin/streamlit run frontend/main.py \
   --server.port 7501 \
   --server.address 127.0.0.1 \
   --server.headless true \

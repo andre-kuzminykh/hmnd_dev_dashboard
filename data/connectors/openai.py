@@ -49,9 +49,67 @@ class OpenAIConnector(BaseConnector):
 
         users_by_id = self._sync_users(report)
         provider_id, model_ids = self._ensure_provider_and_models(report)
-        self._sync_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, report)
+        keys_by_external = self._sync_api_keys(provider_id, users_by_id, report)
+        self._sync_usage(start_dt, end_dt, users_by_id, provider_id, model_ids, keys_by_external, report)
         self._sync_costs(start_dt, end_dt, provider_id, report)
         return report
+
+    # ---- api keys ----
+    def _sync_api_keys(
+        self, provider_id: int, users_by_id: dict[str, int], report: SyncReport
+    ) -> dict[str, int]:
+        """`/v1/organization/admin_api_keys` (admin keys) и `/v1/organization/api_keys`.
+
+        Возвращает mapping external_id → local id.
+        """
+        keys_by_external: dict[str, int] = {}
+        for endpoint, is_admin in (("admin_api_keys", 1), ("api_keys", 0)):
+            after = None
+            while True:
+                params = {"limit": 100}
+                if after:
+                    params["after"] = after
+                data = self._get(endpoint, params)
+                if data is None:
+                    # endpoint может быть недоступен в зависимости от прав
+                    break
+                items = data.get("data", []) if isinstance(data, dict) else []
+                for k in items:
+                    ext = k.get("id") or k.get("key_id")
+                    if not ext:
+                        continue
+                    name = k.get("name") or "(unnamed)"
+                    redacted = k.get("redacted_value") or k.get("redacted_key") or ""
+                    owner_ext = (k.get("owner") or {}).get("id") if isinstance(k.get("owner"), dict) else None
+                    owner_local = users_by_id.get(owner_ext) if owner_ext else None
+                    created_at = k.get("created_at")
+                    last_used = k.get("last_used_at")
+                    with get_conn() as conn:
+                        row = conn.execute(
+                            "SELECT id FROM api_keys WHERE provider_id=? AND external_id=?",
+                            (provider_id, ext),
+                        ).fetchone()
+                        if row:
+                            kid = row["id"]
+                            conn.execute(
+                                """UPDATE api_keys SET name=?, redacted_value=?, owner_user_id=?,
+                                                       is_admin=?, last_used_at=? WHERE id=?""",
+                                (name, redacted, owner_local, is_admin, last_used, kid),
+                            )
+                        else:
+                            kid = conn.execute(
+                                """INSERT INTO api_keys(provider_id, external_id, name, redacted_value,
+                                                        owner_user_id, is_admin, created_at, last_used_at)
+                                   VALUES(?,?,?,?,?,?,?,?)""",
+                                (provider_id, ext, name, redacted, owner_local, is_admin, created_at, last_used),
+                            ).lastrowid
+                            report.inserted += 1
+                        conn.commit()
+                    keys_by_external[ext] = kid
+                if not data.get("has_more"):
+                    break
+                after = data.get("last_id")
+        return keys_by_external
 
     # ---- pieces ----
     def _ensure_provider_and_models(self, report: SyncReport) -> tuple[int, dict[str, int]]:
@@ -124,6 +182,7 @@ class OpenAIConnector(BaseConnector):
         users_by_id: dict[str, int],
         provider_id: int,
         model_ids: dict[str, int],
+        keys_by_external: dict[str, int],
         report: SyncReport,
     ) -> None:
         """`/usage/completions` группируем по user_id и model, bucket = 1d.
@@ -148,7 +207,7 @@ class OpenAIConnector(BaseConnector):
             "start_time": int(start_dt.timestamp()),
             "end_time": int(end_dt.timestamp()),
             "bucket_width": "1d",
-            "group_by": "user_id,model",
+            "group_by": "user_id,model,api_key_id",
             "limit": 31,
         }
         page = None
@@ -181,18 +240,20 @@ class OpenAIConnector(BaseConnector):
                         per_out = tokens_out // requests_n
                         per_cached = tokens_cached // requests_n
                         ts_str = bucket_dt.strftime("%Y-%m-%d %H:%M:%S")
+                        api_key_ext = r.get("api_key_id")
+                        api_key_id = keys_by_external.get(api_key_ext) if api_key_ext else None
                         for _ in range(requests_n):
                             rows.append((
-                                user_id, provider_id, model_id, ts_str,
+                                user_id, provider_id, model_id, api_key_id, ts_str,
                                 per_in, per_out, per_cached, 0.0, 0, "API",
                             ))
                     if rows:
                         conn.executemany(
                             """INSERT INTO usage_events(
-                                user_id, provider_id, model_id, occurred_at,
+                                user_id, provider_id, model_id, api_key_id, occurred_at,
                                 tokens_in, tokens_out, tokens_cached, cost_usd,
                                 is_error, purpose
-                            ) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                             rows,
                         )
                         report.inserted += len(rows)

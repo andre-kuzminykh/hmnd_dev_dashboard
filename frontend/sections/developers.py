@@ -1,12 +1,5 @@
-"""F-04 Developer Usage."""
+"""F-04 Developer Usage section."""
 from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 import plotly.express as px
@@ -14,20 +7,15 @@ import streamlit as st
 
 from backend.config import load_config
 from backend.services.developers import get_developer_usage
-from frontend.components import filters_bar, fmt_money, hero, section
-from frontend.theme import BLUE, NAVY, inject, render_brand
-
-
-st.set_page_config(page_title="Developer Usage · HMND", layout="wide")
-inject()
-render_brand()
+from frontend.components import filters_bar, hero, section
+from frontend.theme import BLUE, NAVY
 
 CFG = load_config()
 
 hero(
     "F-04 · Developer Usage",
-    'Активность <span class="accent">разработчиков</span>',
-    "Сколько каждый разработчик тратит, сколько коммитит, какую долю AI-кода даёт.",
+    'Activity of <span class="accent">developers</span>',
+    "How much each developer spends, how active they are and what share of code is AI-generated.",
 )
 filters = filters_bar()
 
@@ -44,21 +32,16 @@ gh_cols = ["repos_touched", "prs", "ai_code_pct_str", "review_issues"]
 cols_order = base_cols + (gh_cols if CFG.github_enabled else [])
 
 rename = {
-    "user_name": "Developer",
-    "team": "Team",
-    "ai_requests": "AI requests",
-    "tokens": "Tokens",
-    "cost": "Cost $",
-    "repos_touched": "Repos",
-    "prs": "PRs",
-    "ai_code_pct_str": "AI code %",
-    "review_issues": "Review issues",
+    "user_name": "Developer", "team": "Team",
+    "ai_requests": "AI requests", "tokens": "Tokens", "cost": "Cost $",
+    "repos_touched": "Repos", "prs": "PRs",
+    "ai_code_pct_str": "AI code %", "review_issues": "Review issues",
 }
 view = df[cols_order].rename(columns=rename)
 st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"), unsafe_allow_html=True)
 
 if not CFG.github_enabled:
-    st.caption("GitHub-related columns (repos, PRs, AI code %) скрыты — подключи GitHub в Settings.")
+    st.caption("GitHub-related columns (repos, PRs, AI code %) are hidden — connect GitHub in Settings.")
 
 c1, c2 = st.columns(2)
 with c1:

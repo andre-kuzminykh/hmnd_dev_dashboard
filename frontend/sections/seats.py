@@ -1,36 +1,23 @@
-"""F-03 Seats & Licenses."""
+"""F-03 Seats & Licenses section."""
 from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 import pandas as pd
 import streamlit as st
 
 from backend.services.seats import get_seats_summary, get_seats_table
 from frontend.components import badge, fmt_money, hero, kpi_row, section
-from frontend.theme import inject, render_brand
-
-
-st.set_page_config(page_title="Seats · HMND", layout="wide")
-inject()
-render_brand()
 
 hero(
     "F-03 · Seats & Licenses",
-    'Кто <span class="accent">занимает</span> платное место',
-    "Видим, какие сидения куплены и кто их реально использует. Подсвечиваем кандидатов на отзыв.",
+    'Who <span class="accent">occupies</span> a paid seat',
+    "Highlight seats that are paid for but unused, so they can be revoked.",
 )
 
 s = get_seats_summary()
 kpi_row([
-    {"label": "Bought seats", "value": str(s["bought"]), "delta": None},
-    {"label": "Assigned",     "value": str(s["assigned"]), "delta": None},
-    {"label": "Active 30d",   "value": str(s["active_30d"]), "delta": None},
+    {"label": "Bought seats",  "value": str(s["bought"]),       "delta": None},
+    {"label": "Assigned",      "value": str(s["assigned"]),     "delta": None},
+    {"label": "Active 30d",    "value": str(s["active_30d"]),   "delta": None},
     {"label": "Inactive paid", "value": str(s["inactive_paid"]), "delta": None,
      "note": "no usage in 30d"},
 ])
@@ -54,15 +41,11 @@ if rows:
         "user_name", "seat_type", "provider", "assigned",
         "last_used_at", "usage_30d", "monthly_cost_usd", "recommendation",
     ]].rename(columns={
-        "user_name": "User",
-        "seat_type": "Seat type",
-        "provider": "Provider",
-        "assigned": "Assigned",
-        "last_used_at": "Last used",
-        "usage_30d": "Usage 30d $",
-        "monthly_cost_usd": "Cost $/mo",
+        "user_name": "User", "seat_type": "Seat type", "provider": "Provider",
+        "assigned": "Assigned", "last_used_at": "Last used",
+        "usage_30d": "Usage 30d $", "monthly_cost_usd": "Cost $/mo",
         "recommendation": "Recommendation",
     })
     st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"), unsafe_allow_html=True)
 else:
-    st.info("No seats yet.")
+    st.info("No seats yet. Configure them in Settings.")

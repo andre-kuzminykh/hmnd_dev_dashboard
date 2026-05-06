@@ -1,11 +1,19 @@
-"""Конфиг + feature flags. Читает переменные окружения и .streamlit/secrets.toml.
+"""Config + feature flags. Reads env vars and (optionally) .streamlit/secrets.toml.
 
-Никогда не хранит ключи в БД и не логирует их (FR-09.1.1.2).
+Secrets never persist to DB and are never logged (FR-09.1.1.2).
 """
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+_SECRETS_PATHS = [
+    Path("/app/.streamlit/secrets.toml"),
+    Path.cwd() / ".streamlit" / "secrets.toml",
+    Path.home() / ".streamlit" / "secrets.toml",
+]
 
 
 def _running_inside_streamlit() -> bool:
@@ -16,14 +24,19 @@ def _running_inside_streamlit() -> bool:
         return False
 
 
+def _secrets_file_exists() -> bool:
+    return any(p.exists() for p in _SECRETS_PATHS)
+
+
 def _from_env_or_secrets(name: str, default: str = "") -> str:
-    """Сначала env, затем st.secrets — но только если мы внутри Streamlit-сессии.
-    В CLI/sync режиме лезть в st.secrets не нужно: оно печатает шумные warnings.
+    """Env first; only consult st.secrets when running inside Streamlit AND a
+    secrets.toml file actually exists (otherwise Streamlit prints a noisy
+    'No secrets found' message on the page).
     """
     val = os.environ.get(name)
     if val:
         return val
-    if not _running_inside_streamlit():
+    if not _running_inside_streamlit() or not _secrets_file_exists():
         return default
     try:
         import streamlit as st  # noqa: WPS433
@@ -46,9 +59,9 @@ class Config:
     openai_key: str
     anthropic_key: str
     github_token: str
-    github_enabled: bool       # F-05/F-06 показываются только когда True
-    demo_data: bool            # засеять демо-данные при пустой БД
-    anthropic_mock: bool       # синтезировать Anthropic-данные, когда нет admin-ключа
+    github_enabled: bool       # F-05/F-06 visible only when True
+    demo_data: bool            # seed demo dataset on first run
+    anthropic_mock: bool       # synthesise Anthropic data when admin key missing
 
 
 def load_config() -> Config:

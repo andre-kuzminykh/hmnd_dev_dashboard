@@ -1,31 +1,16 @@
 """F-08 Alerts."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent.parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
 import pandas as pd
 import streamlit as st
 
-from backend.services.alerts import (
-    evaluate_alert_rules, list_alerts, update_status,
-)
+from backend.services.alerts import evaluate_alert_rules, list_alerts, update_status
 from frontend.components import badge, hero, section
-from frontend.theme import inject, render_brand
-
-
-st.set_page_config(page_title="Alerts · HMND", layout="wide")
-inject()
-render_brand()
 
 hero(
     "F-08 · Alerts",
-    'Сигналы и <span class="accent">правила</span>',
-    "Аномалии расходов, переборы бюджетов, неактивные сидения, рискованные PR.",
+    'Signals and <span class="accent">rules</span>',
+    "Spend spikes, budget overruns, idle paid seats, risky PRs.",
 )
 
 c1, c2, c3 = st.columns([1, 1, 1])
@@ -34,7 +19,7 @@ with c1:
 with c2:
     status = st.selectbox("Status", ["new", "ack", "resolved", "all"])
 with c3:
-    if st.button("⟳ Re-evaluate rules", use_container_width=True):
+    if st.button("Re-evaluate rules", use_container_width=True):
         n = evaluate_alert_rules()
         st.toast(f"Inserted {n} new alerts")
         st.rerun()
@@ -48,13 +33,9 @@ df = pd.DataFrame(alerts)
 df["severity_badge"] = df["severity"].apply(lambda s: badge(s, s if s != "critical" else "high"))
 view = df[["created_at", "severity_badge", "type", "subject_kind", "subject_id", "message", "status"]].rename(
     columns={
-        "created_at": "Created",
-        "severity_badge": "Severity",
-        "type": "Type",
-        "subject_kind": "Subject",
-        "subject_id": "Id",
-        "message": "Message",
-        "status": "Status",
+        "created_at": "Created", "severity_badge": "Severity",
+        "type": "Type", "subject_kind": "Subject", "subject_id": "Id",
+        "message": "Message", "status": "Status",
     }
 )
 st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"), unsafe_allow_html=True)
