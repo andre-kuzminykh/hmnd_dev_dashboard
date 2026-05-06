@@ -142,6 +142,53 @@ mkdir -p ~/backups
 sqlite3 ~/hmnd_dev_dashboard/data/hmnd.db ".backup '/home/$USER/backups/hmnd-$(date +%F).db'"
 ```
 
+### A9. Открыть дашборд для команды (HTTPS + пароль)
+
+> SSH-туннель удобен только тебе. Чтобы дать ссылку команде — запусти готовый скрипт. Он поднимет nginx + Let's Encrypt + basic-auth, использует `sslip.io` (бесплатный DNS, привязанный к IP) — никакого домена покупать не нужно.
+
+**Шаг 1 (с ноута, не с VM)** — открыть 80/443 в GCP firewall и навесить тег:
+```bash
+gcloud compute firewall-rules create allow-hmnd-web \
+  --project=i-crossbar-433120-v3 \
+  --direction=INGRESS --action=ALLOW \
+  --rules=tcp:80,tcp:443 \
+  --target-tags=http-server \
+  --source-ranges=0.0.0.0/0
+
+gcloud compute instances add-tags human-1 \
+  --tags=http-server \
+  --zone=europe-west1-b --project=i-crossbar-433120-v3
+```
+
+**Шаг 2 (на VM)** — запусти экспозицию:
+```bash
+cd ~/hmnd_dev_dashboard
+git pull
+bash deploy/expose-public.sh andrey andrey@hmnd.ai
+```
+
+Скрипт:
+1. узнает external IP машины через GCE metadata;
+2. соберёт hostname вида `hmnd-<IP-через-дефис>.sslip.io`;
+3. поставит `nginx`, `certbot`, `apache2-utils`;
+4. попросит ввести пароль для basic-auth юзера `andrey`;
+5. напишет `/etc/nginx/sites-available/hmnd`;
+6. выпустит TLS-сертификат через Let's Encrypt и включит редирект `http→https`.
+
+В конце выведет URL вида `https://hmnd-34-121-238-53.sslip.io` — дай его команде, поделись паролем.
+
+**Добавить ещё пользователей:**
+```bash
+sudo htpasswd /etc/nginx/.htpasswd masha
+sudo htpasswd /etc/nginx/.htpasswd petya
+```
+
+**Сертификат продлевается автоматически** через `certbot.timer`. Проверка:
+```bash
+sudo certbot renew --dry-run
+systemctl list-timers | grep certbot
+```
+
 ---
 
 ## Вариант B · systemd на хост (без Docker)
