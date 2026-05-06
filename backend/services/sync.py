@@ -45,8 +45,17 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
         out["reports"]["openai"] = asdict(c.sync(period_days))
 
     if "anthropic" in providers:
-        c = AnthropicConnector(api_key=cfg.anthropic_key, mock=not cfg.anthropic_key)
-        out["reports"]["anthropic"] = asdict(c.sync(period_days))
+        if cfg.anthropic_mock:
+            from data.anthropic_mock import synth_anthropic
+
+            out["reports"]["anthropic"] = {
+                "provider": "anthropic",
+                "mode": "mock",
+                **synth_anthropic(period_days),
+            }
+        else:
+            c = AnthropicConnector(api_key=cfg.anthropic_key, mock=not cfg.anthropic_key)
+            out["reports"]["anthropic"] = asdict(c.sync(period_days))
 
     if "github" in providers and cfg.github_enabled:
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)

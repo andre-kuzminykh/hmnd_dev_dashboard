@@ -48,6 +48,7 @@ class Config:
     github_token: str
     github_enabled: bool       # F-05/F-06 показываются только когда True
     demo_data: bool            # засеять демо-данные при пустой БД
+    anthropic_mock: bool       # синтезировать Anthropic-данные, когда нет admin-ключа
 
 
 def load_config() -> Config:
@@ -57,4 +58,5 @@ def load_config() -> Config:
         github_token=_from_env_or_secrets("GITHUB_TOKEN"),
         github_enabled=_bool_env("HMND_GITHUB_ENABLED", default=False),
         demo_data=_bool_env("HMND_DEMO_DATA", default=False),
+        anthropic_mock=_bool_env("HMND_ANTHROPIC_MOCK", default=False),
     )
