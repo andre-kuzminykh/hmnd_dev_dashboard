@@ -1,0 +1,50 @@
+Email,Name,Agent Completions,Agent Lines,Tab Completions,Tab Lines,Ai Lines,Favorite Model
+olsi@thehumanoid.ai,Oleg Sinavski,661,61067,0,0,61067,claude-opus-4-7-thinking-xhigh
+ssam@skl.vc,Saeid Samadi,1086,33399,5,14,33413,gpt-5.5-medium
+gwad@skl.vc,Gourav Wadhwa,257,15595,300,777,16372,gpt-5.4-medium
+anba@thehumanoid.ai,Andrey Basov,147,11358,0,0,11358,claude-opus-4-7-thinking-high
+dmsh@skl.vc,Dmitry Shingarey,85,7332,0,0,7332,claude-opus-4-7-high
+ksha@skl.vc,Karim Shaban,221,6900,3,6,6906,gpt-5.5-medium
+rzen@skl.vc,Rodrigo Zenha,91,5412,11,21,5433,gpt-5.3-codex
+mapr@thehumanoid.ai,Matteo Presutto,67,5037,0,0,5037,gpt-5.3-codex
+tcor@thehumanoid.ai,Thomas Corberes,56,4488,12,20,4508,gpt-5.5-medium
+nolo@thehumanoid.ai,Nia Oloyede,40,3914,0,0,3914,gpt-5.5-medium
+mata@skl.vc,Mustafa Atakan,140,2759,7,14,2773,claude-4.6-opus-high-thinking
+jamo@thehumanoid.ai,Jacob Moss,102,2415,105,222,2637,gpt-5.3-codex
+dgra@skl.vc,Denis Grachev,18,2584,0,0,2584,claude-4.6-opus-high-thinking
+sram@skl.vc,Sepehr Ramezani,40,2423,2,4,2427,claude-opus-4-7-thinking-xhigh
+isma@thehumanoid.ai,Artem Ismagilov,62,2169,37,66,2235,claude-4.6-opus-high-thinking
+benj@thehumanoid.ai,Benj,19,1940,0,0,1940,default
+sper@skl.vc,Sam Perry,98,1778,1,2,1780,gpt-5.3-codex
+cfil@skl.vc,Cfil,51,1762,0,0,1762,Premium
+ator@skl.vc,Amir Torabi,12,1687,0,0,1687,claude-4.6-opus-high-thinking
+elpe@thehumanoid.ai,Elia Pellegrino,2,5,686,1665,1670,default
+mraf@skl.vc,Muhammad Rafique,40,1262,82,184,1446,composer-2-fast
+anai@skl.vc,Atindra Nair,1,1096,9,18,1114,claude-4.6-opus-high-thinking
+bzia@skl.vc,Babak Zianamin,24,971,0,0,971,default
+olaf@thehumanoid.ai,Olaf,42,942,0,0,942,claude-4.6-sonnet-medium-thinking
+pols@skl.vc,Polina Shorenko,44,832,0,0,832,default
+byan@skl.vc,Boris Yangel,21,621,43,77,698,Premium
+bpar@skl.vc,Bradford Parker,41,594,0,0,594,default
+brig@skl.vc,Brian Ginebaugh,4,568,0,0,568,gpt-5.5-high
+ccop@skl.vc,Claudio Coppola,7,433,2,4,437,gpt-5.5-medium
+lbie@skl.vc,Luke Bierbaum,8,411,0,0,411,claude-4.6-sonnet-medium-thinking
+dalm@skl.vc,Diogo Almeida,15,397,0,0,397,gpt-5.5-extra-high
+batr@thehumanoid.ai,Batr,2,328,9,19,347,default
+ius@skl.vc,Yuriy Strezhik,3,265,5,10,275,claude-opus-4-7-thinking-xhigh
+jonu@thehumanoid.ai,Joe Nunez,20,261,0,0,261,gpt-5.5-medium
+ashu@skl.vc,Artem Shutak,1,230,0,0,230,
+shac@thehumanoid.ai,Cheerag Sharma,1,221,0,0,221,claude-opus-4-7-thinking-xhigh
+mahs@skl.vc,Maheswar Sarala,2,176,14,26,202,default
+vaim@skl.vc,Vaibhav Mehta,1,71,0,0,71,claude-opus-4-7-thinking-high
+greg@skl.vc,Greg,2,52,2,4,56,default
+dadh@thehumanoid.ai,Daksh Dhingra,0,0,19,54,54,
+codg@skl.vc,Cody Griffin,3,44,0,0,44,gpt-5.3-codex-high-fast
+rod.ziolkowski@thehumanoid.ai,Rod Ziolkowski,1,34,0,0,34,default
+sfed@skl.vc,Sergei Fedotov,2,12,0,0,12,claude-opus-4-7-thinking-xhigh
+dmac@skl.vc,Dmac,2,10,0,0,10,claude-4.6-opus-high-thinking
+abri@thehumanoid.ai,Abby Ritterband,0,0,4,8,8,
+fpro@skl.vc,Federico Proni,0,0,1,2,2,
+blake.lieber@hmnd.ai,Blake Lieber,0,0,1,2,2,claude-4.6-sonnet-medium-thinking
+johl@thehumanoid.ai,Johnny Li,0,0,0,0,0,
+ache@thehumanoid.ai,Aleksei Chernikhovskii,0,0,0,0,0,
