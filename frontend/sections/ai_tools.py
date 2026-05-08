@@ -125,57 +125,68 @@ with tab_overview:
 
 
 with tab_claude:
-    rows = get_users_for_provider("anthropic", period_days=filters.period_days,
-                                   api_key_id=filters.api_key_id)
-    total_msgs = sum(r["messages"] for r in rows)
-    code_users = [r for r in rows if r.get("sessions")]
-    cc_lines = sum((r["lines_added"] or 0) for r in rows)
-    kpi_row([
-        {"label": "Chat Active Users",  "value": str(len(rows))},
-        {"label": "Total Messages",     "value": _fmt_int(total_msgs)},
-        {"label": "Claude Code Users",  "value": _fmt_dash(len(code_users) if code_users else None)},
-        {"label": "CC Lines Added",     "value": _fmt_dash(cc_lines if cc_lines else None, _fmt_int)},
-    ])
+    # F-12.1.2 — Claude data comes from the Cursor team CSV exports the user
+    # drops into the repo (see backend.services.cursor_analytics). Anthropic's
+    # Admin API stays untouched; this tab is purely Cursor-derived so the
+    # leaderboard reflects every dev whose Cursor 'favorite model' is Claude.
+    from backend.services.cursor_analytics import (
+        claude_users as _claude_users,
+        load_user_leaderboard as _all_leaders,
+    )
+    claude_rows = _claude_users()
+    all_rows = _all_leaders()
 
-    c1, c2 = st.columns(2)
-    with c1:
-        section("Top 10 Chat Users by Messages")
-        _bar_list(
-            rows[:10],
-            label_key="user_name", value_key="messages", css_class="claude",
-            value_formatter=lambda v: f"{int(v):,}",
+    if not claude_rows:
+        st.info(
+            "No Claude users in the latest Cursor export. Drop a "
+            "User_Leaderboard_*.csv with users whose Favorite Model contains "
+            "'claude' to populate this tab."
         )
-    with c2:
-        section("Top 10 Claude Code Users by Lines")
-        if any(r.get("lines_added") for r in rows):
-            cc_top = sorted(
-                [r for r in rows if r.get("lines_added")],
-                key=lambda r: r["lines_added"], reverse=True,
-            )[:10]
-            _bar_list(cc_top, label_key="user_name", value_key="lines_added",
-                      css_class="claude", value_formatter=_fmt_int)
-        else:
-            st.caption(
-                "No Claude Code line counts yet — wire up Claude Code telemetry "
-                "(CLAUDE_CODE_TELEMETRY env + OTel endpoint) to populate this list."
-            )
+    else:
+        total_ai_lines = sum(r["ai_lines"] for r in claude_rows)
+        total_completions = sum(r["agent_completions"] + r["tab_completions"] for r in claude_rows)
+        share_pct = (
+            len(claude_rows) / max(len(all_rows), 1) * 100 if all_rows else 0.0
+        )
+        kpi_row([
+            {"label": "Claude users",       "value": str(len(claude_rows)),
+             "note": f"{share_pct:.0f}% of team"},
+            {"label": "Total AI lines",     "value": fmt_int(total_ai_lines)},
+            {"label": "Total completions",  "value": fmt_int(total_completions)},
+            {"label": "Period",
+             "value": claude_rows[0]["period_start"][5:] + " — " + claude_rows[0]["period_end"][5:]},
+        ])
 
-    section("All Claude Users")
-    if rows:
-        df = pd.DataFrame(rows)
-        view = df[["user_name", "messages", "sessions", "lines_added", "commits"]].rename(
-            columns={
-                "user_name": "Name", "messages": "Messages",
-                "sessions": "CC Sessions", "lines_added": "Lines Added", "commits": "Commits",
-            }
-        )
-        view = view.fillna("—")
+        c1, c2 = st.columns(2)
+        with c1:
+            section("Top 10 by AI Lines")
+            top_lines = sorted(claude_rows, key=lambda r: r["ai_lines"], reverse=True)[:10]
+            _bar_list(top_lines, label_key="name", value_key="ai_lines",
+                      css_class="claude", value_formatter=fmt_int)
+        with c2:
+            section("Top 10 by Agent Completions")
+            top_compl = sorted(claude_rows, key=lambda r: r["agent_completions"], reverse=True)[:10]
+            _bar_list(top_compl, label_key="name", value_key="agent_completions",
+                      css_class="claude", value_formatter=lambda v: f"{int(v):,}")
+
+        section("All Claude Users")
+        df = pd.DataFrame(claude_rows)
+        view = df[[
+            "name", "favorite_model", "agent_completions", "agent_lines",
+            "tab_completions", "tab_lines", "ai_lines",
+        ]].rename(columns={
+            "name": "Name",
+            "favorite_model": "Favorite model",
+            "agent_completions": "Agent completions",
+            "agent_lines": "Agent lines",
+            "tab_completions": "Tab completions",
+            "tab_lines": "Tab lines",
+            "ai_lines": "AI lines",
+        })
         st.markdown(
             view.to_html(escape=False, index=False, classes="hmnd-table"),
             unsafe_allow_html=True,
         )
-    else:
-        st.info("No Anthropic activity in the period.")
 
 
 with tab_gpt:
@@ -212,27 +223,118 @@ with tab_gpt:
 
 
 with tab_cursor:
-    st.markdown(
-        """
-        <div style="
-            border:1px dashed #fcd34d; border-radius:18px; padding:32px; background:#fffdf6;
-            text-align:center; color:#475569;
-        ">
-            <div style="font-size:13px;color:#f59e0b;letter-spacing:.12em;text-transform:uppercase;font-weight:600">
-                Coming soon
-            </div>
-            <div style="font-size:22px;color:#06091c;font-weight:300;margin-top:8px">
-                Connect Cursor Teams to see this view
-            </div>
-            <p style="margin-top:8px">
-                Add <code>CURSOR_API_TOKEN</code> + <code>CURSOR_ORG_SLUG</code> to <code>.env</code>
-                so the sync can pull <i>active developers</i>, <i>AI lines</i> and <i>tool preference</i>
-                (Claude / GPT / Default) from the Cursor Teams admin endpoint.
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    from backend.services.cursor_analytics import (
+        load_contribution_daily, load_team_dau, load_user_leaderboard, model_usage_summary,
     )
+    leaders = load_user_leaderboard()
+    dau = load_team_dau()
+    contrib = load_contribution_daily()
+    models = model_usage_summary()
+
+    if not leaders and not dau:
+        st.markdown(
+            """
+            <div style="
+                border:1px dashed #fcd34d; border-radius:18px; padding:32px; background:#fffdf6;
+                text-align:center; color:#475569;
+            ">
+                <div style="font-size:13px;color:#f59e0b;letter-spacing:.12em;text-transform:uppercase;font-weight:600">
+                    No Cursor exports yet
+                </div>
+                <div style="font-size:22px;color:#06091c;font-weight:300;margin-top:8px">
+                    Drop the CSV exports into the repo
+                </div>
+                <p style="margin-top:8px">
+                    Expected files at repo root (or <code>HMND_CURSOR_EXPORT_DIR</code>):
+                    <code>User_Leaderboard_*.csv</code>,
+                    <code>Team_DAU_Analytics_*.csv</code>,
+                    <code>Contribution_Analytics_*.csv</code>,
+                    <code>Analytics_Team_*.csv</code>.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        active_devs = len({r["email"] for r in leaders})
+        total_ai_lines = sum(r["ai_lines"] for r in leaders)
+        prefer_claude = sum(1 for r in leaders if "claude" in r["favorite_model"].lower())
+        prefer_gpt = sum(1 for r in leaders if r["favorite_model"].lower().startswith("gpt"))
+        kpi_row([
+            {"label": "Active developers", "value": str(active_devs), "note": "in latest period"},
+            {"label": "Total AI lines",    "value": fmt_int(total_ai_lines)},
+            {"label": "Prefer Claude",     "value": f"{prefer_claude} devs",
+             "note": f"vs {prefer_gpt} on GPT"},
+            {"label": "Period",
+             "value": leaders[0]["period_start"][5:] + " — " + leaders[0]["period_end"][5:]
+             if leaders else "—"},
+        ])
+
+        c1, c2 = st.columns(2)
+        with c1:
+            section("Top 10 by AI Lines")
+            top10 = leaders[:10]
+            max_lines = max((r["ai_lines"] for r in top10), default=1) or 1
+            def _row_class(r):
+                fm = r["favorite_model"].lower()
+                if "claude" in fm:
+                    return "claude"
+                if fm.startswith("gpt"):
+                    return "chatgpt"
+                return "cursor"
+            _bar_list(
+                top10, label_key="name", value_key="ai_lines",
+                css_class=_row_class, max_value=max_lines,
+                value_formatter=fmt_int,
+            )
+        with c2:
+            if dau:
+                section("Daily Active Users")
+                df_dau = pd.DataFrame(dau)
+                df_dau["date"] = pd.to_datetime(df_dau["date"])
+                fig = __import__("plotly.express", fromlist=[""]).bar(
+                    df_dau, x="date", y="dau",
+                    color_discrete_sequence=["#f59e0b"],
+                )
+                fig.update_layout(plot_bgcolor="white", paper_bgcolor="white",
+                                  margin=dict(l=10, r=10, t=10, b=10),
+                                  font=dict(family="Inter", color=NAVY),
+                                  xaxis=dict(showgrid=False),
+                                  yaxis=dict(gridcolor="#e8edf3"))
+                st.plotly_chart(fig, use_container_width=True)
+
+        if models:
+            section("Models used by the team")
+            df_models = pd.DataFrame(models[:15])
+            view = df_models.rename(columns={
+                "model": "Model", "requests": "Requests", "user_days": "User-days",
+            })
+            st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"),
+                        unsafe_allow_html=True)
+
+        if contrib:
+            section("Daily contribution (composer + tabs)")
+            df_c = pd.DataFrame(contrib)
+            df_c["date"] = pd.to_datetime(df_c["date"])
+            df_long = df_c.melt(
+                id_vars=["date"],
+                value_vars=["composer_lines_accepted", "tabs_lines_accepted"],
+                var_name="kind", value_name="lines",
+            )
+            df_long["kind"] = df_long["kind"].map({
+                "composer_lines_accepted": "Composer accepted",
+                "tabs_lines_accepted": "Tabs accepted",
+            })
+            fig = __import__("plotly.express", fromlist=[""]).bar(
+                df_long, x="date", y="lines", color="kind", barmode="stack",
+                color_discrete_map={"Composer accepted": "#6366f1", "Tabs accepted": "#f59e0b"},
+            )
+            fig.update_layout(plot_bgcolor="white", paper_bgcolor="white",
+                              margin=dict(l=10, r=10, t=10, b=10),
+                              font=dict(family="Inter", color=NAVY),
+                              xaxis=dict(showgrid=False),
+                              yaxis=dict(gridcolor="#e8edf3"))
+            st.plotly_chart(fig, use_container_width=True)
 
 
 with tab_high:

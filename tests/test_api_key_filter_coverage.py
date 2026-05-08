@@ -10,7 +10,7 @@ that filtering by each api_key returns DIFFERENT results.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -42,19 +42,21 @@ def two_keys(tmp_db) -> tuple[int, int, int]:
                VALUES(?, 'key_B', 'KEY_B', 'sk-...B', ?, 0)""",
             (provider_id, user_id),
         ).lastrowid
-        # Tag distinct usage on each key. Different days so daily_costs has
-        # a clean per-key footprint.
+        # Use timestamps in the recent PAST (1h / 2h ago) so they fall inside
+        # the filter window regardless of when the test runs. Otherwise, tests
+        # run before the chosen wall-clock time would leave the events in
+        # the future and silently get filtered out.
+        ts_a = (datetime.utcnow() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
+        ts_b = (datetime.utcnow() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
         conn.executemany(
             """INSERT INTO usage_events(user_id, provider_id, model_id, api_key_id,
                                          occurred_at, tokens_in, tokens_out, tokens_cached,
                                          cost_usd, latency_ms, is_error, purpose)
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
             [
-                (user_id, provider_id, model_id, key_a,
-                 datetime.utcnow().strftime("%Y-%m-%d 10:00:00"),
+                (user_id, provider_id, model_id, key_a, ts_a,
                  5000, 1000, 0, 7.50, 100, 0, "API"),
-                (user_id, provider_id, model_id, key_b,
-                 datetime.utcnow().strftime("%Y-%m-%d 11:00:00"),
+                (user_id, provider_id, model_id, key_b, ts_b,
                  1000, 200, 0, 1.25, 80, 0, "API"),
             ],
         )
