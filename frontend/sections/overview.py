@@ -21,6 +21,29 @@ filters = filters_bar()
 
 kpis = get_overview_kpis(filters)
 
+# When the user filters to Anthropic and we have no usage events for it
+# (no admin API key wired up), the OpenAI-shaped Overview gives all zeros.
+# Surface where Claude data actually lives instead of leaving the user
+# staring at $0.
+if filters.provider == "anthropic" and kpis["total_spend"] == 0 and kpis["active_users"] == 0:
+    st.markdown(
+        """
+        <div style="
+            border:1px solid #c7d2fe; border-radius:14px; padding:18px 22px;
+            background:#f5f3ff; color:#3730a3; margin: 6px 0 12px 0;
+            font-size:14px; line-height:1.5;
+        ">
+            <b>Anthropic spend isn't tracked here.</b>
+            We don't have an Anthropic Admin API key, so usage_events has
+            no rows for this provider. Claude usage in your team comes from
+            the Cursor CSV exports — open
+            <b>AI Tools → Claude Users</b> for the leaderboard, or
+            <b>AI Tools → Cursor</b> for team-wide model usage and DAU.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 reported = kpis.get("reported_total")
 total_note = "vs prev period"
 if reported is not None and kpis["total_spend"]:

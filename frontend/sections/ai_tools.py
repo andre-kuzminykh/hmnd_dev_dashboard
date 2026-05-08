@@ -15,6 +15,7 @@ from backend.services.ai_tools import (
     get_users_for_provider,
 )
 from frontend.components import badge, filters_bar, fmt_int, fmt_money, hero, kpi_row, section
+from frontend.theme import NAVY
 
 
 def _fmt_int(v) -> str:

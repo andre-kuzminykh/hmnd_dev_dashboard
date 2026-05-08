@@ -44,7 +44,21 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
         out["reports"]["openai"] = asdict(c.sync(period_days))
 
     if "anthropic" in providers:
-        if cfg.anthropic_mock:
+        # Decision tree:
+        #   1) Cursor CSV exports present → use them as the truth for Claude.
+        #   2) HMND_ANTHROPIC_MOCK=true    → synthetic random demo data.
+        #   3) Otherwise                   → call the real Admin API.
+        from backend.services.cursor_analytics import claude_users as _cu
+        cursor_rows = _cu()
+        if cursor_rows:
+            from data.anthropic_mock import purge_anthropic_mock
+            from data.cursor_to_anthropic import derive_anthropic_from_cursor
+
+            # Drop any previously-synthesised mock rows so the dashboard is
+            # consistent regardless of how the previous sync ran.
+            purge_anthropic_mock()
+            out["reports"]["anthropic"] = derive_anthropic_from_cursor()
+        elif cfg.anthropic_mock:
             from data.anthropic_mock import synth_anthropic
 
             out["reports"]["anthropic"] = {
@@ -53,8 +67,6 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
                 **synth_anthropic(period_days),
             }
         else:
-            # Mock-режим выключен — почистим любые остатки синтетики, чтобы дашборд
-            # показывал только реальные данные.
             from data.anthropic_mock import purge_anthropic_mock
 
             purged = purge_anthropic_mock()
