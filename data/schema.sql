@@ -25,6 +25,18 @@ CREATE TABLE IF NOT EXISTS providers (
     name        TEXT NOT NULL UNIQUE  -- 'openai' | 'anthropic'
 );
 
+-- Multi-tenancy across multiple OpenAI / Anthropic organisations.
+-- Each row maps a local label (user-defined) to the provider's external
+-- organisation id and the env-configured api key.
+CREATE TABLE IF NOT EXISTS organizations (
+    id           INTEGER PRIMARY KEY,
+    provider_id  INTEGER NOT NULL REFERENCES providers(id),
+    label        TEXT NOT NULL,
+    external_id  TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(provider_id, label)
+);
+
 CREATE TABLE IF NOT EXISTS models (
     id          INTEGER PRIMARY KEY,
     provider_id INTEGER NOT NULL REFERENCES providers(id),

@@ -61,6 +61,11 @@ def init_schema(db_path: Path | str | None = None) -> None:
         conn.executescript(sql)
         # idempotent migrations for older DBs
         _ensure_column(conn, "usage_events", "api_key_id", "INTEGER")
+        _ensure_column(conn, "usage_events", "organization_id", "INTEGER")
+        _ensure_column(conn, "api_keys", "organization_id", "INTEGER")
+        _ensure_column(conn, "users", "organization_id", "INTEGER")
+        _ensure_column(conn, "daily_costs", "organization_id", "INTEGER")
+        _ensure_column(conn, "provider_totals", "organization_id", "INTEGER")
         conn.commit()
 
 

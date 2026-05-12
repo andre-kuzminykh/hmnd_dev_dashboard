@@ -10,6 +10,26 @@ from data.connectors import AnthropicConnector, GitHubConnector, OpenAIConnector
 from data.db import get_conn
 
 
+def _ensure_organization(provider: str, label: str) -> int:
+    """Get-or-create an organization row for (provider, label). Returns local id."""
+    with get_conn() as conn:
+        conn.execute("INSERT OR IGNORE INTO providers(name) VALUES(?)", (provider,))
+        pid = conn.execute(
+            "SELECT id FROM providers WHERE name = ?", (provider,)
+        ).fetchone()["id"]
+        conn.execute(
+            """INSERT OR IGNORE INTO organizations(provider_id, label)
+               VALUES(?, ?)""",
+            (pid, label),
+        )
+        row = conn.execute(
+            "SELECT id FROM organizations WHERE provider_id = ? AND label = ?",
+            (pid, label),
+        ).fetchone()
+        conn.commit()
+    return row["id"]
+
+
 def _refresh_daily_costs(period_days: int) -> int:
     """Wipe daily_costs in the period and re-aggregate from usage_events.
 
@@ -40,8 +60,22 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
     out: dict[str, Any] = {"reports": {}}
 
     if "openai" in providers:
-        c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
-        out["reports"]["openai"] = asdict(c.sync(period_days))
+        if cfg.openai_orgs:
+            # Multi-org sync: one OpenAIConnector per configured admin key.
+            org_reports: list[dict[str, Any]] = []
+            for org in cfg.openai_orgs:
+                org_id = _ensure_organization(provider="openai", label=org.label)
+                c = OpenAIConnector(
+                    api_key=org.api_key, mock=False,
+                    org_label=org.label, org_id=org_id,
+                )
+                r = asdict(c.sync(period_days))
+                r["org_label"] = org.label
+                org_reports.append(r)
+            out["reports"]["openai"] = org_reports if len(org_reports) > 1 else org_reports[0]
+        else:
+            c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
+            out["reports"]["openai"] = asdict(c.sync(period_days))
 
     if "anthropic" in providers:
         # Decision tree:

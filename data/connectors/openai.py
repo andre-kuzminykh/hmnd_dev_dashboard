@@ -102,6 +102,15 @@ class OpenAIConnector(BaseConnector):
     name = "openai"
     BASE = "https://api.openai.com/v1/organization"
 
+    def __init__(self, api_key: str | None = None, mock: bool = True,
+                 org_label: str = "default", org_id: int | None = None):
+        super().__init__(api_key=api_key, mock=mock)
+        # Local-DB organisation context. None = legacy single-org mode where
+        # rows are written without org_id (existing behaviour). When org_id is
+        # set, every users/api_keys/usage_events row gets it tagged.
+        self.org_label = org_label
+        self.org_id = org_id
+
     # ---- helpers ----
     def _headers(self) -> dict[str, str]:
         return {
@@ -181,7 +190,51 @@ class OpenAIConnector(BaseConnector):
         # HMND_CALIBRATE_TO_BILLING=false if you want raw model-priced numbers.
         if os.environ.get("HMND_CALIBRATE_TO_BILLING", "true").lower() in {"1", "true", "yes", "on"}:
             self._calibrate_to_reported(start_dt, end_dt, provider_id, report)
+        if self.org_id is not None:
+            self._tag_org_on_synced_rows(provider_id, list(users_by_id.values()),
+                                          list(keys_by_external.values()),
+                                          start_dt, end_dt, report)
         return report
+
+    def _tag_org_on_synced_rows(
+        self,
+        provider_id: int,
+        user_ids: list[int],
+        api_key_ids: list[int],
+        start_dt: datetime,
+        end_dt: datetime,
+        report: SyncReport,
+    ) -> None:
+        """Stamp organization_id on rows we just synced for this org. Keeps
+        rows from different orgs separable in queries when both legacy
+        (org_id IS NULL) and multi-org data coexist.
+        """
+        if not user_ids and not api_key_ids:
+            return
+        with get_conn() as conn:
+            if user_ids:
+                placeholders = ",".join(["?"] * len(user_ids))
+                conn.execute(
+                    f"UPDATE users SET organization_id = ? WHERE id IN ({placeholders})",
+                    [self.org_id, *user_ids],
+                )
+            if api_key_ids:
+                placeholders = ",".join(["?"] * len(api_key_ids))
+                conn.execute(
+                    f"UPDATE api_keys SET organization_id = ? WHERE id IN ({placeholders})",
+                    [self.org_id, *api_key_ids],
+                )
+                # Events inserted in _sync_usage are deleted+reinserted per
+                # period; tag them by api_key_id (which we just set).
+                conn.execute(
+                    f"""UPDATE usage_events SET organization_id = ?
+                        WHERE api_key_id IN ({placeholders})
+                          AND date(occurred_at) >= date(?)
+                          AND date(occurred_at) <= date(?)""",
+                    [self.org_id, *api_key_ids,
+                     start_dt.date().isoformat(), end_dt.date().isoformat()],
+                )
+            conn.commit()
 
     def _calibrate_to_reported(
         self, start_dt: datetime, end_dt: datetime, provider_id: int, report: SyncReport
