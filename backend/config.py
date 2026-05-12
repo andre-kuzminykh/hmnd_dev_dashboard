@@ -62,9 +62,18 @@ class OpenAIOrg:
 
 
 @dataclass
+class OpenAIProjectKey:
+    """A project-scoped key (sk-proj-...). Used only for the read-only project
+    inventory probe — cannot access org-wide usage."""
+    label: str
+    api_key: str
+
+
+@dataclass
 class Config:
     openai_key: str
-    openai_orgs: list[OpenAIOrg]       # multi-org sync targets (incl. legacy single key)
+    openai_orgs: list[OpenAIOrg]                  # admin-key sync targets
+    openai_project_keys: list[OpenAIProjectKey]   # project-scoped probes
     anthropic_key: str
     github_token: str
     github_enabled: bool       # F-05/F-06 visible only when True
@@ -102,11 +111,34 @@ def _parse_openai_orgs(legacy_key: str) -> list[OpenAIOrg]:
     return []
 
 
+def _parse_openai_project_keys() -> list[OpenAIProjectKey]:
+    """Parse OPENAI_PROJECT_KEYS env (JSON list of {label, key}). Project keys
+    can't drive sync but we probe them for inventory (models/assistants/files)."""
+    raw = os.environ.get("OPENAI_PROJECT_KEYS", "").strip()
+    if not raw:
+        return []
+    try:
+        import json
+        items = json.loads(raw)
+    except Exception:
+        return []
+    out: list[OpenAIProjectKey] = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        key = (it.get("key") or "").strip()
+        label = (it.get("label") or "default").strip() or "default"
+        if key:
+            out.append(OpenAIProjectKey(label=label, api_key=key))
+    return out
+
+
 def load_config() -> Config:
     openai_key = _from_env_or_secrets("OPENAI_API_KEY")
     return Config(
         openai_key=openai_key,
         openai_orgs=_parse_openai_orgs(openai_key),
+        openai_project_keys=_parse_openai_project_keys(),
         anthropic_key=_from_env_or_secrets("ANTHROPIC_API_KEY"),
         github_token=_from_env_or_secrets("GITHUB_TOKEN"),
         github_enabled=_bool_env("HMND_GITHUB_ENABLED", default=False),
