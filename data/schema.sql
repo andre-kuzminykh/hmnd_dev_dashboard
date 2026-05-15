@@ -226,3 +226,34 @@ CREATE TABLE IF NOT EXISTS git_author_repo_stats (
 );
 CREATE INDEX IF NOT EXISTS ix_garstats_repo ON git_author_repo_stats(repo);
 CREATE INDEX IF NOT EXISTS ix_garstats_user ON git_author_repo_stats(user_id);
+
+-- Per-commit rollup for code-quality analysis (bug-fix rate, revert
+-- ratio, feature vs refactor balance, AI-vs-human bug rates).
+-- Populated from git_commit_file_stats_*.csv by collapsing all file
+-- rows of the same commit into one aggregate.
+CREATE TABLE IF NOT EXISTS git_commits (
+    id           INTEGER PRIMARY KEY,
+    repo         TEXT NOT NULL,
+    sha          TEXT NOT NULL,
+    author_name  TEXT,
+    author_email TEXT,
+    author_date  TEXT,
+    subject      TEXT,
+    additions    INTEGER NOT NULL DEFAULT 0,
+    deletions    INTEGER NOT NULL DEFAULT 0,
+    files_changed INTEGER NOT NULL DEFAULT 0,
+    -- Subject-classification flags (one commit can have multiple tags).
+    is_bug_fix   INTEGER NOT NULL DEFAULT 0,
+    is_revert    INTEGER NOT NULL DEFAULT 0,
+    is_feature   INTEGER NOT NULL DEFAULT 0,
+    is_refactor  INTEGER NOT NULL DEFAULT 0,
+    is_test      INTEGER NOT NULL DEFAULT 0,
+    is_docs      INTEGER NOT NULL DEFAULT 0,
+    user_id      INTEGER REFERENCES users(id),
+    is_bot       INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(repo, sha)
+);
+CREATE INDEX IF NOT EXISTS ix_git_commits_author ON git_commits(author_name);
+CREATE INDEX IF NOT EXISTS ix_git_commits_user ON git_commits(user_id);
+CREATE INDEX IF NOT EXISTS ix_git_commits_date ON git_commits(author_date);
+CREATE INDEX IF NOT EXISTS ix_git_commits_flags ON git_commits(is_bug_fix, is_revert);
