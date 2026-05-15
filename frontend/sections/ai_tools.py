@@ -233,7 +233,7 @@ with tab_overview:
     with col_summary:
         section("Usage Summary")
         usage_rows = [
-            {"tool": "Claude Chat",
+            {"tool": "Claude (all products)",
              "users": _claude_spend["u"],
              "activity": f"{_claude_spend['c']:,} reqs",
              "spend": fmt_money(claude_v)},
@@ -337,7 +337,16 @@ with tab_claude:
                     )
 
         section("All Claude Users")
-        df = pd.DataFrame(claude_rows)
+        # Drop zero-activity rows — Cursor leaderboard surfaces members who
+        # picked Claude as favorite but generated no actual lines/completions
+        # this period. Showing them as 0/0/0/0/0 looks like a bug.
+        active_claude_rows = [
+            r for r in claude_rows
+            if (int(r.get("ai_lines") or 0) > 0
+                or int(r.get("agent_completions") or 0) > 0
+                or int(r.get("tab_completions") or 0) > 0)
+        ]
+        df = pd.DataFrame(active_claude_rows)
         view = df[[
             "name", "favorite_model", "agent_completions", "agent_lines",
             "tab_completions", "tab_lines", "ai_lines",
@@ -433,9 +442,25 @@ with tab_cc:
         # Cowork etc.), not CC-only.
         model_spend = get_anthropic_model_spend_from_json()
         if model_spend:
+            # Surface the JSON's actual rangeStart/End so the user doesn't
+            # think these $-values are filtered by the page's Period picker.
+            from data.sources.anthropic_json import latest_anthropic_file as _laf
+            _af = _laf()
+            _window_note = ""
+            if _af:
+                try:
+                    import json as _json
+                    _meta = _json.loads(_af.path.read_text(encoding="utf-8")).get("_meta") or {}
+                    _start = (_meta.get("rangeStart") or "")[:10]
+                    _end = (_meta.get("rangeEnd") or "")[:10]
+                    if _start and _end:
+                        _window_note = f" Window: {_start} → {_end}."
+                except Exception:
+                    pass
             st.caption(
                 "Sourced from `rollups.modelSpend` (all Claude products combined — "
                 "per-product per-model split isn't in the JSON dump)."
+                + _window_note
             )
             cc1, cc2 = st.columns(2)
             with cc1:
@@ -687,6 +712,12 @@ with tab_models:
     f = filters
     rows_api = get_models_breakdown(f)  # usage_events grouped by model
 
+    # Respect the Source filter — picking a specific provider should narrow
+    # the landscape to that provider's models. Without this, picking
+    # 'Anthropic' still showed gpt-* rows which looked like a bug.
+    if filters.provider and filters.provider != "all":
+        rows_api = [r for r in rows_api if r["provider"] == filters.provider]
+
     # Replace Anthropic's 'claude-generic' placeholder with real per-model
     # spend from the JSON rollup. Total Anthropic spend stays the same; we
     # just attribute it to actual model names so the landscape doesn't
@@ -872,6 +903,12 @@ def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
 
 
 with tab_high:
+    if filters.provider != "all":
+        st.caption(
+            f"ℹ️ Cross-tool view — ignores Source filter "
+            f"(currently '{filters.provider}') by design. Ranks people across "
+            f"OpenAI + Anthropic + Cursor together."
+        )
     # Threshold slider — default $1k per the design screenshot.
     threshold = st.slider("High-spender threshold ($)", 200, 5000, 1000, 100,
                           key="hs_threshold")
