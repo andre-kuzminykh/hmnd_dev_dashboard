@@ -106,42 +106,67 @@ section("AI Tools")
 
 
 with tab_overview:
-    # Spend breakdown across the three tools — matches the design screenshot.
+    # Spend breakdown across the three tools — respects the Source filter.
+    # When Source is narrowed (e.g. 'OpenAI · Artem'), zero out the
+    # other-provider stats so the user sees ONLY the scope they picked.
     from data.db import get_conn as _gc
     f = filters
     s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
     e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
+    _scope = (f.provider or "all").lower()
+    _show_anthropic = _scope in ("all", "anthropic")
+    _show_openai    = _scope in ("all", "openai")
+    _show_cursor    = _scope in ("all", "cursor")
+    # Apply org filter to OpenAI as well (scope = 'openai' + organization='Artem')
+    _org_clause = ""
+    _org_params: list = []
+    if f.organization and f.organization != "all":
+        _org_clause = " AND ue.organization_id IN (SELECT id FROM organizations WHERE label = ?) "
+        _org_params = [f.organization]
+
+    _empty = {"s": 0, "u": 0, "c": 0}
     with _gc() as _conn:
-        _claude_spend = _conn.execute(
-            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
-               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
-            (s_iso, e_iso),
-        ).fetchone()
-        _gpt_spend = _conn.execute(
-            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
-               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name='openai' AND ue.occurred_at BETWEEN ? AND ?""",
-            (s_iso, e_iso),
-        ).fetchone()
+        if _show_anthropic:
+            _claude_spend = _conn.execute(
+                f"""SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
+                   FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+                   WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?
+                   {_org_clause}""",
+                [s_iso, e_iso] + _org_params,
+            ).fetchone()
+        else:
+            _claude_spend = _empty
+        if _show_openai:
+            _gpt_spend = _conn.execute(
+                f"""SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
+                   FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+                   WHERE p.name='openai' AND ue.occurred_at BETWEEN ? AND ?
+                   {_org_clause}""",
+                [s_iso, e_iso] + _org_params,
+            ).fetchone()
+        else:
+            _gpt_spend = _empty
 
     # Cursor: real spend comes from usage_events (cursor JSON loader writes
     # spendCents + includedSpendCents). Leaderboard is used only for the
     # completion / AI lines counters that don't have an events-equivalent.
     from backend.services.cursor_analytics import load_user_leaderboard as _llb
-    _leaders = _llb()
+    _leaders = _llb() if _show_cursor else []
     _cursor_devs = len(_leaders)
     _cursor_completions = sum(int(r.get("agent_completions", 0) or 0)
                               + int(r.get("tab_completions", 0) or 0) for r in _leaders)
     _cursor_ai_lines = sum(int(r.get("ai_lines", 0) or 0) for r in _leaders)
-    with _gc() as _conn:
-        _cursor_spend_row = _conn.execute(
-            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(*) AS c
-               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?""",
-            (s_iso, e_iso),
-        ).fetchone()
-    _cursor_spend_actual = float(_cursor_spend_row["s"] or 0)
+    if _show_cursor:
+        with _gc() as _conn:
+            _cursor_spend_row = _conn.execute(
+                """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(*) AS c
+                   FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+                   WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?""",
+                (s_iso, e_iso),
+            ).fetchone()
+        _cursor_spend_actual = float(_cursor_spend_row["s"] or 0)
+    else:
+        _cursor_spend_actual = 0.0
 
     claude_v = float(_claude_spend["s"] or 0)
     gpt_v = float(_gpt_spend["s"] or 0)
@@ -217,8 +242,13 @@ with tab_overview:
     col_top, col_summary = st.columns(2)
     with col_top:
         section("Top Spenders — All Tools")
+        if _scope != "all":
+            st.caption(
+                "ℹ️ Cross-tool ranking — ignores Source filter by design "
+                "(ranks people across OpenAI + Anthropic + Cursor together)."
+            )
         spenders = get_high_spenders(period_days=f.period_days, threshold_usd=0,
-                                     api_key_id=f.api_key_id)
+                                     api_key_id=None)
         top10 = spenders[:10]
         if top10:
             max_spend = max(r["spend"] for r in top10) or 1
@@ -256,6 +286,12 @@ with tab_overview:
 
 
 with tab_claude:
+    if filters.provider not in ("all", "anthropic", "cursor"):
+        st.info(
+            f"Claude Users tab is sourced from Cursor leaderboard (favorite_model "
+            f"contains 'claude'). Source filter '{filters.provider}' doesn't apply "
+            f"here — switch to 'All sources' or 'Anthropic' / 'Cursor'."
+        )
     # F-12.1.2 — Claude data comes from the Cursor team CSV exports the user
     # drops into the repo (see backend.services.cursor_analytics). Anthropic's
     # Admin API stays untouched; this tab is purely Cursor-derived so the
@@ -366,6 +402,12 @@ with tab_claude:
 
 
 with tab_cc:
+    if filters.provider not in ("all", "anthropic"):
+        st.info(
+            f"Claude Code tab shows Anthropic events (purpose='Agent'). "
+            f"Source filter '{filters.provider}' has no Claude Code data — "
+            f"switch to 'All sources' or 'Anthropic'."
+        )
     # Claude Code = Anthropic events with purpose 'Agent' (synthesised from
     # Cursor leaderboard's agent_completions) — see data/cursor_to_anthropic.
     from data.db import get_conn
@@ -491,6 +533,12 @@ with tab_cc:
 
 
 with tab_gpt:
+    if filters.provider not in ("all", "openai"):
+        st.info(
+            f"ChatGPT tab shows OpenAI API events. Source filter "
+            f"'{filters.provider}' has no OpenAI data — switch to 'All sources' "
+            f"or one of 'OpenAI · Artem' / 'OpenAI · Humanoid'."
+        )
     rows = get_users_for_provider("openai", period_days=filters.period_days,
                                    api_key_id=filters.api_key_id)
     total_msgs = sum(r["messages"] for r in rows)
@@ -566,6 +614,12 @@ with tab_gpt:
 
 
 with tab_cursor:
+    if filters.provider not in ("all", "cursor"):
+        st.info(
+            f"Cursor tab shows the Cursor team leaderboard. Source filter "
+            f"'{filters.provider}' has no Cursor data — switch to 'All sources' "
+            f"or 'Cursor'."
+        )
     from backend.services.cursor_analytics import (
         load_contribution_daily, load_team_dau, load_user_leaderboard, model_usage_summary,
     )
