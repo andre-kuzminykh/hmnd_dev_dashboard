@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 
 from backend.analytics import Filters
 from backend.services.overview import get_overview_kpis
@@ -18,6 +19,49 @@ def test_fr_01_1_1_1_kpi_keys(tmp_db):
     assert REQUIRED_KEYS.issubset(kpis.keys())
     for k in REQUIRED_KEYS:
         assert isinstance(kpis[k], (int, float))
+
+
+def test_total_spend_uses_billing_api_when_available(tmp_db):
+    """When provider_totals has rows (= we synced /costs from the billing API),
+    the Total Spend KPI must reflect that, NOT the SUM of usage_events. The
+    /usage endpoint is incomplete (missing audio, batch, some buckets), so
+    summing events undersees by 20-40%. /costs is the source of truth.
+    """
+    from data.db import get_conn
+    with get_conn() as conn:
+        pid = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        mid = conn.execute(
+            "SELECT id FROM models WHERE provider_id = ? LIMIT 1", (pid,)
+        ).fetchone()["id"]
+        # Wipe existing OpenAI data so the assertion isn't muddied by fixture noise.
+        today = datetime.utcnow().date().isoformat()
+        conn.execute("DELETE FROM usage_events WHERE provider_id = ?", (pid,))
+        conn.execute("DELETE FROM provider_totals WHERE provider_id = ?", (pid,))
+        # usage_events: $50 (undersees actual billing)
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id,
+                                         occurred_at, tokens_in, tokens_out,
+                                         tokens_cached, cost_usd, is_error, purpose)
+               VALUES(?, ?, ?, datetime('now', '-1 day'), 1000, 100, 0, 50.0, 0, 'API')""",
+            (uid, pid, mid),
+        )
+        # provider_totals: $100 (authoritative)
+        conn.execute(
+            """INSERT INTO provider_totals(provider_id, day, cost_usd)
+               VALUES(?, ?, 100.0)""",
+            (pid, today),
+        )
+        conn.commit()
+
+    kpis = get_overview_kpis(Filters(period_days=7, provider="openai"))
+    assert kpis["total_spend"] == 100.0, (
+        f"Total Spend should reflect /costs ($100), got ${kpis['total_spend']}"
+    )
+    assert kpis["total_spend_events"] == 50.0, (
+        f"events-derived figure must be exposed for transparency, got ${kpis['total_spend_events']}"
+    )
+    assert kpis["reported_total"] == 100.0
 
 
 def test_tokens_in_subtracts_cached(tmp_db):

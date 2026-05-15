@@ -45,10 +45,14 @@ if filters.provider == "anthropic" and kpis["total_spend"] == 0 and kpis["active
     )
 
 reported = kpis.get("reported_total")
+events_total = kpis.get("total_spend_events")
 total_note = "vs prev period"
-if reported is not None and kpis["total_spend"]:
-    diff_pct = (kpis["total_spend"] - reported) / reported * 100 if reported else 0
-    total_note = f"reported by provider: {fmt_money(reported)}  ·  Δ {diff_pct:+.1f}%"
+if reported is not None and reported > 0:
+    # When we have authoritative billing-API totals (e.g. OpenAI /costs,
+    # Anthropic /cost_report), the headline Total Spend IS that number.
+    # Show the events-derived figure as a transparency footnote so the user
+    # can spot when /usage/completions undersees /costs.
+    total_note = f"from billing API · events sum: {fmt_money(events_total or 0)}"
 
 cached_note = (
     f"+ {fmt_int(kpis['tokens_cached'])} cached"

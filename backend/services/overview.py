@@ -131,12 +131,28 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         ai_share_prev = _ai_code_share(conn, prev_start, prev_end)
         suspicious = _suspicious_count(conn)
         reported_total = _provider_reported_total(conn, start, end, f.provider)
+        reported_total_prev = _provider_reported_total(conn, prev_start, prev_end, f.provider)
 
-    cost_per_user = safe_div(cur["total_spend"], cur["active_users"], default=0.0)
-    cost_per_user_prev = safe_div(prev["total_spend"], prev["active_users"], default=0.0)
+    # FR-01.x — Total Spend prefers the authoritative billing-API number
+    # (provider_totals from /v1/organization/costs etc.) over SUM(usage_events).
+    # OpenAI's /usage/completions endpoint is incomplete (missing some
+    # buckets, audio/whisper, batch API, etc.), so summing events under-counts
+    # by 20-40%. /costs is the source of truth — that's what the provider's
+    # own billing UI shows. We still show the events-derived value as a note
+    # for transparency.
+    if reported_total is not None and reported_total > 0:
+        total_spend = reported_total
+        total_spend_prev = reported_total_prev if reported_total_prev is not None else prev["total_spend"]
+    else:
+        total_spend = cur["total_spend"]
+        total_spend_prev = prev["total_spend"]
+
+    cost_per_user = safe_div(total_spend, cur["active_users"], default=0.0)
+    cost_per_user_prev = safe_div(total_spend_prev, prev["active_users"], default=0.0)
 
     out = {
-        "total_spend": round(cur["total_spend"], 2),
+        "total_spend": round(total_spend, 2),
+        "total_spend_events": round(cur["total_spend"], 2),  # for transparency
         "tokens_in": int(cur["tokens_in"]),
         "tokens_out": int(cur["tokens_out"]),
         "tokens_cached": int(cur.get("tokens_cached") or 0),
@@ -149,7 +165,7 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         # None when sync hasn't populated provider_totals yet.
         "reported_total": round(reported_total, 2) if reported_total is not None else None,
         # deltas (FR-01.1.1.3)
-        "total_spend_delta": pct_delta(cur["total_spend"], prev["total_spend"]),
+        "total_spend_delta": pct_delta(total_spend, total_spend_prev),
         "tokens_in_delta": pct_delta(cur["tokens_in"], prev["tokens_in"]),
         "tokens_out_delta": pct_delta(cur["tokens_out"], prev["tokens_out"]),
         "active_users_delta": pct_delta(cur["active_users"], prev["active_users"]),
@@ -162,33 +178,66 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
 
 
 def get_daily_spend_series(filters: Filters | None = None, now: datetime | None = None) -> list[dict]:
-    """Time series для линейного графика на Overview."""
+    """Time series для линейного графика на Overview.
+
+    For providers that populate provider_totals (currently OpenAI via /costs),
+    we use those daily totals — they're authoritative and match the provider's
+    billing UI. For providers that don't (Anthropic JSON, Cursor JSON), we
+    sum usage_events as before.
+    """
     f = filters or Filters()
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
-    p_clause, p_params = provider_clause(f.provider, "p")
-    t_clause, t_params = team_clause(f.team, "t")
-    o_clause, o_params = org_clause(f.organization, "ue")
-    k_clause, k_params = api_key_clause(f.api_key_id, "ue")
-    sql = f"""
-        SELECT date(ue.occurred_at) AS day,
-               p.name AS provider,
-               ROUND(SUM(ue.cost_usd), 2) AS cost
-        FROM usage_events ue
-        JOIN users u ON u.id = ue.user_id
-        LEFT JOIN teams t ON t.id = u.team_id
-        JOIN providers p ON p.id = ue.provider_id
-        WHERE ue.occurred_at BETWEEN ? AND ?
-        {p_clause}
-        {t_clause}
-        {o_clause}
-        {k_clause}
-        GROUP BY day, provider
-        ORDER BY day
-    """
-    params = (
-        [start.isoformat(sep=" "), end.isoformat(sep=" ")]
-        + p_params + t_params + o_params + k_params
-    )
+
     with get_conn() as conn:
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        # 1) Daily authoritative numbers from provider_totals (e.g. OpenAI /costs)
+        pt_rows = conn.execute(
+            """SELECT pt.day, p.name AS provider, pt.cost_usd AS cost
+               FROM provider_totals pt
+               JOIN providers p ON p.id = pt.provider_id
+               WHERE pt.day BETWEEN ? AND ?""",
+            (start.date().isoformat(), end.date().isoformat()),
+        ).fetchall()
+        providers_with_totals = {r["provider"] for r in pt_rows}
+
+        # 2) Daily events-summed for providers that don't have totals (JSON sources).
+        p_clause, p_params = provider_clause(f.provider, "p")
+        t_clause, t_params = team_clause(f.team, "t")
+        o_clause, o_params = org_clause(f.organization, "ue")
+        k_clause, k_params = api_key_clause(f.api_key_id, "ue")
+        ev_rows = conn.execute(
+            f"""SELECT date(ue.occurred_at) AS day,
+                       p.name AS provider,
+                       ROUND(SUM(ue.cost_usd), 2) AS cost
+                FROM usage_events ue
+                JOIN users u ON u.id = ue.user_id
+                LEFT JOIN teams t ON t.id = u.team_id
+                JOIN providers p ON p.id = ue.provider_id
+                WHERE ue.occurred_at BETWEEN ? AND ?
+                {p_clause}
+                {t_clause}
+                {o_clause}
+                {k_clause}
+                GROUP BY day, provider
+                ORDER BY day""",
+            [start.isoformat(sep=" "), end.isoformat(sep=" ")]
+            + p_params + t_params + o_params + k_params,
+        ).fetchall()
+
+    # Compose: provider_totals win per (provider, day); fallback to events.
+    out: dict[tuple[str, str], dict] = {}
+    for r in ev_rows:
+        prov = r["provider"]
+        # Skip events for providers that have authoritative provider_totals —
+        # we'll use those instead to avoid mixing two different signals.
+        if prov in providers_with_totals:
+            continue
+        out[(r["day"], prov)] = {"day": r["day"], "provider": prov, "cost": r["cost"]}
+    for r in pt_rows:
+        prov = r["provider"]
+        # Honor the provider filter on the totals path too.
+        if f.provider != "all" and prov != f.provider:
+            continue
+        out[(r["day"], prov)] = {"day": r["day"], "provider": prov, "cost": round(float(r["cost"] or 0), 2)}
+
+    return sorted(out.values(), key=lambda x: (x["day"], x["provider"]))
