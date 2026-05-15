@@ -567,7 +567,171 @@ And cursor-derived skipped с пометкой "skipped: JSON source present"
 
 - **FR-14.3.1.1** — В run_sync для каждого провайдера: scan `sources/`, если JSON найден — используй его и пропусти fallback path.
 
+---
 
+## F-15 — Code Quality (Git × AI)
+
+**Цель:** Ответить CEO/CTO на вопрос «сколько багов от ИИ и сколько люди делают». Из коммитов 3 репозиториев (`hmnd` / `hmnd-cloud` / `hmnd-sim`) — по regex на subject — классифицируем bug-fix / revert / feature / refactor / test / docs, и сводим в команду-вайд rates + per-author breakdown + AI-spend-per-fix debt indicator + high-churn files.
+
+### US-15.1 — Bug-fix rate across team and AI/human split
+
+> *As a* CEO/CTO
+> *I want* видеть какой % коммитов — это баг-фиксы, в разрезе людей vs ботов/AI-агентов, и сколько денег уходит на каждый bug-fix
+> *so that* понимать, не генерит ли AI код, который потом приходится постоянно чинить.
+
+#### SC-15.1.1 — Subject classification at load time
+
+```gherkin
+Given в sources/ лежит git_commit_file_stats_YYYYMMDD.csv с per-commit-file rows
+When запускается load_git_commits_csv(path)
+Then для каждого уникального (repo, sha) пишется строка в git_commits с flags is_bug_fix / is_revert / is_feature / is_refactor / is_test / is_docs (0|1)
+And классификация делается regex по полю subject (первая строка сообщения коммита)
+And автор-бот (github-actions, Cursor Agent, etc) помечается is_bot=1 через _is_bot_author
+And user_id заполняется по результату _match_user_id (email / full_name / local-part)
+```
+
+**Требования:**
+
+- **FR-15.1.1.1** — `_classify_subject(subject)` возвращает dict с 6 флагами по regex:
+  - `is_bug_fix` если subject матчит `\b(fix|fixes|fixed|bug|bugfix|hotfix|patch)\b` или `^fix[:\(!]`
+  - `is_revert` если матчит `^revert\b` или `\brevert[:\s\"\']`
+  - `is_feature` если `^feat\b`, `^feature\b`, или `\badd(ed|s)?\b\s`
+  - `is_refactor` если `^refactor\b`, `\brefactor(ing|ed)?\b`, `^style\b`, `^perf\b`, `^chore\b`
+  - `is_test` если `^test\b` или `\btest(s|ing)?\b`
+  - `is_docs` если `^docs?\b` или `\b(documentation|readme)\b`
+  - Пустая / None строка → все 0.
+- **FR-15.1.1.2** — `load_git_commits_csv` пишет в `git_commits` одну строку на (repo, sha) с агрегированными additions/deletions/files_changed по всем file-rows и тегами из `_classify_subject`. Перед записью таблица очищается (idempotent).
+
+#### SC-15.1.2 — Team-wide bug-rate rollup
+
+```gherkin
+Given в git_commits 10 коммитов: 3 fix + 7 feat, все за последние 30 дней
+When вызван get_team_quality(period_days=30)
+Then commits = 10, fixes = 3, features = 7
+And bug_rate_pct = 30.0, revert_rate_pct = 0.00
+And если 4 коммита человеческих (1 fix) + 2 коммита бота (1 fix) — human_bug_rate_pct=25.0, bot_bug_rate_pct=50.0
+```
+
+**Требования:**
+
+- **FR-15.1.2.1** — `get_team_quality(period_days, repos)` возвращает dict с полями: `commits, fixes, reverts, features, refactors, tests, docs, bot_commits, human_commits, bug_rate_pct, revert_rate_pct, human_bug_rate_pct, bot_bug_rate_pct, additions, deletions`. Все percent-поля округлены до 1 знака (revert до 2).
+- **FR-15.1.2.2** — Human vs bot split: `human_commits = SUM(is_bot=0)`, `bot_commits = SUM(is_bot=1)`, и аналогично для fixes. Bug-rate считается per cohort.
+- **FR-15.1.2.3** — Repo filter: при `repos=["hmnd"]` SQL подмешивает `AND c.repo IN (?)` — все агрегаты считаются по подмножеству.
+- **FR-15.1.2.4** — Date filter: `period_days > 0` → `WHERE substr(c.author_date, 1, 10) >= cutoff`. `period_days = 0` — фильтр выключен.
+- **FR-15.1.2.5** — Empty result: если в скоупе 0 коммитов — возвращает все нули + `bug_rate_pct = None` (не делим на 0), без NaN.
+
+#### SC-15.1.3 — Per-author breakdown with alias dedup
+
+```gherkin
+Given user 'Alice' с user_id=42; в git_commits 2 коммита от 'Alice' и 1 от alias 'alice2', все с user_id=42
+When вызван get_quality_per_author(period_days=30)
+Then Alice появляется ровно в одной строке (GROUP BY COALESCE(user_id, author_name))
+And commits = 3, fixes = соответствует ground truth
+And bug_rate_pct = fixes / commits * 100, округлено до 1 знака
+```
+
+**Требования:**
+
+- **FR-15.1.3.1** — Per-author rollup группируется по `COALESCE(c.user_id, c.author_name)` — алиасы одного человека (один user_id) сливаются в одну строку. canonical_name = `COALESCE(u.full_name, c.author_name)`.
+
+#### SC-15.1.4 — AI spend per bug-fix debt indicator
+
+```gherkin
+Given за период $100 AI spend в usage_events и 4 коммита с is_bug_fix=1
+When вызван get_ai_spend_per_fix(period_days=30)
+Then ai_spend = 100.0, fixes = 4, ai_spend_per_fix = 25.0
+And если fixes = 0 → ai_spend_per_fix = None (не падаем DivisionByZero)
+```
+
+**Требования:**
+
+- **FR-15.1.4.1** — `get_ai_spend_per_fix(period_days)` делает single SQL с двумя subselects (`SUM(cost_usd)` из `usage_events`, `COUNT(*)` из `git_commits WHERE is_bug_fix=1`) и возвращает `{period_days, ai_spend, fixes, ai_spend_per_fix}`.
+- **FR-15.1.4.2** — Zero-fixes safety: `_safe_div(spend, 0) → None`.
+
+#### SC-15.1.5 — High-churn files (problem areas)
+
+```gherkin
+Given в per-commit-file CSV файл auth.py меняли в 3 разных коммитах, util.py — в 1
+When вызван get_high_churn_files(period_days=30, limit=10)
+Then auth.py первый в списке с commits=3, util.py — второй с commits=1
+And по каждому файлу: file, commits, additions, deletions, repos (';'-separated)
+And при repos=["hmnd"] — учитываются только коммиты из hmnd
+```
+
+**Требования:**
+
+- **FR-15.1.5.1** — `get_high_churn_files(period_days, repos, limit)` НЕ читает БД (`git_commits` collapses per-commit), а runtime-читает per-commit-file CSV через `latest_git_commits_file()`. Если CSV отсутствует — `[]`.
+- **FR-15.1.5.2** — Repo filter работает над raw CSV: строки с `repo not in repos_set` пропускаются.
+
+### US-15.2 — UI: Code Quality block in Devs tab
+
+> *As a* CEO
+> *I want* увидеть весь Code Quality на одном экране в табе Devs (Git × AI), ВЫШЕ детальных per-segment таблиц
+> *so that* команда-вайд signal читается до того, как я уйду в детали по людям.
+
+#### SC-15.2.1 — Block placement and structure
+
+```gherkin
+Given get_team_quality вернул commits > 0
+When открыт таб 'Devs (Git × AI)'
+Then секция 'Code Quality (Git × AI)' рендерится ПОСЛЕ Segment distribution + ПЕРЕД 'Drill into segments'
+And в секции по порядку: KPI row → Commit composition bar → 2-column ($/fix card + AI vs human bug rate bars) → Per-author bug-fix breakdown table → High-churn files table
+And KPI row содержит 5 карточек: Commits / Bug-fix rate / Human bug rate / Bot bug rate / Revert rate
+And $/fix card цвет границы: зелёный (< $100), оранжевый ($100-500), красный (≥ $500)
+And если commits = 0 — вся секция скрыта целиком (нет 'Code Quality' заголовка, нет пустых таблиц)
+```
+
+**Требования:**
+
+- **FR-15.2.1.1** — UI-секция respects period + repo multi-select из Devs табa.
+
+---
+
+## F-16 — '?' help tooltips on KPIs and section titles
+
+**Цель:** Сделать дашборд читаемым для не-технического CEO. Каждая важная метрика и каждая секция имеет тонкий '?' значок, по hover-у которого появляется короткое (1-3 строки) объяснение «что это · почему важно · когда тревожиться» на русском.
+
+### US-16.1 — Help icon on section() and kpi_row()
+
+> *As a* CEO who didn't write this dashboard
+> *I want* hover-tooltip с объяснением каждого KPI и заголовка секции
+> *so that* мне не приходится спрашивать «а что это значит» каждый раз.
+
+#### SC-16.1.1 — Help icon rendering
+
+```gherkin
+Given вызов section(title="Code Quality", help="Качество кода через призму AI")
+When страница отрисована
+Then в HTML заголовка появляется <span class="hmnd-help" data-tip="Качество кода через призму AI" tabindex="0">?</span>
+And при hover/focus открывается CSS popover с тем же текстом
+
+Given вызов kpi_row([{label, value, help}, ...])
+When страница отрисована
+Then каждая KPI-карточка с help-полем имеет '?' значок рядом с label
+And карточки без help-поля рендерятся БЕЗ '?' (no broken DOM)
+```
+
+**Требования:**
+
+- **FR-16.1.1.1** — `frontend.components.section(title, help=None)` — при `help is not None` добавляет `_help_icon(help)` в HTML заголовка.
+- **FR-16.1.1.2** — `frontend.components.kpi_card(label, value, ..., help=None)` принимает help-поле; `kpi_row(items)` пробрасывает help в каждый kpi_card.
+- **FR-16.1.1.3** — `_help_icon(text)` экранирует `& < > "` чтобы текст с тегами/кавычками не ломал атрибут `data-tip` и обрамляющий HTML. Возвращает `""` для `None` / пустой строки — безопасно сплайсить unconditionally.
+- **FR-16.1.1.4** — Отсутствие `help` параметра должно давать пустой результат (`_help_icon(None) == ""`) — обратная совместимость для всех существующих `section("...")` без help.
+
+#### SC-16.1.2 — Accessibility
+
+```gherkin
+Given '?' значок в DOM
+When юзер табает к нему клавиатурой
+Then значок фокусируется (tabindex=0) и тот же tooltip открывается через :focus
+And значок имеет aria-label с тем же текстом для screen reader
+```
+
+**Требования:**
+
+- **FR-16.1.2.1** — `_help_icon` рендерит `tabindex="0" aria-label="<text>"` чтобы быть keyboard-accessible и читаемым assistive-tech.
+
+---
 
 Каждый тест в `tests/` именуется `test_<req_id_lower>` и проверяет ровно одно требование.
 
@@ -612,6 +776,23 @@ And cursor-derived skipped с пометкой "skipped: JSON source present"
 | `tests/test_sources_cursor.py::test_fr_14_1_2_1_shape` | FR-14.1.2.1 |
 | `tests/test_sources_cursor.py::test_fr_14_1_2_2_json_over_csv_priority` | FR-14.1.2.2 |
 | `tests/test_sources_anthropic.py::test_fr_14_3_1_1_json_wins_over_cursor_derived` | FR-14.3.1.1 |
+| `tests/test_git_quality.py::test_classify_subject_tags_bug_fix_and_revert` | FR-15.1.1.1 |
+| `tests/test_git_quality.py::test_load_commits_populates_git_commits_with_flags` | FR-15.1.1.2 |
+| `tests/test_git_quality.py::test_get_team_quality_computes_rates` | FR-15.1.2.1 |
+| `tests/test_git_quality.py::test_get_team_quality_human_vs_bot_split` | FR-15.1.2.2 |
+| `tests/test_git_quality.py::test_get_team_quality_repo_filter` | FR-15.1.2.3 |
+| `tests/test_git_quality.py::test_get_team_quality_date_filter` | FR-15.1.2.4 |
+| `tests/test_git_quality.py::test_get_team_quality_empty_returns_safe_zeros` | FR-15.1.2.5 |
+| `tests/test_git_quality.py::test_get_quality_per_author_dedupes_by_user_id` | FR-15.1.3.1 |
+| `tests/test_git_quality.py::test_get_ai_spend_per_fix` | FR-15.1.4.1 |
+| `tests/test_git_quality.py::test_get_ai_spend_per_fix_zero_fixes_safe` | FR-15.1.4.2 |
+| `tests/test_git_quality.py::test_get_high_churn_files` | FR-15.1.5.1 |
+| `tests/test_git_quality.py::test_get_high_churn_files_repo_filter` | FR-15.1.5.2 |
+| `tests/test_ux_help.py::test_section_renders_help_icon` | FR-16.1.1.1 |
+| `tests/test_ux_help.py::test_kpi_row_renders_help_icon_per_card` | FR-16.1.1.2 |
+| `tests/test_ux_help.py::test_help_icon_escapes_html` | FR-16.1.1.3 |
+| `tests/test_ux_help.py::test_section_without_help_has_no_icon` | FR-16.1.1.4 |
+| `tests/test_ux_help.py::test_help_icon_carries_aria_label` | FR-16.1.2.1 |
 
 ## Архитектура слоёв
 
