@@ -18,19 +18,14 @@ def _kpis_in_window(conn, start: datetime, end: datetime, f: Filters) -> dict[st
 
     # FR-01.1.1.1 — основной набор метрик.
     # tokens_in is stored as the raw 'input_tokens' value from each provider
-    # API; for OpenAI that field INCLUDES cached input tokens. To match the
-    # OpenAI Platform billing UI (and similar billing UIs that show only the
-    # billable portion), we subtract `tokens_cached` from `tokens_in` when
-    # displaying. Cached tokens are still tracked separately in DB so per-
-    # model cost accounting works.
+    # API. For OpenAI that field already includes cached input tokens and is
+    # the same number Platform UI displays as 'Total tokens' / 'input tokens'
+    # — so we show it as-is to match the billing UI. tokens_cached is kept
+    # as a separate aggregate so we can break it out if needed.
     sql = f"""
         SELECT
             COALESCE(SUM(ue.cost_usd), 0)        AS total_spend,
-            COALESCE(SUM(CASE
-                WHEN ue.tokens_in > COALESCE(ue.tokens_cached, 0)
-                    THEN ue.tokens_in - COALESCE(ue.tokens_cached, 0)
-                ELSE 0
-            END), 0) AS tokens_in,
+            COALESCE(SUM(ue.tokens_in), 0)       AS tokens_in,
             COALESCE(SUM(ue.tokens_out), 0)      AS tokens_out,
             COALESCE(SUM(COALESCE(ue.tokens_cached, 0)), 0)  AS tokens_cached,
             COALESCE(COUNT(DISTINCT ue.user_id), 0) AS active_users

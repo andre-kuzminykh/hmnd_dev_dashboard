@@ -64,10 +64,14 @@ def test_total_spend_uses_billing_api_when_available(tmp_db):
     assert kpis["reported_total"] == 100.0
 
 
-def test_tokens_in_subtracts_cached(tmp_db):
-    """Tokens In KPI must show UNCACHED input only, so the number matches
-    the OpenAI Platform billing UI (which shows uncached only). Stored
-    tokens_in includes cached, so the SQL aggregate subtracts tokens_cached.
+def test_tokens_in_matches_openai_platform(tmp_db):
+    """Tokens In KPI must show the raw 'input_tokens' value (which already
+    INCLUDES cached) so it matches what OpenAI Platform's 'Total tokens' /
+    'input tokens' card displays. tokens_cached stays as a separate KPI
+    field so callers can show the cached portion alongside if needed.
+
+    Reference: comparing dashboard against console.openai.com → Usage,
+    'Total tokens' line equals SUM(input_tokens). We surface the same.
     """
     from data.db import get_conn
     with get_conn() as conn:
@@ -76,7 +80,7 @@ def test_tokens_in_subtracts_cached(tmp_db):
         mid = conn.execute(
             "SELECT id FROM models WHERE provider_id = ? LIMIT 1", (pid,)
         ).fetchone()["id"]
-        # Insert 1 event with tokens_in=100 incl. tokens_cached=70 → display = 30.
+        # Insert 1 event with tokens_in=100 incl. tokens_cached=70 → display = 100.
         conn.execute(
             """INSERT INTO usage_events(user_id, provider_id, model_id, occurred_at,
                                          tokens_in, tokens_out, tokens_cached, cost_usd,
@@ -86,30 +90,16 @@ def test_tokens_in_subtracts_cached(tmp_db):
         )
         conn.commit()
 
-    kpis = get_overview_kpis(Filters(period_days=7, provider="openai"))
-    # The KPI exposes the cached portion separately, and tokens_in must be
-    # strictly smaller than raw SUM(tokens_in) because we subtract cached.
-    assert kpis["tokens_cached"] >= 70
+    kpis_with = get_overview_kpis(Filters(period_days=7, provider="openai"))
     with get_conn() as conn:
-        raw_in = conn.execute(
-            """SELECT COALESCE(SUM(tokens_in), 0) AS s
-               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name = 'openai' AND ue.occurred_at >= datetime('now', '-7 days')"""
-        ).fetchone()["s"]
-    # Display value must equal raw minus cached (clamped at zero per row to
-    # defend against any individual event where cached > input).
-    assert kpis["tokens_in"] < raw_in
-    assert kpis["tokens_in"] >= 0
-    # Drop in tokens_in across the new row must equal exactly 100-70=30, even
-    # if other fixture rows already existed (they're stable).
-    # Re-running with the row deleted should bump tokens_in by 30 less.
-    with get_conn() as conn:
-        conn.execute(
-            "DELETE FROM usage_events WHERE tokens_in=100 AND tokens_cached=70"
-        )
+        conn.execute("DELETE FROM usage_events WHERE tokens_in=100 AND tokens_cached=70")
         conn.commit()
-    kpis2 = get_overview_kpis(Filters(period_days=7, provider="openai"))
-    assert kpis["tokens_in"] - kpis2["tokens_in"] == 30
+    kpis_without = get_overview_kpis(Filters(period_days=7, provider="openai"))
+
+    # New row added exactly 100 to displayed tokens_in (NOT 30 = 100-70).
+    assert kpis_with["tokens_in"] - kpis_without["tokens_in"] == 100
+    # Cached portion still surfaced for transparency.
+    assert kpis_with["tokens_cached"] - kpis_without["tokens_cached"] == 70
 
 
 def test_fr_01_1_1_2_zero_users(tmp_db, monkeypatch):
