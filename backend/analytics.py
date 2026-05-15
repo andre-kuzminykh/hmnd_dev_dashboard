@@ -9,8 +9,9 @@ from typing import Optional
 @dataclass
 class Filters:
     period_days: int = 30
-    provider: str = "all"                # 'all' | 'openai' | 'anthropic'
-    team: str = "all"                    # 'all' | team name
+    provider: str = "all"                # 'all' | 'openai' | 'anthropic' | 'cursor' | ...
+    team: str = "all"                    # 'all' | team name (legacy: backend/frontend/...)
+    organization: str = "all"            # 'all' | org label (Artem, Humanoid, ...)
     repo: Optional[str] = None
     user_id: Optional[int] = None
     # F-13 — explicit date range overrides period_days when both are set.
@@ -25,6 +26,7 @@ class Filters:
             period_days=self.period_days,
             provider=self.provider,
             team=self.team,
+            organization=self.organization,
             repo=self.repo,
             user_id=self.user_id,
             date_from=self.date_from,
@@ -103,6 +105,22 @@ def api_key_clause(api_key_id: int | None, alias: str = "ue") -> tuple[str, list
     if not api_key_id:
         return "", []
     return f" AND {alias}.api_key_id = ? ", [api_key_id]
+
+
+def org_clause(org_label: str, alias: str = "ue") -> tuple[str, list]:
+    """Filter usage_events (or users) rows by organization label. Matches via
+    a subquery against organizations.label so callers don't need to JOIN.
+
+    `alias` is the usage_events (or users) table alias whose
+    `organization_id` column we filter on.
+    """
+    if not org_label or org_label == "all":
+        return "", []
+    return (
+        f" AND {alias}.organization_id IN "
+        f"(SELECT id FROM organizations WHERE label = ?) ",
+        [org_label],
+    )
 
 
 def safe_div(a: float, b: float, default: float | None = 0.0):

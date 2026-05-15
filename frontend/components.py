@@ -22,8 +22,42 @@ PRESETS = [
 ]
 DEFAULT_PRESET = "Last 30 days"
 
-PROVIDERS = ["all", "openai", "anthropic"]
-TEAMS = ["all", "Backend", "Frontend", "Data", "Product"]
+def _available_providers() -> list[str]:
+    """Providers that have at least one usage event. Built from the DB so new
+    sources (cursor, github) show up without code changes.
+    """
+    sql = """
+        SELECT DISTINCT p.name
+        FROM providers p
+        WHERE EXISTS (
+            SELECT 1 FROM usage_events ue WHERE ue.provider_id = p.id
+        )
+        ORDER BY p.name
+    """
+    try:
+        with get_conn() as conn:
+            return ["all"] + [r["name"] for r in conn.execute(sql).fetchall()]
+    except Exception:
+        return ["all"]
+
+
+def _available_organizations() -> list[str]:
+    """Org labels for providers that have rows tagged with organization_id.
+    Example output: ['all', 'Artem', 'Humanoid'].
+    """
+    sql = """
+        SELECT DISTINCT o.label
+        FROM organizations o
+        WHERE EXISTS (
+            SELECT 1 FROM usage_events ue WHERE ue.organization_id = o.id
+        )
+        ORDER BY o.label
+    """
+    try:
+        with get_conn() as conn:
+            return ["all"] + [r["label"] for r in conn.execute(sql).fetchall()]
+    except Exception:
+        return ["all"]
 
 
 def _api_keys_for_provider(provider: str) -> list[dict[str, Any]]:
@@ -53,9 +87,19 @@ def filters_bar() -> Filters:
     """
     st.session_state.setdefault("preset", DEFAULT_PRESET)
     st.session_state.setdefault("provider", "all")
-    st.session_state.setdefault("team", "all")
+    st.session_state.setdefault("organization", "all")
     st.session_state.setdefault("custom_range", (datetime.utcnow().date(), datetime.utcnow().date()))
     st.session_state.setdefault("api_key_id", None)
+
+    providers = _available_providers()
+    organizations = _available_organizations()
+
+    # Drop stale selections that no longer exist in the DB so we don't filter
+    # on something that won't return any rows.
+    if st.session_state.provider not in providers:
+        st.session_state.provider = "all"
+    if st.session_state.organization not in organizations:
+        st.session_state.organization = "all"
 
     keys = _api_keys_for_provider(st.session_state.provider)
     options = [None] + [k["id"] for k in keys]
@@ -66,15 +110,16 @@ def filters_bar() -> Filters:
     c1, c2, c3, c4 = st.columns([1, 1.2, 1, 1])
     with c1:
         st.selectbox(
-            "Provider", PROVIDERS, key="provider",
+            "Provider", providers, key="provider",
             format_func=lambda x: "All providers" if x == "all" else x.capitalize(),
         )
     with c2:
         st.selectbox("Period", PRESETS, key="preset")
     with c3:
         st.selectbox(
-            "Team", TEAMS, key="team",
-            format_func=lambda x: "All teams" if x == "all" else x,
+            "Organization", organizations, key="organization",
+            format_func=lambda x: "All orgs" if x == "all" else x,
+            help="OpenAI sub-org: Artem (admin API) or Humanoid (JSON drop).",
         )
     with c4:
         # If the active provider doesn't include the previously-selected key,
@@ -110,7 +155,8 @@ def filters_bar() -> Filters:
     return Filters(
         period_days=period_days,
         provider=st.session_state.provider,
-        team=st.session_state.team,
+        team="all",  # legacy field (people-team), no UI surface for it any more
+        organization=st.session_state.organization,
         date_from=date_from,
         date_to=date_to,
         api_key_id=st.session_state.api_key_id,

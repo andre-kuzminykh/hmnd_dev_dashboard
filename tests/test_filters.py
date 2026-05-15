@@ -97,3 +97,58 @@ def test_fr_13_3_1_2_project_filter_field():
     assert f.project_id == 42
     f2 = Filters()
     assert f2.project_id is None
+
+
+# ---- Organization filter (Artem / Humanoid) ----
+
+def test_org_clause_excludes_other_orgs(tmp_db):
+    """Filters.organization='Humanoid' must return only Humanoid-tagged rows."""
+    from data.db import get_conn
+    from backend.services.overview import get_overview_kpis
+
+    with get_conn() as conn:
+        pid = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        conn.execute(
+            "INSERT OR IGNORE INTO organizations(provider_id, label) VALUES(?, 'Artem')",
+            (pid,),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO organizations(provider_id, label) VALUES(?, 'Humanoid')",
+            (pid,),
+        )
+        a_id = conn.execute(
+            "SELECT id FROM organizations WHERE provider_id=? AND label='Artem'", (pid,)
+        ).fetchone()["id"]
+        h_id = conn.execute(
+            "SELECT id FROM organizations WHERE provider_id=? AND label='Humanoid'", (pid,)
+        ).fetchone()["id"]
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        mid = conn.execute(
+            "SELECT id FROM models WHERE provider_id = ? LIMIT 1", (pid,)
+        ).fetchone()["id"]
+        # one Artem event ($10), one Humanoid event ($1)
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, organization_id,
+                                         occurred_at, tokens_in, tokens_out, tokens_cached,
+                                         cost_usd, is_error, purpose)
+               VALUES(?, ?, ?, ?, datetime('now', '-1 day'), 1000, 100, 0, 10.0, 0, 'API')""",
+            (uid, pid, mid, a_id),
+        )
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, organization_id,
+                                         occurred_at, tokens_in, tokens_out, tokens_cached,
+                                         cost_usd, is_error, purpose)
+               VALUES(?, ?, ?, ?, datetime('now', '-1 day'), 100, 10, 0, 1.0, 0, 'API')""",
+            (uid, pid, mid, h_id),
+        )
+        conn.commit()
+
+    all_orgs = get_overview_kpis(Filters(period_days=7, provider="openai"))
+    only_humanoid = get_overview_kpis(Filters(period_days=7, provider="openai", organization="Humanoid"))
+    only_artem = get_overview_kpis(Filters(period_days=7, provider="openai", organization="Artem"))
+    # Org filter must shrink total spend
+    assert only_humanoid["total_spend"] < all_orgs["total_spend"]
+    assert only_artem["total_spend"] < all_orgs["total_spend"]
+    # Sum of the two orgs should approximately equal "all orgs" total
+    # (within rounding, plus any pre-existing fixture data tagged to neither)
+    assert only_humanoid["total_spend"] + only_artem["total_spend"] <= all_orgs["total_spend"] + 0.01

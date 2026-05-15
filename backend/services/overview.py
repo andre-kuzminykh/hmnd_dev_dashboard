@@ -6,13 +6,14 @@ from typing import Any
 
 from data.db import get_conn
 from backend.analytics import (
-    Filters, api_key_clause, pct_delta, provider_clause, safe_div, team_clause,
+    Filters, api_key_clause, org_clause, pct_delta, provider_clause, safe_div, team_clause,
 )
 
 
 def _kpis_in_window(conn, start: datetime, end: datetime, f: Filters) -> dict[str, Any]:
     p_clause, p_params = provider_clause(f.provider, "p")
     t_clause, t_params = team_clause(f.team, "t")
+    o_clause, o_params = org_clause(f.organization, "ue")
     k_clause, k_params = api_key_clause(f.api_key_id, "ue")
 
     # FR-01.1.1.1 — основной набор метрик
@@ -29,9 +30,13 @@ def _kpis_in_window(conn, start: datetime, end: datetime, f: Filters) -> dict[st
         WHERE ue.occurred_at BETWEEN ? AND ?
         {p_clause}
         {t_clause}
+        {o_clause}
         {k_clause}
     """
-    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params + k_params
+    params = (
+        [start.isoformat(sep=" "), end.isoformat(sep=" ")]
+        + p_params + t_params + o_params + k_params
+    )
     row = conn.execute(sql, params).fetchone()
     return dict(row)
 
@@ -151,6 +156,7 @@ def get_daily_spend_series(filters: Filters | None = None, now: datetime | None 
     start, end = f.date_range(now)
     p_clause, p_params = provider_clause(f.provider, "p")
     t_clause, t_params = team_clause(f.team, "t")
+    o_clause, o_params = org_clause(f.organization, "ue")
     k_clause, k_params = api_key_clause(f.api_key_id, "ue")
     sql = f"""
         SELECT date(ue.occurred_at) AS day,
@@ -163,10 +169,14 @@ def get_daily_spend_series(filters: Filters | None = None, now: datetime | None 
         WHERE ue.occurred_at BETWEEN ? AND ?
         {p_clause}
         {t_clause}
+        {o_clause}
         {k_clause}
         GROUP BY day, provider
         ORDER BY day
     """
-    params = [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params + t_params + k_params
+    params = (
+        [start.isoformat(sep=" "), end.isoformat(sep=" ")]
+        + p_params + t_params + o_params + k_params
+    )
     with get_conn() as conn:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
