@@ -60,30 +60,27 @@ kpi_row([
     {"label": "Active users", "value": str(kpis["active_users"]),
      "delta": kpis["active_users_delta"], "note": "with activity in period"},
 ])
-bottom = [
-    {"label": "Seats used",     "value": str(kpis["seats_used"]),
-     "delta": None, "note": "assigned seats"},
-    {"label": "Cost per user", "value": fmt_money(kpis["cost_per_user"]),
-     "delta": kpis["cost_per_user_delta"], "note": "average"},
-    {"label": "Suspicious",    "value": str(kpis["suspicious_count"]),
-     "delta": None, "note": "open alerts"},
-]
 if CFG.github_enabled:
-    bottom.insert(2, {
+    kpi_row([{
         "label": "AI code share", "value": fmt_pct(kpis["ai_code_share"]),
         "delta": kpis["ai_code_share_delta"], "note": "merged AI lines / total",
-    })
-kpi_row(bottom)
+    }])
 
 section("Spend over time")
 series = get_daily_spend_series(filters)
 if series:
+    from frontend.components import PROVIDER_DISPLAY
     df = pd.DataFrame(series)
     df["day"] = pd.to_datetime(df["day"])
+    df["provider"] = df["provider"].map(lambda n: PROVIDER_DISPLAY.get(n, n.capitalize()))
+    # Re-key colour map to display names so the legend & colours stay aligned.
+    display_colors = {
+        PROVIDER_DISPLAY.get(k, k.capitalize()): v for k, v in PROVIDER_COLORS.items()
+    }
     fig = px.area(
         df,
         x="day", y="cost", color="provider",
-        color_discrete_map=PROVIDER_COLORS,
+        color_discrete_map=display_colors,
     )
     fig.update_layout(
         plot_bgcolor="white", paper_bgcolor="white",
