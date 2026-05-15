@@ -200,8 +200,10 @@ def inject() -> None:
 
 
 def render_brand() -> None:
-    """Top-left HUMANOID logo + name. No subtitle inside sidebar."""
-    st.sidebar.markdown(
+    """HUMANOID logo + name. Renders in the main content column when the
+    sidebar is hidden (single-page layout).
+    """
+    st.markdown(
         """
         <div class="hmnd-brand">
             <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="HMND" />
