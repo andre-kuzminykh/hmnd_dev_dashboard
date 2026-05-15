@@ -185,3 +185,103 @@ def get_high_spenders(period_days: int = 30, threshold_usd: float = 200,
             "risk": classify_risk(spend),
         })
     return out
+
+
+# ---- Tool-specific breakdowns ----
+
+def get_anthropic_spend_by_purpose(period_days: int = 30) -> list[dict[str, Any]]:
+    """Anthropic spend split by `purpose` (Chat / Agent (= Claude Code) /
+    Cowork / Chrome / Design / Other). Empty list if no events in window.
+    Returns [{purpose, spend, requests, users}, ...] sorted by spend desc.
+    """
+    end = datetime.utcnow()
+    start = end - timedelta(days=period_days)
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT ue.purpose AS purpose,
+                      ROUND(SUM(ue.cost_usd), 2)        AS spend,
+                      COUNT(*)                          AS requests,
+                      COUNT(DISTINCT ue.user_id)        AS users
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name = 'anthropic' AND ue.occurred_at BETWEEN ? AND ?
+               GROUP BY ue.purpose
+               ORDER BY spend DESC""",
+            (start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_spend_by_model(provider: str, period_days: int = 30,
+                       purpose: str | None = None) -> list[dict[str, Any]]:
+    """Per-model spend (and request count) for a provider in the window.
+    Optionally narrow to a single `purpose` (e.g. 'Agent' for Claude Code).
+    """
+    end = datetime.utcnow()
+    start = end - timedelta(days=period_days)
+    purpose_clause = " AND ue.purpose = ? " if purpose else ""
+    purpose_params = [purpose] if purpose else []
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"""SELECT m.name AS model,
+                       ROUND(SUM(ue.cost_usd), 2) AS spend,
+                       COUNT(*) AS requests,
+                       COUNT(DISTINCT ue.user_id) AS users
+                FROM usage_events ue
+                JOIN providers p ON p.id = ue.provider_id
+                JOIN models m   ON m.id = ue.model_id
+                WHERE p.name = ? AND ue.occurred_at BETWEEN ? AND ?
+                {purpose_clause}
+                GROUP BY m.id
+                ORDER BY spend DESC""",
+            [provider, start.strftime("%Y-%m-%d %H:%M:%S"),
+             end.strftime("%Y-%m-%d %H:%M:%S")] + purpose_params,
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_high_spenders_per_provider(period_days: int = 30) -> list[dict[str, Any]]:
+    """Cross-tool spend per user with a per-provider breakdown — lets the
+    UI show 'Andy Park: $9920 GPT + $3154 CC = $13074 total'.
+
+    Returns one row per user_id with cost_openai, cost_anthropic, cost_cursor,
+    cost_total, messages.
+    """
+    end = datetime.utcnow()
+    start = end - timedelta(days=period_days)
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id, u.full_name AS user_name, u.email,
+                      COUNT(*) AS messages,
+                      ROUND(SUM(CASE WHEN p.name='openai'    THEN ue.cost_usd ELSE 0 END), 2) AS cost_openai,
+                      ROUND(SUM(CASE WHEN p.name='anthropic' THEN ue.cost_usd ELSE 0 END), 2) AS cost_anthropic,
+                      ROUND(SUM(CASE WHEN p.name='cursor'    THEN ue.cost_usd ELSE 0 END), 2) AS cost_cursor,
+                      ROUND(SUM(ue.cost_usd), 2)              AS cost_total
+               FROM usage_events ue
+               JOIN users u    ON u.id = ue.user_id
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE ue.occurred_at BETWEEN ? AND ?
+               GROUP BY u.id
+               HAVING cost_total > 0
+               ORDER BY cost_total DESC""",
+            (start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_openai_top_models(period_days: int = 30) -> list[dict[str, Any]]:
+    """ChatGPT / OpenAI per-model leaderboard by message count and spend."""
+    return get_spend_by_model("openai", period_days=period_days)
+
+
+def get_cursor_completion_split(period_days: int = 30) -> dict[str, int]:
+    """Return {'agent': X, 'tab': Y, 'total': X+Y} aggregated across the
+    Cursor leaderboard within `period_days` (best-effort: leaderboard
+    rows carry the period that ended within the window).
+    """
+    # We import here to avoid circular imports between services.
+    from backend.services.cursor_analytics import load_user_leaderboard
+    rows = load_user_leaderboard()
+    agent = sum(int(r.get("agent_completions") or 0) for r in rows)
+    tab = sum(int(r.get("tab_completions") or 0) for r in rows)
+    return {"agent": agent, "tab": tab, "total": agent + tab}

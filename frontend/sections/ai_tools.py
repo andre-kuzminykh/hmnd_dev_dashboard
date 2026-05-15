@@ -10,8 +10,13 @@ from backend.services.ai_tools import (
     chatgpt_flag,
     classify_risk,
     get_ai_tools_overview,
+    get_anthropic_spend_by_purpose,
+    get_cursor_completion_split,
     get_high_spenders,
+    get_high_spenders_per_provider,
+    get_openai_top_models,
     get_provider_freshness,
+    get_spend_by_model,
     get_users_for_provider,
 )
 from frontend.components import badge, filters_bar, fmt_int, fmt_money, hero, kpi_row, section
@@ -283,6 +288,45 @@ with tab_claude:
             _bar_list(top_compl, label_key="name", value_key="agent_completions",
                       css_class="claude", value_formatter=lambda v: f"{int(v):,}")
 
+        # Claude Products Breakdown — split Anthropic spend across Chat /
+        # Claude Code (Agent) / Cowork+Other.
+        purposes = get_anthropic_spend_by_purpose(period_days=filters.period_days)
+        if purposes:
+            section("Claude Products Breakdown")
+            # Group into 3 buckets to match the design:
+            #   Chat            -> "Chat"
+            #   Agent           -> "Claude Code"
+            #   the rest        -> "Cowork + Other"
+            grouped: dict[str, dict] = {"Chat": {}, "Claude Code": {}, "Cowork + Other": {}}
+            for p in purposes:
+                key = {"Chat": "Chat", "Agent": "Claude Code"}.get(
+                    p["purpose"], "Cowork + Other"
+                )
+                g = grouped.setdefault(key, {"spend": 0.0, "requests": 0, "users": 0})
+                g["spend"] = (g.get("spend") or 0) + (p["spend"] or 0)
+                g["requests"] = (g.get("requests") or 0) + (p["requests"] or 0)
+                g["users"] = max(g.get("users") or 0, p["users"] or 0)
+            colors = {"Chat": "#a5b4fc", "Claude Code": "#6366f1", "Cowork + Other": "#c7d2fe"}
+            cols = st.columns(3)
+            for col, (label, g) in zip(cols, grouped.items()):
+                with col:
+                    st.markdown(
+                        f"""
+                        <div style="border:1px solid #e8edf3;border-top:3px solid {colors[label]};
+                                    border-radius:18px;padding:18px 20px;background:#fff;height:100%;">
+                            <div style="font-size:11px;color:#64748b;text-transform:uppercase;
+                                        letter-spacing:.12em;margin-bottom:8px;">{label}</div>
+                            <div style="font-size:24px;font-weight:300;color:#06091c;">
+                                {fmt_money(g.get('spend') or 0)}
+                            </div>
+                            <div style="font-size:12px;color:#475569;margin-top:10px;">
+                                {(g.get('users') or 0)} users · {(g.get('requests') or 0):,} reqs
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
         section("All Claude Users")
         df = pd.DataFrame(claude_rows)
         view = df[[
@@ -371,6 +415,36 @@ with tab_cc:
             f"{share:.1f}%</b>.</div>",
             unsafe_allow_html=True,
         )
+
+        # Spend by Model — split CC spend across opus / sonnet / haiku
+        cc_models = get_spend_by_model("anthropic",
+                                       period_days=filters.period_days,
+                                       purpose="Agent")
+        if cc_models:
+            cc_models_total = sum(m["spend"] or 0 for m in cc_models) or 1
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                section("Spend by Model")
+                _bar_list(cc_models[:10], label_key="model", value_key="spend",
+                          css_class="claude", value_formatter=fmt_money)
+            with cc2:
+                section("Model Share of Spend")
+                shares_html = []
+                for m in cc_models[:6]:
+                    pct = (m["spend"] / cc_models_total * 100) if cc_models_total else 0
+                    shares_html.append(
+                        f'<div style="margin-bottom:8px;">'
+                        f'  <div style="display:flex;justify-content:space-between;'
+                        f'       font-size:13px;color:#475569;margin-bottom:3px;">'
+                        f'    <code>{m["model"]}</code><b>{pct:.1f}%</b>'
+                        f'  </div>'
+                        f'  <div style="background:#f1f5f9;height:6px;border-radius:3px;'
+                        f'       overflow:hidden;">'
+                        f'    <div style="background:#6366f1;height:100%;width:{pct:.2f}%;"></div>'
+                        f'  </div>'
+                        f'</div>'
+                    )
+                st.markdown("".join(shares_html), unsafe_allow_html=True)
     else:
         st.info(
             "No Claude Code events yet. Once Anthropic admin API or Cursor "
@@ -391,8 +465,50 @@ with tab_gpt:
         {"label": "High Spenders",  "value": str(len(high))},
     ])
 
-    section("All ChatGPT Users")
     if rows:
+        # Top 5 by messages + Spend Metrics — side by side
+        col_top, col_metrics = st.columns(2)
+        with col_top:
+            section("Top Users — by messages")
+            top_by_msgs = sorted(rows, key=lambda r: r["messages"], reverse=True)[:5]
+            _bar_list(top_by_msgs, label_key="user_name", value_key="messages",
+                      css_class="chatgpt", value_formatter=fmt_int)
+        with col_metrics:
+            section("Spend Metrics")
+            avg_per_user = total_spend / max(len(rows), 1) if rows else 0
+            top_single = max((r["cost"] for r in rows), default=0)
+            # Dominant model = OpenAI model with most messages
+            openai_models = get_openai_top_models(period_days=filters.period_days)
+            dom_model = openai_models[0]["model"] if openai_models else "—"
+            dom_share = 0.0
+            if openai_models:
+                tot_reqs = sum(m["requests"] for m in openai_models) or 1
+                dom_share = openai_models[0]["requests"] / tot_reqs * 100
+            metrics_rows = [
+                ("Total spend",     fmt_money(total_spend)),
+                ("Avg per user",    fmt_money(avg_per_user)),
+                ("High spenders (≥ $200)", f"{len(high)} users"),
+                ("Top single spend",fmt_money(top_single)),
+                ("Dominant model",  f"{dom_model} ({dom_share:.0f}%)"),
+            ]
+            st.markdown(
+                "<table class='hmnd-table'><tbody>"
+                + "".join(
+                    f"<tr><td style='color:#475569'>{k}</td>"
+                    f"<td style='text-align:right;font-weight:600'>{v}</td></tr>"
+                    for k, v in metrics_rows
+                )
+                + "</tbody></table>",
+                unsafe_allow_html=True,
+            )
+
+        # Top Models Used by message count
+        if openai_models:
+            section("Top Models Used")
+            _bar_list(openai_models[:8], label_key="model", value_key="requests",
+                      css_class="chatgpt", value_formatter=fmt_int)
+
+        section("All ChatGPT Users")
         df = pd.DataFrame(rows).sort_values("messages", ascending=False)
         df["spend_str"] = df["cost"].apply(lambda v: fmt_money(v) if v else "—")
         df["flag_str"] = df["cost"].apply(
@@ -447,13 +563,21 @@ with tab_cursor:
     else:
         active_devs = len({r["email"] for r in leaders})
         total_ai_lines = sum(r["ai_lines"] for r in leaders)
+        total_agent = sum(int(r.get("agent_completions") or 0) for r in leaders)
+        total_tab = sum(int(r.get("tab_completions") or 0) for r in leaders)
+        total_completions = total_agent + total_tab
         prefer_claude = sum(1 for r in leaders if "claude" in r["favorite_model"].lower())
         prefer_gpt = sum(1 for r in leaders if r["favorite_model"].lower().startswith("gpt"))
         kpi_row([
             {"label": "Active developers", "value": str(active_devs)},
-            {"label": "Total AI lines",    "value": fmt_int(total_ai_lines)},
-            {"label": "Prefer Claude",     "value": f"{prefer_claude} devs"},
-            {"label": "Prefer GPT",        "value": f"{prefer_gpt} devs"},
+            {"label": "Completions",       "value": fmt_int(total_completions)},
+            {"label": "AI Lines Written",  "value": fmt_int(total_ai_lines)},
+            {"label": "Prefer Claude",     "value": f"{prefer_claude} / {prefer_gpt}"},
+        ])
+        # Second row: completion split
+        kpi_row([
+            {"label": "Agent completions", "value": fmt_int(total_agent)},
+            {"label": "Tab completions",   "value": fmt_int(total_tab)},
         ])
 
         c1, c2 = st.columns(2)
@@ -474,8 +598,25 @@ with tab_cursor:
                 value_formatter=fmt_int,
             )
         with c2:
-            if dau:
-                section("Daily Active Users")
+            section("Top 10 by Completions")
+            by_completions = sorted(
+                leaders,
+                key=lambda r: (int(r.get("agent_completions") or 0)
+                               + int(r.get("tab_completions") or 0)),
+                reverse=True,
+            )[:10]
+            # Synthesize a 'completions' field for the bar
+            for r in by_completions:
+                r["_completions"] = (int(r.get("agent_completions") or 0)
+                                      + int(r.get("tab_completions") or 0))
+            _bar_list(
+                by_completions, label_key="name", value_key="_completions",
+                css_class=_row_class, value_formatter=fmt_int,
+            )
+
+        if dau:
+            section("Daily Active Users")
+            with st.container():
                 df_dau = pd.DataFrame(dau)
                 df_dau["date"] = pd.to_datetime(df_dau["date"])
                 fig = __import__("plotly.express", fromlist=[""]).bar(
@@ -702,7 +843,12 @@ with tab_high:
     ])
 
     if high:
-        # Detailed cards per high spender — bordered card layout like the design.
+        # Cross-tool per-user spend split so we can show 'Andy Park: GPT $9920
+        # + CC $3154 = $13074'. Build a lookup by user_name (since the basic
+        # high_spenders list keys on user_name string).
+        per_provider = get_high_spenders_per_provider(period_days=filters.period_days)
+        split_by_user = {r["user_name"]: r for r in per_provider}
+
         section("Notable high spend")
         cards_html = []
         for s in high[:15]:
@@ -711,6 +857,20 @@ with tab_high:
             border_color = {"high": "#ef4444", "medium": "#f59e0b",
                             "low": "#eab308"}.get(risk, "#94a3b8")
             note = _hs_note(s)
+            split = split_by_user.get(s["user_name"])
+            split_parts: list[str] = []
+            if split:
+                if split.get("cost_openai", 0) > 0:
+                    split_parts.append(f"GPT {fmt_money(split['cost_openai'])}")
+                if split.get("cost_anthropic", 0) > 0:
+                    split_parts.append(f"CC {fmt_money(split['cost_anthropic'])}")
+                if split.get("cost_cursor", 0) > 0:
+                    split_parts.append(f"Cursor {fmt_money(split['cost_cursor'])}")
+            split_html = (
+                f"<div style='color:#94a3b8; font-size:11px; margin-top:4px;'>"
+                f"{' + '.join(split_parts)}</div>"
+                if len(split_parts) > 1 else ""
+            )
             cards_html.append(f"""
                 <div style="border-left:3px solid {border_color}; padding:14px 18px;
                             margin-bottom:8px; background:#fcfdff;
@@ -721,6 +881,7 @@ with tab_high:
                         <div style="color:#64748b; font-size:12px; margin-top:2px;">
                             {s['messages']:,} messages · {note}
                         </div>
+                        {split_html}
                     </div>
                     <div style="font-size:18px; font-weight:600; color:{border_color}; white-space:nowrap;">
                         {fmt_money(spend_v)}
