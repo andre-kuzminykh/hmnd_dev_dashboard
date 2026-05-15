@@ -191,6 +191,24 @@ h1 { font-weight: 300; }
 }
 
 [data-testid="stMetricValue"] { color: #06091c; }
+
+/* Pointer cursor on every interactive element — Streamlit defaults to
+   text-cursor for many widgets which feels like nothing is clickable. */
+button,
+[role="button"],
+[role="tab"],
+[data-baseweb="tab"],
+[data-baseweb="select"],
+[data-baseweb="select"] *,
+[data-testid="stSelectbox"],
+[data-testid="stSelectbox"] *,
+[data-testid="stSlider"] [role="slider"],
+.stDownloadButton button,
+.hmnd-chip,
+.hmnd-badge,
+a {
+    cursor: pointer !important;
+}
 </style>
 """
 
