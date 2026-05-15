@@ -192,6 +192,80 @@ h1 { font-weight: 300; }
 
 [data-testid="stMetricValue"] { color: #06091c; }
 
+/* '?' help badge with CSS hover-tooltip.
+   Used in section titles and KPI labels for short, CEO-friendly
+   explanations of what each metric / section is showing. */
+.hmnd-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px; height: 16px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: Inter, sans-serif;
+    line-height: 1;
+    cursor: help;
+    position: relative;
+    vertical-align: middle;
+    transition: background 0.15s ease;
+    user-select: none;
+}
+.hmnd-help:hover, .hmnd-help:focus {
+    background: #4953d8;
+    color: #fff;
+    outline: none;
+}
+.hmnd-help::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #06091c;
+    color: #ffffff;
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 400;
+    font-family: Inter, sans-serif;
+    line-height: 1.45;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+    white-space: normal;
+    width: 280px;
+    box-shadow: 0 14px 32px -10px rgba(6,9,28,.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1000;
+}
+.hmnd-help::before {
+    content: "";
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #06091c;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1000;
+}
+.hmnd-help:hover::after, .hmnd-help:focus::after,
+.hmnd-help:hover::before, .hmnd-help:focus::before {
+    opacity: 1;
+}
+/* KPI label: keep label inline with the help badge */
+.hmnd-kpi .label { display: inline-flex; align-items: center; }
+/* Section title: keep h2 inline with the help badge */
+.hmnd-section h2 { display: flex; align-items: center; gap: 2px; }
+
 /* Pointer cursor on every interactive element — Streamlit defaults to
    text-cursor for many widgets which feels like nothing is clickable. */
 button,

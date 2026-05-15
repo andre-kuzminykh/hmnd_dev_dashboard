@@ -195,12 +195,29 @@ def _delta_html(delta: float, suffix: str = "%") -> str:
     return f'<span class="hmnd-delta-flat">— {delta:.1f}{suffix}</span>'
 
 
-def kpi_card(label: str, value: str, delta: float | None = None, note: str | None = None) -> str:
+def _help_icon(text: str | None) -> str:
+    """Tiny '?' badge with a CSS hover-tooltip. Empty string when no text —
+    so callers can splice it into HTML unconditionally.
+    """
+    if not text:
+        return ""
+    # Escape just enough so a quote/angle in the help text doesn't break the
+    # surrounding HTML or the data-tip attribute.
+    safe = (text.replace("&", "&amp;").replace('"', "&quot;")
+                .replace("<", "&lt;").replace(">", "&gt;"))
+    return (
+        f'<span class="hmnd-help" tabindex="0" '
+        f'data-tip="{safe}" aria-label="{safe}">?</span>'
+    )
+
+
+def kpi_card(label: str, value: str, delta: float | None = None,
+             note: str | None = None, help: str | None = None) -> str:
     delta_html = _delta_html(delta) if delta is not None else ""
     note_html = f'<div class="note">{note}</div>' if note else ""
     return f"""
         <div class="hmnd-kpi">
-            <div class="label">{label}</div>
+            <div class="label">{label}{_help_icon(help)}</div>
             <div class="value">{value}</div>
             <div class="note">{delta_html} {note_html or ''}</div>
         </div>
@@ -212,6 +229,9 @@ def kpi_row(items: list[dict[str, Any]], cols: int = 4) -> None:
     page even when the number of items in the row is less than `cols`.
     Empty trailing slots are kept as blank columns so each card has the same
     width as in the row above/below.
+
+    Each `items` dict may carry an optional `help` string that renders as a
+    hover-tooltip badge next to the KPI label.
     """
     for i in range(0, len(items), cols):
         chunk = items[i:i + cols]
@@ -242,8 +262,11 @@ def hero(eyebrow: str, title_html: str, subtitle: str | None = None) -> None:
     )
 
 
-def section(title: str) -> None:
-    st.markdown(f'<div class="hmnd-section"><h2>{title}</h2></div>', unsafe_allow_html=True)
+def section(title: str, help: str | None = None) -> None:
+    st.markdown(
+        f'<div class="hmnd-section"><h2>{title}{_help_icon(help)}</h2></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def fmt_money(v: float) -> str:

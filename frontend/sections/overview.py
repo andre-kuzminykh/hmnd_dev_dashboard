@@ -91,21 +91,39 @@ if filters.provider == "anthropic" and kpis["total_spend"] == 0 and kpis["active
 
 kpi_row([
     {"label": "Total spend",  "value": fmt_money(kpis["total_spend"]),
-     "delta": kpis["total_spend_delta"]},
+     "delta": kpis["total_spend_delta"],
+     "help": "Сколько мы заплатили за все AI-инструменты за выбранный период "
+             "(OpenAI API + Anthropic API + Cursor). Стрелка — изменение vs "
+             "предыдущий такой же период."},
     {"label": "Tokens in",    "value": fmt_int(kpis["tokens_in"]),
-     "delta": kpis["tokens_in_delta"]},
+     "delta": kpis["tokens_in_delta"],
+     "help": "Сколько токенов мы отправили моделям (вход). Грубо — объём "
+             "контекста, промптов и истории чатов."},
     {"label": "Tokens out",   "value": fmt_int(kpis["tokens_out"]),
-     "delta": kpis["tokens_out_delta"]},
+     "delta": kpis["tokens_out_delta"],
+     "help": "Сколько токенов модели сгенерировали (ответы). Выходные токены "
+             "обычно в 3-5x дороже входных."},
     {"label": "Active users", "value": str(kpis["active_users"]),
-     "delta": kpis["active_users_delta"]},
+     "delta": kpis["active_users_delta"],
+     "help": "Уникальные пользователи, которые сделали хотя бы 1 запрос за "
+             "период. Помогает понять реальный охват AI-инструментов в "
+             "команде."},
 ])
 if CFG.github_enabled:
     kpi_row([{
         "label": "AI code share", "value": fmt_pct(kpis["ai_code_share"]),
         "delta": kpis["ai_code_share_delta"],
+        "help": "Доля строк кода, сгенерированных AI, от общего числа "
+                "коммитов команды. Cursor отмечает ai_lines напрямую; коммиты "
+                "ботов считаем 100% AI.",
     }])
 
-section("Spend over time")
+section(
+    "Spend over time",
+    help="Дневной трат по каждому провайдеру за период. Резкие пики обычно "
+         "= новый юзер с heavy use, или автоматизация / cron, или дорогой "
+         "reasoning-модель.",
+)
 series = get_daily_spend_series(filters)
 if series:
     from frontend.components import PROVIDER_DISPLAY
