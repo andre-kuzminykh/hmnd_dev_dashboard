@@ -98,31 +98,153 @@ _freshness_header()
 filters = filters_bar()
 
 
-tab_overview, tab_claude, tab_gpt, tab_cursor, tab_high = st.tabs(
-    ["Overview", "Claude Users", "ChatGPT Users", "Cursor", "⚠ High Spenders"]
-)
+(tab_overview, tab_claude, tab_cc, tab_gpt, tab_cursor,
+ tab_models, tab_high) = st.tabs([
+    "Overview", "Claude Users", "Claude Code", "ChatGPT",
+    "Cursor", "Models", "⚠ High Spenders",
+])
 
 
 with tab_overview:
-    o = get_ai_tools_overview(period_days=5)
-    kpi_row([
-        {"label": "Claude Chat Users (5d)",  "value": _fmt_dash(o["claude_chat_users"]),
-         "delta": None, "note": "Anthropic active users"},
-        {"label": "Claude Code Users (5d)", "value": _fmt_dash(o["claude_code_users"]),
-         "delta": None, "note": "needs Claude Code telemetry"},
-        {"label": "ChatGPT Active Users",   "value": _fmt_dash(o["chatgpt_active_users"]),
-         "delta": None, "note": "OpenAI active users"},
-        {"label": "Cursor Active Devs",     "value": _fmt_dash(o["cursor_active_devs"]),
-         "delta": None, "note": "needs Cursor Teams API"},
-    ])
+    # Spend breakdown across the three tools — matches the design screenshot.
+    from data.db import get_conn as _gc
+    f = filters
+    s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
+    e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
+    with _gc() as _conn:
+        _claude_spend = _conn.execute(
+            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
+               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
+        _gpt_spend = _conn.execute(
+            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
+               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name='openai' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
 
-    c1, c2 = st.columns(2)
+    # Cursor side: derive spend estimate from leaderboard if available
+    from backend.services.cursor_analytics import load_user_leaderboard as _llb
+    _leaders = _llb()
+    _cursor_devs = len(_leaders)
+    _cursor_completions = sum(int(r.get("agent_completions", 0) or 0)
+                              + int(r.get("tab_completions", 0) or 0) for r in _leaders)
+    _cursor_ai_lines = sum(int(r.get("ai_lines", 0) or 0) for r in _leaders)
+    # Rough Cursor team-spend estimate: $20/seat/month × active devs × (period_days/30)
+    _cursor_spend_est = _cursor_devs * 20 * (f.period_days / 30.0) if _cursor_devs else 0
+
+    claude_v = float(_claude_spend["s"] or 0)
+    gpt_v = float(_gpt_spend["s"] or 0)
+    cursor_v = float(_cursor_spend_est)
+    total_v = claude_v + gpt_v + cursor_v
+    cp = (claude_v / total_v * 100) if total_v else 0
+    gp = (gpt_v / total_v * 100) if total_v else 0
+    crp = (cursor_v / total_v * 100) if total_v else 0
+
+    if total_v > 0:
+        st.markdown(
+            f"""
+            <div style="border:1px solid #e8edf3;border-radius:18px;padding:18px 22px;
+                        background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);margin-bottom:14px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div style="font-weight:600;color:#06091c;">Spend Breakdown</div>
+                    <div style="color:#64748b;font-size:12px;">Total <b style="color:#06091c">{fmt_money(total_v)}</b></div>
+                </div>
+                <div style="display:flex;height:36px;border-radius:8px;overflow:hidden;background:#f1f5f9;">
+                    <div style="background:#6366f1;width:{cp:.2f}%;display:flex;align-items:center;justify-content:center;
+                                color:white;font-weight:600;font-size:13px;">
+                        {cp:.1f}%
+                    </div>
+                    <div style="background:#10a37f;width:{gp:.2f}%;display:flex;align-items:center;justify-content:center;
+                                color:white;font-weight:600;font-size:13px;">
+                        {gp:.1f}%
+                    </div>
+                    <div style="background:#f59e0b;width:{crp:.2f}%;display:flex;align-items:center;justify-content:center;
+                                color:white;font-weight:600;font-size:13px;">
+                        {crp:.1f}%
+                    </div>
+                </div>
+                <div style="display:flex;gap:24px;margin-top:10px;font-size:13px;color:#475569;">
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6366f1;margin-right:6px;"></span>Claude <b style="color:#06091c">{fmt_money(claude_v)}</b></span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10a37f;margin-right:6px;"></span>ChatGPT <b style="color:#06091c">{fmt_money(gpt_v)}</b></span>
+                    <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px;"></span>Cursor ~<b style="color:#06091c">{fmt_money(cursor_v)}</b></span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Tool cards with coloured top borders
+    def _tool_card(color: str, label: str, value: str, note: str) -> str:
+        return f"""
+            <div style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
+                        padding:18px 20px;background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);
+                        box-shadow:0 14px 32px -24px rgba(6,9,28,.14);height:100%;">
+                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;">{label}</div>
+                <div style="font-size:28px;line-height:1;font-weight:300;color:#06091c;">{value}</div>
+                <div style="font-size:12px;color:#475569;margin-top:10px;">{note}</div>
+            </div>
+        """
+
+    c1, c2, c3 = st.columns(3)
     with c1:
-        section("Claude — Daily Active Users")
-        st.caption("Connect Claude Code telemetry for hour-level granularity.")
+        st.markdown(_tool_card(
+            "#6366f1", "Claude", fmt_money(claude_v),
+            f"{_claude_spend['u']} users · {_claude_spend['c']:,} reqs",
+        ), unsafe_allow_html=True)
     with c2:
-        section("Claude Code — Daily Lines Added")
-        st.caption("Will appear once Claude Code OTel collector is wired up.")
+        st.markdown(_tool_card(
+            "#10a37f", "ChatGPT", fmt_money(gpt_v),
+            f"{_gpt_spend['u']} users · {_gpt_spend['c']:,} reqs",
+        ), unsafe_allow_html=True)
+    with c3:
+        st.markdown(_tool_card(
+            "#f59e0b", "Cursor", f"~{fmt_money(cursor_v)}",
+            f"{_cursor_devs} devs · {_cursor_completions:,} completions · {fmt_int(_cursor_ai_lines)} AI lines",
+        ), unsafe_allow_html=True)
+
+    # Top spenders all tools + Usage summary
+    col_top, col_summary = st.columns(2)
+    with col_top:
+        section("Top Spenders — All Tools")
+        spenders = get_high_spenders(period_days=f.period_days, threshold_usd=0,
+                                     api_key_id=f.api_key_id)
+        top10 = spenders[:10]
+        if top10:
+            max_spend = max(r["spend"] for r in top10) or 1
+            _bar_list(
+                top10, label_key="user_name", value_key="spend",
+                css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
+                max_value=max_spend, value_formatter=fmt_money,
+            )
+        else:
+            st.caption("No spend recorded yet — run sync from VM.")
+
+    with col_summary:
+        section("Usage Summary")
+        usage_rows = [
+            {"tool": "Claude Chat",
+             "users": _claude_spend["u"],
+             "activity": f"{_claude_spend['c']:,} reqs",
+             "spend": fmt_money(claude_v)},
+            {"tool": "ChatGPT",
+             "users": _gpt_spend["u"],
+             "activity": f"{_gpt_spend['c']:,} msgs",
+             "spend": fmt_money(gpt_v)},
+            {"tool": "Cursor",
+             "users": _cursor_devs,
+             "activity": f"{_cursor_completions:,} completions",
+             "spend": f"~{fmt_money(cursor_v)}"},
+        ]
+        df = pd.DataFrame(usage_rows)
+        view = df.rename(columns={
+            "tool": "Tool", "users": "Users",
+            "activity": "Activity", "spend": "Spend"
+        })
+        st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True)
 
 
 with tab_claude:
@@ -187,6 +309,84 @@ with tab_claude:
         st.markdown(
             view.to_html(escape=False, index=False, classes="hmnd-table"),
             unsafe_allow_html=True,
+        )
+
+
+with tab_cc:
+    # Claude Code = Anthropic events with purpose 'Agent' (synthesised from
+    # Cursor leaderboard's agent_completions) — see data/cursor_to_anthropic.
+    from data.db import get_conn
+    from backend.analytics import api_key_clause as _api_key_clause
+    f = filters
+    s, e = f.date_range()
+    k_clause, k_params = _api_key_clause(f.api_key_id, "ue")
+    sql = f"""
+        SELECT u.full_name AS name,
+               u.email      AS email,
+               COUNT(*)     AS requests,
+               ROUND(SUM(ue.cost_usd), 2) AS spend,
+               SUM(ue.tokens_in)  AS tokens_in,
+               SUM(ue.tokens_out) AS tokens_out
+        FROM usage_events ue
+        JOIN users u ON u.id = ue.user_id
+        JOIN providers p ON p.id = ue.provider_id
+        WHERE p.name = 'anthropic'
+          AND ue.purpose = 'Agent'
+          AND ue.occurred_at BETWEEN ? AND ?
+          {k_clause}
+        GROUP BY u.id
+        ORDER BY spend DESC
+    """
+    with get_conn() as conn:
+        cc_rows = [dict(r) for r in conn.execute(
+            sql,
+            [s.strftime("%Y-%m-%d %H:%M:%S"), e.strftime("%Y-%m-%d %H:%M:%S")] + k_params,
+        ).fetchall()]
+
+    total_reqs = sum(r["requests"] for r in cc_rows)
+    total_spend = sum(r["spend"] or 0 for r in cc_rows)
+    top_spender = cc_rows[0] if cc_rows else None
+    # CC share of Anthropic
+    with get_conn() as conn:
+        all_anthropic_spend = conn.execute(
+            """SELECT ROUND(SUM(ue.cost_usd), 2) AS s
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s.strftime("%Y-%m-%d %H:%M:%S"), e.strftime("%Y-%m-%d %H:%M:%S")),
+        ).fetchone()["s"] or 0
+    cc_share = (total_spend / all_anthropic_spend * 100) if all_anthropic_spend > 0 else 0.0
+
+    kpi_row([
+        {"label": "CC Requests", "value": _fmt_int(total_reqs),
+         "note": f"{len(cc_rows)} users"},
+        {"label": "CC Spend", "value": fmt_money(total_spend),
+         "note": f"{cc_share:.1f}% of Claude total"},
+        {"label": "Top Spender",
+         "value": fmt_money(top_spender['spend']) if top_spender else "—",
+         "note": (top_spender['name'] or top_spender['email'].split('@')[0])[:24] if top_spender else "—"},
+        {"label": "Avg / user",
+         "value": fmt_money(total_spend / max(len(cc_rows), 1)) if cc_rows else "—"},
+    ])
+
+    if cc_rows:
+        section("Top Claude Code Users by spend")
+        _bar_list(cc_rows[:15], label_key="name", value_key="spend",
+                  css_class="claude", value_formatter=fmt_money)
+        # 80/20 footer
+        top5_spend = sum(r["spend"] or 0 for r in cc_rows[:5])
+        share = (top5_spend / total_spend * 100) if total_spend > 0 else 0.0
+        st.markdown(
+            f"<div style='margin-top:8px;color:#475569;font-size:13px'>"
+            f"Top 5 account for <b style='color:#06091c'>{fmt_money(top5_spend)}</b> "
+            f"of {fmt_money(total_spend)} CC spend — <b style='color:#6366f1'>"
+            f"{share:.1f}%</b>.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info(
+            "No Claude Code events yet. Once Anthropic admin API or Cursor "
+            "leaderboard exports are loaded, Claude Code traffic shows up here."
         )
 
 
@@ -338,42 +538,232 @@ with tab_cursor:
             st.plotly_chart(fig, use_container_width=True)
 
 
+with tab_models:
+    # Combined model landscape: OpenAI events + Anthropic (cursor-derived)
+    # + Cursor leaderboard model usage. Status badge auto-derived from
+    # share within tool.
+    from backend.services.models_svc import get_models_breakdown
+    from backend.services.cursor_analytics import model_usage_summary
+    f = filters
+    rows_api = get_models_breakdown(f)  # usage_events grouped by model
+
+    # Per-provider total spend → share computation
+    spend_by_provider: dict[str, float] = {}
+    for r in rows_api:
+        p = r["provider"]
+        spend_by_provider[p] = spend_by_provider.get(p, 0) + (r["cost"] or 0)
+
+    cursor_rows = model_usage_summary()
+    cursor_total_reqs = sum(m["requests"] for m in cursor_rows)
+
+    section(f"Model landscape — {f.date_range()[0].date()} → {f.date_range()[1].date()}")
+
+    items: list[dict[str, Any]] = []
+    # API-side models
+    for r in rows_api:
+        share = ((r["cost"] or 0) / spend_by_provider[r["provider"]] * 100
+                 if spend_by_provider.get(r["provider"]) else 0)
+        tool_label = "Chat + CC" if r["provider"] == "anthropic" else "ChatGPT"
+        items.append({
+            "_color": "claude" if r["provider"] == "anthropic" else "chatgpt",
+            "model": r["model"],
+            "tool": tool_label,
+            "share": share,
+            "metric": fmt_money(r["cost"] or 0),
+            "metric_note": f"({share:.0f}%)",
+            "raw_value": r["cost"] or 0,
+        })
+    # Cursor-side models (requests, not $)
+    for m in cursor_rows[:10]:
+        share = (m["requests"] / cursor_total_reqs * 100) if cursor_total_reqs else 0
+        is_claude = "claude" in m["model"].lower()
+        items.append({
+            "_color": "claude" if is_claude else ("chatgpt" if "gpt" in m["model"].lower() else "cursor"),
+            "model": m["model"],
+            "tool": "Cursor",
+            "share": share,
+            "metric": f"{fmt_int(m['requests'])} reqs",
+            "metric_note": f"({share:.0f}%)",
+            "raw_value": m["requests"],
+        })
+
+    def _status(it: dict[str, Any]) -> tuple[str, str]:
+        s = it["share"]
+        if s >= 40:
+            return ("DOMINANT", "high")
+        if s >= 20:
+            return ("GROWING", "review")
+        if s >= 10:
+            return ("ACTIVE", "low")
+        return ("ACTIVE", "low")
+
+    # Sort: API by $ desc, then Cursor by requests desc
+    items.sort(key=lambda x: (-(x["share"] if x["tool"] != "Cursor" else 0),
+                              -x["raw_value"]))
+
+    html_rows = []
+    for it in items[:20]:
+        status_text, status_kind = _status(it)
+        dot_color = {"claude": "#6366f1", "chatgpt": "#10a37f",
+                     "cursor": "#f59e0b"}.get(it["_color"], "#94a3b8")
+        html_rows.append(
+            f"<tr>"
+            f"<td><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:{dot_color};margin-right:8px'></span>"
+            f"<code>{it['model']}</code></td>"
+            f"<td>{it['tool']}</td>"
+            f"<td>{badge(status_text, status_kind)}</td>"
+            f"<td><b>{it['metric']}</b> <span style='color:#64748b'>{it['metric_note']}</span></td>"
+            f"</tr>"
+        )
+    st.markdown(
+        f"<table class='hmnd-table'>"
+        f"<thead><tr><th>Model</th><th>Tool</th><th>Status</th><th>Spend / Volume</th></tr></thead>"
+        f"<tbody>{''.join(html_rows)}</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        section("Claude spend by model")
+        claude_models = [r for r in rows_api if r["provider"] == "anthropic"]
+        if claude_models:
+            _bar_list(claude_models[:10], label_key="model", value_key="cost",
+                      css_class="claude", value_formatter=fmt_money)
+    with c2:
+        section("Cursor top models")
+        if cursor_rows:
+            def _row_class(r):
+                m = r["model"].lower()
+                if "claude" in m: return "claude"
+                if "gpt" in m: return "chatgpt"
+                return "cursor"
+            _bar_list(cursor_rows[:10], label_key="model", value_key="requests",
+                      css_class=_row_class, value_formatter=fmt_int)
+
+
 with tab_high:
-    spenders = get_high_spenders(period_days=filters.period_days,
-                                  threshold_usd=200,
-                                  api_key_id=filters.api_key_id)
-    combined = sum(r["spend"] for r in spenders)
-    top = spenders[0] if spenders else None
+    # Threshold slider — default $1k per the design screenshot.
+    threshold = st.slider("High-spender threshold ($)", 200, 5000, 1000, 100,
+                          key="hs_threshold")
+    all_spenders = get_high_spenders(period_days=filters.period_days,
+                                      threshold_usd=0,
+                                      api_key_id=filters.api_key_id)
+    high = [r for r in all_spenders if r["spend"] >= threshold]
+    combined = sum(r["spend"] for r in high)
+    top = high[0] if high else None
+    total_users = len(all_spenders)
+    share_high = (len(high) / total_users * 100) if total_users else 0
+
     kpi_row([
-        {"label": "High Spenders", "value": str(len(spenders)), "note": "≥ $200"},
-        {"label": "Combined Spend", "value": fmt_money(combined)},
-        {"label": "Top Spender", "value": fmt_money(top["spend"]) if top else "—",
-         "note": top["user_name"] if top else "—"},
+        {"label": "High Spenders", "value": str(len(high)),
+         "note": f"of {total_users} users · ≥ {fmt_money(threshold)} · {share_high:.0f}%"},
+        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—",
+         "note": (f"{top['user_name']} · {top['messages']} msgs") if top else "—"},
+        {"label": "Combined spend", "value": fmt_money(combined)},
     ])
 
-    if spenders:
-        section("Top 10 High Spenders")
-        max_spend = max(r["spend"] for r in spenders)
-        _bar_list(
-            spenders[:10],
-            label_key="user_name", value_key="spend",
-            css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
-            max_value=max_spend,
-            value_formatter=lambda v: fmt_money(v),
-        )
+    if high:
+        # Detailed cards per high spender — bordered card layout like the design.
+        section("Notable high spend")
+        cards_html = []
+        for s in high[:15]:
+            spend_v = s["spend"] or 0
+            risk = classify_risk(spend_v) or "low"
+            border_color = {"high": "#ef4444", "medium": "#f59e0b",
+                            "low": "#eab308"}.get(risk, "#94a3b8")
+            note = _hs_note(s)
+            cards_html.append(f"""
+                <div style="border-left:3px solid {border_color}; padding:14px 18px;
+                            margin-bottom:8px; background:#fcfdff;
+                            border-radius:0 12px 12px 0;
+                            display:flex; align-items:center; justify-content:space-between; gap:18px;">
+                    <div style="min-width:0;">
+                        <div style="font-weight:600; color:#06091c; font-size:14px;">{s['user_name']}</div>
+                        <div style="color:#64748b; font-size:12px; margin-top:2px;">
+                            {s['messages']:,} messages · {note}
+                        </div>
+                    </div>
+                    <div style="font-size:18px; font-weight:600; color:{border_color}; white-space:nowrap;">
+                        {fmt_money(spend_v)}
+                    </div>
+                </div>
+            """)
+        st.markdown("".join(cards_html), unsafe_allow_html=True)
 
-        section("Detail · Red ≥ $1000 · Amber ≥ $500 · Yellow ≥ $200")
-        df = pd.DataFrame(spenders)
-        df["spend_str"] = df["spend"].apply(fmt_money)
-        df["dpm_str"] = df["dollar_per_msg"].apply(lambda v: f"${v:.2f}" if v is not None else "—")
-        df["risk_badge"] = df["risk"].apply(lambda r: badge(r, r))
-        view = df[["user_name", "messages", "spend_str", "dpm_str", "risk_badge"]].rename(
-            columns={"user_name": "Name", "messages": "Messages",
-                     "spend_str": "Spend", "dpm_str": "$/msg", "risk_badge": "Risk"}
-        )
-        st.markdown(
-            view.to_html(escape=False, index=False, classes="hmnd-table"),
-            unsafe_allow_html=True,
-        )
+        # Two-column footer: narrative analysis + cross-tool ranking bars
+        col_anal, col_rank = st.columns(2)
+        with col_anal:
+            section("High spend analysis")
+            findings = _hs_findings(high)
+            if findings:
+                st.markdown(
+                    "<ul style='margin:0; padding-left:18px; color:#475569; "
+                    "font-size:13px; line-height:1.7'>"
+                    + "".join(f"<li>{f}</li>" for f in findings) + "</ul>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No notable anomalies detected.")
+        with col_rank:
+            section("Cross-tool spend ranking")
+            ranked = sorted(all_spenders, key=lambda r: r["spend"] or 0, reverse=True)[:10]
+            max_spend = max((r["spend"] or 0) for r in ranked) or 1
+            _bar_list(
+                ranked, label_key="user_name", value_key="spend",
+                css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
+                max_value=max_spend,
+                value_formatter=fmt_money,
+            )
     else:
-        st.info("No users above $200 spend in the last 30 days.")
+        st.info(f"No users at or above {fmt_money(threshold)} in the period.")
+
+
+def _hs_note(s: dict[str, Any]) -> str:
+    """Heuristic one-liner describing the spend pattern."""
+    spend = s["spend"] or 0
+    msgs = s["messages"] or 0
+    dpm = (spend / msgs) if msgs > 0 else None
+    if dpm is not None and dpm >= 100:
+        return f"anomalous: ~${dpm:,.0f} per message — possible API/automation"
+    if dpm is not None and dpm >= 20:
+        return f"high cost/message (${dpm:,.1f}/msg) — likely reasoning model"
+    if msgs >= 1000:
+        return "high volume, proportionate spend"
+    return f"avg ${dpm:,.2f}/msg" if dpm is not None else "non-message billing"
+
+
+def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
+    """Generate up to 4 narrative bullets for the analysis card."""
+    bullets: list[str] = []
+    if not high:
+        return bullets
+    top = high[0]
+    bullets.append(
+        f"<b>{top['user_name']}</b> — {fmt_money(top['spend'])} on "
+        f"{top['messages']:,} messages, top single spender."
+    )
+    # anomalous $/msg
+    anomalies = [s for s in high
+                 if s["messages"] and (s["spend"] / s["messages"]) >= 100]
+    if anomalies:
+        a = anomalies[0]
+        dpm = a["spend"] / a["messages"]
+        bullets.append(
+            f"<b>{a['user_name']}</b> — {fmt_money(a['spend'])} on {a['messages']} messages "
+            f"(~${dpm:,.0f}/msg). Likely API/automation, not chat usage."
+        )
+    # high msg volume
+    volume = sorted(high, key=lambda r: r["messages"] or 0, reverse=True)
+    if volume and volume[0]["messages"] >= 1000 and volume[0] != top:
+        v = volume[0]
+        bullets.append(
+            f"<b>{v['user_name']}</b> — {v['messages']:,} messages at "
+            f"{fmt_money(v['spend'])}. High volume, normal $/msg."
+        )
+    # concentration
+    if len(high) >= 3:
+        top3 = sum(s["spend"] for s in high[:3])
+        total = sum(s["spend"] for s in high)
+        share = (top3 / total * 100) if total else 0
+        bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
+    return bullets[:4]
