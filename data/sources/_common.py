@@ -23,8 +23,9 @@ def sources_dirs() -> list[Path]:
     return [p for p in out if p.exists()]
 
 
-# Accept dates as YYYYMMDD or YYYY-MM-DD anywhere in the filename suffix.
-_DATE_RE = re.compile(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})(?:\.json)$")
+# Accept dates as YYYYMMDD or YYYY-MM-DD anywhere in the filename suffix,
+# in JSON or CSV files (Anthropic / Cursor / OpenAI JSON drops + git CSVs).
+_DATE_RE = re.compile(r"(\d{4})[-_]?(\d{2})[-_]?(\d{2})(?:\.json|\.csv)$")
 
 
 @dataclass
