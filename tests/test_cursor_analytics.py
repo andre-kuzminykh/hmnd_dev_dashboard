@@ -30,6 +30,7 @@ def _write_fixtures(dir_path: Path) -> None:
 def test_load_user_leaderboard(tmp_path, monkeypatch):
     _write_fixtures(tmp_path)
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     import importlib
     import backend.services.cursor_analytics as ca
     importlib.reload(ca)
@@ -50,6 +51,7 @@ def test_load_user_leaderboard(tmp_path, monkeypatch):
 def test_claude_users_filter(tmp_path, monkeypatch):
     _write_fixtures(tmp_path)
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     import importlib
     import backend.services.cursor_analytics as ca
     importlib.reload(ca)
@@ -63,6 +65,7 @@ def test_claude_users_filter(tmp_path, monkeypatch):
 def test_team_dau(tmp_path, monkeypatch):
     _write_fixtures(tmp_path)
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     import importlib
     import backend.services.cursor_analytics as ca
     importlib.reload(ca)
@@ -77,6 +80,7 @@ def test_team_dau(tmp_path, monkeypatch):
 def test_models_summary_aggregates_team_analytics(tmp_path, monkeypatch):
     _write_fixtures(tmp_path)
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     import importlib
     import backend.services.cursor_analytics as ca
     importlib.reload(ca)
@@ -98,6 +102,7 @@ def test_later_period_overrides_earlier(tmp_path, monkeypatch):
         "olsi@x,Oleg,500,5000,0,0,5000,claude-opus-4-7-thinking-xhigh\n"
     )
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     import importlib
     import backend.services.cursor_analytics as ca
     importlib.reload(ca)

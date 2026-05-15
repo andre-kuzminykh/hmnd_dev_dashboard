@@ -109,11 +109,11 @@ def load_user_leaderboard() -> list[dict[str, Any]]:
                 }
 
     # 2. JSON sources/Cursor_*.json — higher priority than CSV, override
-    #    per email.
+    #    per email. We call parse_cursor_json (read-only, no DB writes).
     try:
-        from data.sources.cursor_json import find_cursor_files, load_cursor_json
+        from data.sources.cursor_json import find_cursor_files, parse_cursor_json
         for sf in find_cursor_files():
-            doc = load_cursor_json(sf.path)
+            doc = parse_cursor_json(sf.path)
             ps = doc.get("period_start") or ""
             pe = doc.get("period_end") or ""
             for u in doc.get("users", []):

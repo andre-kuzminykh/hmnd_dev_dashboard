@@ -101,7 +101,13 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
     out: dict[str, Any] = {"reports": {}}
 
     if "openai" in providers:
-        if cfg.openai_orgs:
+        # JSON source wins over API (lets you back-fill a second org without
+        # admin access). Files: sources/OpenAI_*.json.
+        from data.sources.openai_json import latest_openai_file, load_openai_json
+        oai_file = latest_openai_file()
+        if oai_file is not None:
+            out["reports"]["openai"] = load_openai_json(oai_file.path)
+        elif cfg.openai_orgs:
             # Multi-org sync: one OpenAIConnector per configured admin key.
             org_reports: list[dict[str, Any]] = []
             for org in cfg.openai_orgs:
@@ -120,6 +126,13 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
 
     if "anthropic" in providers:
         out["reports"]["anthropic"] = _sync_anthropic(cfg, period_days)
+
+    if "cursor" in providers or "cursor" not in providers:
+        # Cursor is JSON-only — always try it if a Cursor_*.json file is present.
+        from data.sources.cursor_json import latest_cursor_file, load_cursor_json
+        cur_file = latest_cursor_file()
+        if cur_file is not None:
+            out["reports"]["cursor"] = load_cursor_json(cur_file.path)
 
     if "github" in providers and cfg.github_enabled:
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)

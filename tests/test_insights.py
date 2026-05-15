@@ -72,6 +72,7 @@ def test_dev_roi_shape(tmp_db, monkeypatch):
     """ROI shape when there's no Cursor data → empty rows but team totals 0."""
     from backend.services.insights import get_developer_roi
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", "/tmp/empty_for_roi_test")
+    monkeypatch.setenv("HMND_SOURCES_DIR", "/tmp/empty_for_roi_test")
     out = get_developer_roi(dev_rate_usd_per_hour=100, lines_per_hour=50, period_days=14)
     assert "rows" in out and "team" in out
     assert "assumptions" in out
@@ -93,6 +94,7 @@ def test_dev_roi_math(tmp_path, monkeypatch):
 
     # Cursor CSV mock
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     (tmp_path / "User_Leaderboard_2026-04-30_2026-05-06.csv").write_text(
         "Email,Name,Agent Completions,Agent Lines,Tab Completions,Tab Lines,Ai Lines,Favorite Model\n"
         "u1@x,User One,100,4000,0,0,4000,claude-opus-4-7\n"
