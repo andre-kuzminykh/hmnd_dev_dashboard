@@ -274,6 +274,41 @@ def get_openai_top_models(period_days: int = 30) -> list[dict[str, Any]]:
     return get_spend_by_model("openai", period_days=period_days)
 
 
+def get_anthropic_model_spend_from_json() -> list[dict[str, Any]]:
+    """Per-model Anthropic spend pulled DIRECTLY from the latest JSON dump's
+    rollups.modelSpend field. We use this for the 'Spend by Model' card on
+    the Claude Code tab — usage_events stores all Anthropic events under
+    a 'claude-generic' placeholder model because raw.userCostByProduct
+    records don't carry per-event model attribution. The rollup IS the
+    authoritative per-model number.
+
+    Returns [{model, spend, share}, ...] in USD, sorted by spend desc.
+    Empty list when no JSON file is present.
+    """
+    try:
+        from data.sources.anthropic_json import latest_anthropic_file
+        import json as _json
+    except Exception:
+        return []
+    f = latest_anthropic_file()
+    if not f:
+        return []
+    try:
+        doc = _json.loads(f.path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    rollups = doc.get("rollups") or {}
+    model_spend_cents = rollups.get("modelSpend") or {}
+    total = sum(float(v or 0) for v in model_spend_cents.values()) or 1
+    out = [
+        {"model": name,
+         "spend": round(float(v or 0) / 100.0, 2),
+         "share": float(v or 0) / total * 100}
+        for name, v in model_spend_cents.items()
+    ]
+    return sorted(out, key=lambda r: r["spend"], reverse=True)
+
+
 def get_cursor_completion_split(period_days: int = 30) -> dict[str, int]:
     """Return {'agent': X, 'tab': Y, 'total': X+Y} aggregated across the
     Cursor leaderboard within `period_days` (best-effort: leaderboard

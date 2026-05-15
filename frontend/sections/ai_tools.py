@@ -10,6 +10,7 @@ from backend.services.ai_tools import (
     chatgpt_flag,
     classify_risk,
     get_ai_tools_overview,
+    get_anthropic_model_spend_from_json,
     get_anthropic_spend_by_purpose,
     get_cursor_completion_split,
     get_high_spenders,
@@ -124,19 +125,27 @@ with tab_overview:
             (s_iso, e_iso),
         ).fetchone()
 
-    # Cursor side: derive spend estimate from leaderboard if available
+    # Cursor: real spend comes from usage_events (cursor JSON loader writes
+    # spendCents + includedSpendCents). Leaderboard is used only for the
+    # completion / AI lines counters that don't have an events-equivalent.
     from backend.services.cursor_analytics import load_user_leaderboard as _llb
     _leaders = _llb()
     _cursor_devs = len(_leaders)
     _cursor_completions = sum(int(r.get("agent_completions", 0) or 0)
                               + int(r.get("tab_completions", 0) or 0) for r in _leaders)
     _cursor_ai_lines = sum(int(r.get("ai_lines", 0) or 0) for r in _leaders)
-    # Rough Cursor team-spend estimate: $20/seat/month × active devs × (period_days/30)
-    _cursor_spend_est = _cursor_devs * 20 * (f.period_days / 30.0) if _cursor_devs else 0
+    with _gc() as _conn:
+        _cursor_spend_row = _conn.execute(
+            """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(*) AS c
+               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
+    _cursor_spend_actual = float(_cursor_spend_row["s"] or 0)
 
     claude_v = float(_claude_spend["s"] or 0)
     gpt_v = float(_gpt_spend["s"] or 0)
-    cursor_v = float(_cursor_spend_est)
+    cursor_v = _cursor_spend_actual
     total_v = claude_v + gpt_v + cursor_v
     cp = (claude_v / total_v * 100) if total_v else 0
     gp = (gpt_v / total_v * 100) if total_v else 0
@@ -200,7 +209,7 @@ with tab_overview:
         ), unsafe_allow_html=True)
     with c3:
         st.markdown(_tool_card(
-            "#f59e0b", "Cursor", f"~{fmt_money(cursor_v)}",
+            "#f59e0b", "Cursor", fmt_money(cursor_v),
             f"{_cursor_devs} devs · {_cursor_completions:,} completions · {fmt_int(_cursor_ai_lines)} AI lines",
         ), unsafe_allow_html=True)
 
@@ -235,7 +244,7 @@ with tab_overview:
             {"tool": "Cursor",
              "users": _cursor_devs,
              "activity": f"{_cursor_completions:,} completions",
-             "spend": f"~{fmt_money(cursor_v)}"},
+             "spend": fmt_money(cursor_v)},
         ]
         df = pd.DataFrame(usage_rows)
         view = df.rename(columns={
@@ -416,33 +425,37 @@ with tab_cc:
             unsafe_allow_html=True,
         )
 
-        # Spend by Model — split CC spend across opus / sonnet / haiku
-        cc_models = get_spend_by_model("anthropic",
-                                       period_days=filters.period_days,
-                                       purpose="Agent")
-        if cc_models:
-            cc_models_total = sum(m["spend"] or 0 for m in cc_models) or 1
+        # Spend by Model — pulled DIRECTLY from rollups.modelSpend in the
+        # source JSON. usage_events stores Anthropic events under a
+        # 'claude-generic' placeholder because the JSON's userCostByProduct
+        # rows have model=null; the rollup is the authoritative per-model
+        # number. Caveat: rollup is across all Claude products (Chat + CC +
+        # Cowork etc.), not CC-only.
+        model_spend = get_anthropic_model_spend_from_json()
+        if model_spend:
+            st.caption(
+                "Sourced from `rollups.modelSpend` (all Claude products combined — "
+                "per-product per-model split isn't in the JSON dump)."
+            )
             cc1, cc2 = st.columns(2)
             with cc1:
                 section("Spend by Model")
-                _bar_list(cc_models[:10], label_key="model", value_key="spend",
+                _bar_list(model_spend[:10], label_key="model", value_key="spend",
                           css_class="claude", value_formatter=fmt_money)
             with cc2:
                 section("Model Share of Spend")
                 shares_html = []
-                for m in cc_models[:6]:
-                    pct = (m["spend"] / cc_models_total * 100) if cc_models_total else 0
+                for m in model_spend[:6]:
+                    pct = m["share"]
                     shares_html.append(
                         f'<div style="margin-bottom:8px;">'
-                        f'  <div style="display:flex;justify-content:space-between;'
-                        f'       font-size:13px;color:#475569;margin-bottom:3px;">'
-                        f'    <code>{m["model"]}</code><b>{pct:.1f}%</b>'
-                        f'  </div>'
-                        f'  <div style="background:#f1f5f9;height:6px;border-radius:3px;'
-                        f'       overflow:hidden;">'
-                        f'    <div style="background:#6366f1;height:100%;width:{pct:.2f}%;"></div>'
-                        f'  </div>'
-                        f'</div>'
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'font-size:13px;color:#475569;margin-bottom:3px;">'
+                        f'<code>{m["model"]}</code><b>{pct:.1f}%</b></div>'
+                        f'<div style="background:#f1f5f9;height:6px;border-radius:3px;'
+                        f'overflow:hidden;">'
+                        f'<div style="background:#6366f1;height:100%;width:{pct:.2f}%;"></div>'
+                        f'</div></div>'
                     )
                 st.markdown("".join(shares_html), unsafe_allow_html=True)
     else:
@@ -572,10 +585,11 @@ with tab_cursor:
             {"label": "Active developers", "value": str(active_devs)},
             {"label": "Completions",       "value": fmt_int(total_completions)},
             {"label": "AI Lines Written",  "value": fmt_int(total_ai_lines)},
-            {"label": "Prefer Claude",     "value": f"{prefer_claude} / {prefer_gpt}"},
+            {"label": "Prefer Claude",     "value": str(prefer_claude)},
         ])
-        # Second row: completion split
+        # Second row: completion split + GPT-preferring devs
         kpi_row([
+            {"label": "Prefer GPT",        "value": str(prefer_gpt)},
             {"label": "Agent completions", "value": fmt_int(total_agent)},
             {"label": "Tab completions",   "value": fmt_int(total_tab)},
         ])
@@ -673,6 +687,32 @@ with tab_models:
     f = filters
     rows_api = get_models_breakdown(f)  # usage_events grouped by model
 
+    # Replace Anthropic's 'claude-generic' placeholder with real per-model
+    # spend from the JSON rollup. Total Anthropic spend stays the same; we
+    # just attribute it to actual model names so the landscape doesn't
+    # collapse to one row.
+    anthropic_rollup = get_anthropic_model_spend_from_json()
+    if anthropic_rollup:
+        rows_api = [r for r in rows_api if not (
+            r["provider"] == "anthropic" and r["model"] == "claude-generic"
+        )]
+        # rescale rollup to the events-window total so percentages match
+        # what the rest of the dashboard shows.
+        anth_total_events = next(
+            (r["cost"] for r in get_spend_by_model("anthropic", period_days=f.period_days)
+             if r["model"] == "claude-generic"),
+            None,
+        )
+        rollup_total = sum(m["spend"] for m in anthropic_rollup) or 1
+        scale = (anth_total_events / rollup_total) if anth_total_events else 1.0
+        for m in anthropic_rollup:
+            rows_api.append({
+                "provider": "anthropic",
+                "model": m["model"],
+                "cost": round(m["spend"] * scale, 2),
+                "requests": 0,
+            })
+
     # Per-provider total spend → share computation
     spend_by_provider: dict[str, float] = {}
     for r in rows_api:
@@ -689,9 +729,20 @@ with tab_models:
     for r in rows_api:
         share = ((r["cost"] or 0) / spend_by_provider[r["provider"]] * 100
                  if spend_by_provider.get(r["provider"]) else 0)
-        tool_label = "Chat + CC" if r["provider"] == "anthropic" else "ChatGPT"
+        # Correct tool attribution from the event's actual provider.
+        tool_label = {
+            "anthropic": "Chat + CC",
+            "openai":    "ChatGPT",
+            "cursor":    "Cursor",
+            "github":    "GitHub Copilot",
+        }.get(r["provider"], r["provider"].capitalize())
+        color_label = {
+            "anthropic": "claude",
+            "openai":    "chatgpt",
+            "cursor":    "cursor",
+        }.get(r["provider"], "cursor")
         items.append({
-            "_color": "claude" if r["provider"] == "anthropic" else "chatgpt",
+            "_color": color_label,
             "model": r["model"],
             "tool": tool_label,
             "share": share,
@@ -866,28 +917,30 @@ with tab_high:
                     split_parts.append(f"CC {fmt_money(split['cost_anthropic'])}")
                 if split.get("cost_cursor", 0) > 0:
                     split_parts.append(f"Cursor {fmt_money(split['cost_cursor'])}")
-            split_html = (
-                f"<div style='color:#94a3b8; font-size:11px; margin-top:4px;'>"
-                f"{' + '.join(split_parts)}</div>"
+            # Build inner block as a single line — Streamlit's markdown parser
+            # treats blank lines inside HTML as paragraph breaks, which was
+            # turning subsequent cards into literal text. Keeping it inline
+            # (no embedded newlines) avoids that.
+            split_inline = (
+                f'<div style="color:#94a3b8;font-size:11px;margin-top:4px;">'
+                f'{" + ".join(split_parts)}</div>'
                 if len(split_parts) > 1 else ""
             )
-            cards_html.append(f"""
-                <div style="border-left:3px solid {border_color}; padding:14px 18px;
-                            margin-bottom:8px; background:#fcfdff;
-                            border-radius:0 12px 12px 0;
-                            display:flex; align-items:center; justify-content:space-between; gap:18px;">
-                    <div style="min-width:0;">
-                        <div style="font-weight:600; color:#06091c; font-size:14px;">{s['user_name']}</div>
-                        <div style="color:#64748b; font-size:12px; margin-top:2px;">
-                            {s['messages']:,} messages · {note}
-                        </div>
-                        {split_html}
-                    </div>
-                    <div style="font-size:18px; font-weight:600; color:{border_color}; white-space:nowrap;">
-                        {fmt_money(spend_v)}
-                    </div>
-                </div>
-            """)
+            card_html = (
+                f'<div style="border-left:3px solid {border_color};padding:14px 18px;'
+                f'margin-bottom:8px;background:#fcfdff;border-radius:0 12px 12px 0;'
+                f'display:flex;align-items:center;justify-content:space-between;gap:18px;">'
+                f'<div style="min-width:0;">'
+                f'<div style="font-weight:600;color:#06091c;font-size:14px;">{s["user_name"]}</div>'
+                f'<div style="color:#64748b;font-size:12px;margin-top:2px;">'
+                f'{s["messages"]:,} messages · {note}</div>'
+                f'{split_inline}'
+                f'</div>'
+                f'<div style="font-size:18px;font-weight:600;color:{border_color};white-space:nowrap;">'
+                f'{fmt_money(spend_v)}</div>'
+                f'</div>'
+            )
+            cards_html.append(card_html)
         st.markdown("".join(cards_html), unsafe_allow_html=True)
 
         # Two-column footer: narrative analysis + cross-tool ranking bars

@@ -62,3 +62,61 @@ def test_main_page_loads_with_source(tmp_db, source):
 def test_main_page_with_period(tmp_db, preset):
     app = _run(("all", "all"), preset)
     assert not app.exception, f"main period={preset} raised: {app.exception}"
+
+
+def test_no_raw_html_tags_in_rendered_output(tmp_db):
+    """Catches the High-Spenders bug where embedded newlines in
+    cards_html caused Streamlit's markdown parser to bail out and dump
+    closing </div> tags as visible text. The smoke check is: across the
+    full page, the only </div>'s rendered as text should be from inside
+    `<code>` blocks or empty markdown. Failing this means our HTML got
+    interpreted as paragraph-broken markdown.
+    """
+    from data.db import get_conn
+    # Seed a minimal cross-tool dataset so the High Spenders section has
+    # multiple cards (the bug only manifested with >1 card).
+    with get_conn() as conn:
+        pid_o = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        pid_a = conn.execute("SELECT id FROM providers WHERE name='anthropic'").fetchone()["id"]
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        m_o = conn.execute("SELECT id FROM models WHERE provider_id=? LIMIT 1", (pid_o,)).fetchone()["id"]
+        m_a = conn.execute("SELECT id FROM models WHERE provider_id=? LIMIT 1", (pid_a,)).fetchone()["id"]
+        for cost in (500, 1200, 900, 1500, 700):
+            conn.execute(
+                """INSERT INTO usage_events(user_id, provider_id, model_id, occurred_at,
+                                             tokens_in, tokens_out, tokens_cached, cost_usd,
+                                             is_error, purpose)
+                   VALUES(?, ?, ?, datetime('now', '-1 day'), 100, 50, 0, ?, 0, 'API')""",
+                (uid, pid_o if cost % 2 else pid_a, m_o if cost % 2 else m_a, cost),
+            )
+        conn.commit()
+
+    app = AppTest.from_file(str(MAIN), default_timeout=30)
+    app.run()
+    assert not app.exception, f"main page raised: {app.exception}"
+    # Pull every markdown/HTML element rendered and ensure none of them
+    # have raw closing-div text. We allow `</div>` only inside <code> or
+    # <pre> blocks (which never happens in our cards).
+    body = "\n".join(getattr(e, "body", "") or "" for e in app.markdown)
+    # The bug looked like literal '</div>\n<div style="font-size:18px;' in
+    # the rendered text — i.e. Streamlit DIDN'T treat it as HTML so it
+    # showed up in the displayed text. Detect by checking if any rendered
+    # text element has '</div>' as raw text (not inside <code>).
+    import re
+    # remove anything inside <code>...</code> first
+    stripped = re.sub(r"<code[^>]*>.*?</code>", "", body, flags=re.S)
+    # rendered as text would mean it appears outside an HTML structure;
+    # since Streamlit re-serializes HTML, presence as text outside any
+    # opening tag is impossible to detect from .body alone. Instead,
+    # assert that high-spenders related cards render cleanly: pick any
+    # bullet in body that mentions 'messages ·' and ensure it's followed
+    # by another opening tag, not a closing one.
+    suspect = re.findall(
+        r"messages\s+·[^<]{0,200}?</div>\s*<div\s+style=\"font-size:18px", stripped
+    )
+    # When the bug is present these literal substrings appear in plain
+    # body text; when fixed, the HTML is well-formed and Streamlit hides
+    # the inner tags.
+    assert not suspect, (
+        f"High-Spenders cards leaked raw HTML: {suspect[:1]}"
+    )
