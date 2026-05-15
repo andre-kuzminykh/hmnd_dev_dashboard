@@ -116,11 +116,22 @@ if series:
     display_colors = {
         PROVIDER_DISPLAY.get(k, k.capitalize()): v for k, v in PROVIDER_COLORS.items()
     }
-    fig = px.area(
-        df,
-        x="day", y="cost", color="provider",
-        color_discrete_map=display_colors,
-    )
+    # When the period collapses to ≤ 2 distinct days (e.g. Today / Yesterday)
+    # an area/line chart looks empty. Draw a bar chart instead so the user
+    # can see the actual numbers per provider.
+    distinct_days = df["day"].nunique()
+    if distinct_days <= 2:
+        fig = px.bar(
+            df, x="day", y="cost", color="provider",
+            color_discrete_map=display_colors, barmode="group",
+            text_auto=".2f",
+        )
+        fig.update_traces(textposition="outside")
+    else:
+        fig = px.area(
+            df, x="day", y="cost", color="provider",
+            color_discrete_map=display_colors,
+        )
     fig.update_layout(
         plot_bgcolor="white", paper_bgcolor="white",
         margin=dict(l=10, r=10, t=10, b=10),
