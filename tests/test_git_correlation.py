@@ -316,6 +316,55 @@ def test_team_ai_share_includes_bots(tmp_db, tmp_path):
     assert s["ai_share_pct"] == pytest.approx(66.7, abs=0.1)
 
 
+def test_dedup_by_user_id(tmp_db, tmp_path):
+    """When multiple git_author_name aliases all map to the same AI user
+    (via the LLM matcher), the correlation must return ONE merged row per
+    user, not one per alias. User reported: 'Mustafa Atakan' showed 3
+    times in the table because of 3 git aliases.
+    """
+    from data.db import get_conn
+    with get_conn() as conn:
+        # Seed an AI user
+        conn.execute(
+            "INSERT INTO users(email, full_name) VALUES('mustafa@x', 'Mustafa Atakan')"
+        )
+        uid = conn.execute(
+            "SELECT id FROM users WHERE email='mustafa@x'"
+        ).fetchone()["id"]
+        conn.commit()
+
+    # 3 git aliases all linked to that user
+    csv_path = tmp_path / "git_authors.csv"
+    _write_authors_csv(csv_path, [
+        ("Mustafa Atakan",  "mustafa@x", "hmnd",       140, 19200, 25300, -6100, "2026-04-01", "2026-05-10"),
+        ("Mustafa Atakan2", "mat@gmail", "hmnd-cloud",  10,   445,   205,   240, "2026-04-01", "2026-05-10"),
+        ("matakan",         "ma@y",      "hmnd-sim",     3,    78,    12,    66, "2026-04-01", "2026-05-10"),
+    ])
+    from data.sources.git_csv import load_git_authors_csv
+    load_git_authors_csv(csv_path)
+    # Manually link the 'aliases' to the same user (simulates the LLM matcher).
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE git_authors SET user_id = ? WHERE name IN "
+            "('Mustafa Atakan', 'Mustafa Atakan2', 'matakan')",
+            (uid,),
+        )
+        conn.commit()
+
+    from backend.services.git_correlation import get_git_ai_correlation
+    devs = get_git_ai_correlation(period_days=30)
+    mustafa = [r for r in devs if r["canonical_name"] == "Mustafa Atakan"]
+    assert len(mustafa) == 1, (
+        f"Expected 1 Mustafa row, got {len(mustafa)}: {mustafa}"
+    )
+    # Aggregated stats: 140 + 10 + 3 = 153 commits
+    assert mustafa[0]["commits"] == 153
+    # 19200 + 445 + 78 = 19723 additions
+    assert mustafa[0]["git_additions"] == 19723
+    # Display label hints at multiple aliases
+    assert "+2 aliases" in mustafa[0]["git_author_name"] or len(mustafa[0]["git_author_name"]) > 0
+
+
 def test_ai_share_percent(tmp_db, tmp_path):
     """ai_share_of_additions = min(ai_lines, additions) / additions * 100."""
     from data.db import get_conn

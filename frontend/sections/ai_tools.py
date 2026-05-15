@@ -1151,11 +1151,21 @@ with tab_devs:
 
         # 3. Format helpers + per-segment tables
         def _money(v):
-            return fmt_money(v) if v is not None and v > 0 else "—"
+            if v is None or (isinstance(v, float) and v != v):  # NaN-safe
+                return "—"
+            return fmt_money(v) if v > 0 else "—"
         def _num(v):
+            if v is None or (isinstance(v, float) and v != v):
+                return "0"
             return fmt_int(int(v)) if v else "0"
         def _pct(v):
-            return f"{v:.0f}%" if v is not None else "—"
+            if v is None or (isinstance(v, float) and v != v):
+                return "—"
+            return f"{v:.0f}%"
+        def _ratio(v):
+            if v is None or (isinstance(v, float) and v != v):
+                return "—"
+            return f"{v:.0f}"
 
         df_all = pd.DataFrame(devs)
         if df_all.empty or not picked_segments:
@@ -1191,9 +1201,7 @@ with tab_devs:
                     "AI share %":     seg_df["ai_share_of_additions"].map(_pct),
                     "$/commit":       seg_df["cost_per_commit"].map(_money),
                     "$/1k git adds":  seg_df["cost_per_1000_git_additions"].map(_money),
-                    "ailines/commit": seg_df["ai_lines_per_commit"].map(
-                        lambda v: f"{v:.0f}" if v is not None else "—"
-                    ),
+                    "ailines/commit": seg_df["ai_lines_per_commit"].map(_ratio),
                     "Repos":          seg_df["repos"],
                 })
                 st.markdown(

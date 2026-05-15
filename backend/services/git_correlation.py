@@ -184,32 +184,76 @@ def get_git_ai_correlation(period_days: int = 30,
         cursor_by_email[(r.get("email") or "").lower()] = r
 
     out: list[dict[str, Any]] = []
+    # Multiple git_author_name aliases can map to the same AI user via the
+    # LLM matcher (e.g. 'Mustafa Atakan' + 'Mustafa Atakan2' + 'matakan' all
+    # → user_id=47). Aggregate them into ONE row per user_id so the per-dev
+    # table doesn't show duplicate rows for the same person.
+    # Unmatched rows (user_id is NULL) stay as their own row keyed by name.
+    buckets: dict[Any, dict[str, Any]] = {}
     for row in git_rows:
         emails = [e for e in (row["git_emails"] or "").split(";") if e]
-        user_id = row["user_id"]
-        ai_data = ai_by_user.get(user_id) if user_id is not None else None
+        uid = row["user_id"]
+        # Bucket key: user id when matched, else the git author name as
+        # a fallback so unmatched rows don't collide.
+        bkey = ("uid", uid) if uid is not None else ("name", row["git_name"])
+        b = buckets.get(bkey)
+        if b is None:
+            b = {
+                "user_id": uid,
+                "ai_name": row["ai_name"] or "",
+                "canonical_email": row["canonical_email"] or "",
+                "git_names": [],
+                "emails": [],
+                "repos": set(),
+                "commits": 0,
+                "additions": 0,
+                "deletions": 0,
+                "is_bot": False,
+            }
+            buckets[bkey] = b
+        b["git_names"].append(row["git_name"])
+        for e in emails:
+            if e not in b["emails"]:
+                b["emails"].append(e)
+        for r in (row["repos"] or "").split(";"):
+            if r:
+                b["repos"].add(r)
+        b["commits"] += int(row["commits"] or 0)
+        b["additions"] += int(row["additions"] or 0)
+        b["deletions"] += int(row["deletions"] or 0)
+        if _is_bot_author(row["git_name"]):
+            b["is_bot"] = True
+
+    for b in buckets.values():
+        uid = b["user_id"]
+        ai_data = ai_by_user.get(uid) if uid is not None else None
         ai_cost = float(ai_data["ai_cost_usd"]) if ai_data else 0.0
-        # Cursor leaderboard hit: try every email this git-author used.
+        # Cursor leaderboard: try every email aggregated for this person.
         cursor_hit = next(
-            (cursor_by_email[e] for e in emails if e in cursor_by_email),
+            (cursor_by_email[e] for e in b["emails"] if e in cursor_by_email),
             None,
         )
+        # Also try by canonical AI email when this person is matched.
+        if cursor_hit is None and b["canonical_email"]:
+            cursor_hit = cursor_by_email.get(b["canonical_email"].lower())
         ai_lines = int((cursor_hit or {}).get("ai_lines") or 0)
         agent_completions = int((cursor_hit or {}).get("agent_completions") or 0)
         tab_completions = int((cursor_hit or {}).get("tab_completions") or 0)
 
-        commits = int(row["commits"] or 0)
-        additions = int(row["additions"] or 0)
-        deletions = int(row["deletions"] or 0)
-        is_bot = _is_bot_author(row["git_name"])
+        commits = b["commits"]
+        additions = b["additions"]
+        deletions = b["deletions"]
+        git_name_display = (b["git_names"][0]
+                            if len(b["git_names"]) == 1
+                            else f"{b['git_names'][0]} (+{len(b['git_names'])-1} aliases)")
 
         out.append({
-            "canonical_name": row["ai_name"] or row["git_name"],
-            "ai_name": row["ai_name"] or "",
-            "git_author_name": row["git_name"],
-            "git_email": emails[0] if emails else "",
-            "repos": row["repos"] or "",
-            "is_bot": is_bot,
+            "canonical_name": b["ai_name"] or git_name_display,
+            "ai_name": b["ai_name"],
+            "git_author_name": git_name_display,
+            "git_email": b["emails"][0] if b["emails"] else "",
+            "repos": ";".join(sorted(b["repos"])),
+            "is_bot": b["is_bot"],
             "ai_cost_usd": ai_cost,
             "ai_lines": ai_lines,
             "agent_completions": agent_completions,
