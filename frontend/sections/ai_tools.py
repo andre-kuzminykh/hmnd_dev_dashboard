@@ -1143,23 +1143,11 @@ with tab_devs:
             "Show tables for:",
             options=seg_options,
             default=seg_options,
-            format_func=lambda s: seg_labels_map[s],
+            format_func=lambda s: f"{seg_labels_map[s]}  ({counts.get(s, 0)})",
             key="devs_segments_filter",
             help="Pick one or more segments to render their developers as "
                  "individual tables.",
         )
-
-        # Centered search bar for filtering rows by name across all selected
-        # segments. Empty = show everything.
-        _c1, _c2, _c3 = st.columns([1, 2, 1])
-        with _c2:
-            search_query = st.text_input(
-                "🔍 Search by name",
-                value="",
-                key="devs_search",
-                placeholder="type a name…",
-                label_visibility="collapsed",
-            )
 
         # 3. Format helpers + per-segment tables
         def _money(v):
@@ -1183,16 +1171,8 @@ with tab_devs:
         if df_all.empty or not picked_segments:
             st.caption("No segments selected — pick at least one above.")
         else:
-            search_lower = (search_query or "").strip().lower()
             for seg_id in picked_segments:
                 seg_devs = [r for r in devs if r["segment"] == seg_id]
-                if search_lower:
-                    seg_devs = [
-                        r for r in seg_devs
-                        if search_lower in (r.get("canonical_name") or "").lower()
-                        or search_lower in (r.get("git_author_name") or "").lower()
-                        or search_lower in (r.get("git_email") or "").lower()
-                    ]
                 if not seg_devs:
                     continue
                 color = seg_colors_map[seg_id]
