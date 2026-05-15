@@ -101,13 +101,10 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
     out: dict[str, Any] = {"reports": {}}
 
     if "openai" in providers:
-        # JSON source wins over API (lets you back-fill a second org without
-        # admin access). Files: sources/OpenAI_*.json.
-        from data.sources.openai_json import latest_openai_file, load_openai_json
-        oai_file = latest_openai_file()
-        if oai_file is not None:
-            out["reports"]["openai"] = load_openai_json(oai_file.path)
-        elif cfg.openai_orgs:
+        # OpenAI is API-first because we have two admin keys (Artem + Humanoid).
+        # JSON fallback only when no admin keys are configured (the path that
+        # exists for orgs without admin access).
+        if cfg.openai_orgs:
             # Multi-org sync: one OpenAIConnector per configured admin key.
             org_reports: list[dict[str, Any]] = []
             for org in cfg.openai_orgs:
@@ -121,8 +118,14 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
                 org_reports.append(r)
             out["reports"]["openai"] = org_reports if len(org_reports) > 1 else org_reports[0]
         else:
-            c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
-            out["reports"]["openai"] = asdict(c.sync(period_days))
+            # No admin keys → fall back to JSON drop.
+            from data.sources.openai_json import latest_openai_file, load_openai_json
+            oai_file = latest_openai_file()
+            if oai_file is not None:
+                out["reports"]["openai"] = load_openai_json(oai_file.path)
+            else:
+                c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
+                out["reports"]["openai"] = asdict(c.sync(period_days))
 
     if "anthropic" in providers:
         out["reports"]["anthropic"] = _sync_anthropic(cfg, period_days)
