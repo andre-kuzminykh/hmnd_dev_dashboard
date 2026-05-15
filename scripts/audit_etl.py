@@ -289,6 +289,70 @@ def audit_tokens_uncached() -> bool:
 
 
 # ---------------------------------------------------------------------------
+# GIT CSV — drop-the-file source for Git × AI correlation
+# ---------------------------------------------------------------------------
+
+def audit_git_csv() -> bool:
+    print(f"\n{HEAD}── GIT (CSV drop) ──{END}")
+    from data.sources.git_csv import (
+        latest_git_authors_file, latest_git_commits_file,
+        load_git_authors_csv, load_git_commits_csv,
+    )
+    from data.db import get_conn
+    import csv
+
+    ga = latest_git_authors_file()
+    if ga is None:
+        print(f"  {BAD} no git_authors_*.csv in sources/")
+        return False
+    gc = latest_git_commits_file()
+    print(f"  authors CSV: {ga.path.name}")
+    if gc is not None:
+        print(f"  commits CSV: {gc.path.name}")
+    else:
+        print(f"  (no per-commit-file CSV — repo filter won't work)")
+
+    # Raw author totals
+    with open(ga.path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        raw_authors = list(reader)
+    raw_commits = sum(int(r.get("commits") or 0) for r in raw_authors)
+    raw_add = sum(int(r.get("additions") or 0) for r in raw_authors)
+    raw_del = sum(int(r.get("deletions") or 0) for r in raw_authors)
+    print(f"  raw rows           : {len(raw_authors):>10,}")
+    print(f"  raw Σ commits      : {raw_commits:>10,}")
+    print(f"  raw Σ additions    : {raw_add:>10,}")
+    print(f"  raw Σ deletions    : {raw_del:>10,}")
+
+    # Load and compare
+    rep1 = load_git_authors_csv(ga.path)
+    if gc is not None:
+        rep2 = load_git_commits_csv(gc.path)
+    with get_conn() as conn:
+        db = conn.execute(
+            """SELECT COUNT(*) AS n,
+                      COALESCE(SUM(commits), 0)   AS c,
+                      COALESCE(SUM(additions), 0) AS a,
+                      COALESCE(SUM(deletions), 0) AS d
+               FROM git_authors"""
+        ).fetchone()
+    db_n, db_c, db_a, db_d = db["n"], db["c"], db["a"], db["d"]
+
+    ok1 = _print("DB rows == raw rows",          float(len(raw_authors)), float(db_n), tol=0)
+    ok2 = _print("DB Σ commits == raw",          float(raw_commits),      float(db_c), tol=1)
+    ok3 = _print("DB Σ additions == raw",        float(raw_add),          float(db_a), tol=1)
+    ok4 = _print("DB Σ deletions == raw",        float(raw_del),          float(db_d), tol=1)
+    print(f"  matched_to_users (deterministic): {rep1['matched_to_users']} / {rep1['inserted']}")
+
+    # Bot detection sanity
+    from backend.services.git_correlation import get_git_ai_correlation
+    devs = get_git_ai_correlation(period_days=120)
+    n_bots = sum(1 for r in devs if r.get("is_bot"))
+    print(f"  bot rows detected               : {n_bots}")
+    return ok1 and ok2 and ok3 and ok4
+
+
+# ---------------------------------------------------------------------------
 
 def main() -> int:
     _setup_db()
@@ -297,6 +361,7 @@ def main() -> int:
         "Cursor":             audit_cursor(),
         "OpenAI / Humanoid":  audit_openai_json(),
         "Tokens (uncached)":  audit_tokens_uncached(),
+        "Git CSV":            audit_git_csv(),
     }
     print(f"\n{HEAD}══════════════════ SUMMARY ══════════════════{END}")
     all_ok = True

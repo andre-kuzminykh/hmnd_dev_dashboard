@@ -196,4 +196,47 @@ for r in get_high_spenders(period_days=PERIOD_DAYS, threshold_usd=0)[:10]:
     print(f"  {r['user_name']:<24}  {_fmt_money(r['spend']):>10}  "
           f"msgs={r['messages']:>6}{split_str}")
 
+_print_section("Git × AI correlation (last 30 days)")
+try:
+    from backend.services.git_correlation import (
+        get_git_ai_correlation, get_team_ai_share,
+    )
+    from data.sources.git_csv import list_known_repos
+    devs = get_git_ai_correlation(period_days=PERIOD_DAYS)
+    share = get_team_ai_share(period_days=PERIOD_DAYS)
+    if not devs:
+        print("  No git_authors loaded — drop git_authors_*.csv into sources/")
+    else:
+        repos_known = list_known_repos()
+        print(f"  Repos in granular table  : {', '.join(repos_known) if repos_known else '(none)'}")
+        print(f"  Tracked git authors      : {len(devs)} ({sum(1 for r in devs if r.get('is_bot'))} bots)")
+        print(f"  Total git additions      : {share['total_additions']:,}")
+        print(f"  - by humans              : {share['human_additions']:,}")
+        print(f"  - by bots                : {share['bot_additions']:,}")
+        print(f"  AI-generated lines       : {share['ai_lines_total']:,}")
+        print(f"  Team AI share            : {share['ai_share_pct']}%")
+        print(f"  Bot share                : {share['bot_share_pct']}%")
+        print(f"  Human AI share           : {share['human_ai_share_pct']}%")
+        print()
+        # Segment distribution
+        from collections import Counter
+        seg_counts = Counter(r["segment"] for r in devs)
+        print("  Segment distribution:")
+        for seg, n in sorted(seg_counts.items(), key=lambda x: -x[1]):
+            pct = n / len(devs) * 100
+            print(f"    {seg:<32}  {n:>4}  ({pct:5.1f}%)")
+        print()
+        # Top 5 by ai_cost + git_additions composite
+        print("  Top 5 by total impact (commits + AI cost × 0.1):")
+        for r in devs[:5]:
+            ai_share = r.get("ai_share_of_additions")
+            ai_share_s = f"{ai_share:.0f}%" if ai_share else "—"
+            print(f"    {r['canonical_name']:<24}  "
+                  f"${(r['ai_cost_usd'] or 0):>7.0f}  "
+                  f"commits={r['commits']:>5}  "
+                  f"+lines={r['git_additions']:>7}  "
+                  f"AI-share={ai_share_s}")
+except Exception as e:
+    print(f"  ERROR: {e}")
+
 print("\n\033[1m── END SNAPSHOT ──\033[0m")
