@@ -109,21 +109,26 @@ def _call_llm(ai_users: list[dict], git_authors: list[dict]) -> dict[str, int | 
     print(f"→ calling {_model()} with {len(ai_users)} ai users × "
           f"{len(git_authors)} unmatched git authors")
 
+    body = {
+        "model": _model(),
+        "messages": [
+            {"role": "system",
+             "content": "You are a careful entity-resolution assistant. "
+                        "Reply with valid JSON only."},
+            {"role": "user", "content": prompt},
+        ],
+        "response_format": {"type": "json_object"},
+    }
+    # gpt-5.x only accepts the default temperature (1). Older models default
+    # to higher randomness, so for them we pin temperature=0 for determinism.
+    if not _model().startswith("gpt-5"):
+        body["temperature"] = 0
+
     r = requests.post(
         "https://api.openai.com/v1/chat/completions",
         headers={"Authorization": f"Bearer {key}",
                  "Content-Type": "application/json"},
-        json={
-            "model": _model(),
-            "messages": [
-                {"role": "system",
-                 "content": "You are a careful entity-resolution assistant. "
-                            "Reply with valid JSON only."},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
-        },
+        json=body,
         timeout=120,
     )
     if r.status_code != 200:

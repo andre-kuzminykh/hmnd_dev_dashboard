@@ -16,6 +16,7 @@ meaningful regardless of absolute scale):
     AI_ACTIVE_BUT_NO_GIT            — has AI activity & zero commits in git
     GIT_ACTIVE_BUT_NO_AI            — has commits & zero AI activity
     NORMAL                          — everything else
+    BOT_AUTOMATION                  — author is a bot/agent (100% AI-generated code)
 """
 from __future__ import annotations
 
@@ -23,6 +24,35 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from data.db import get_conn
+
+
+# Bot / automation authors — their commits are 100% AI-generated code,
+# pulled out of the human-segment classification and counted toward the
+# team AI-share denominator.
+_BOT_NAMES = {
+    "github-actions", "cursor agent", "cursor", "opencode agent", "opencode",
+    "claude", "humanoid ai", "hmnd training user", "thehumanoidrobots",
+    "alphaclaw", "vrobot", "root", "your name",
+    "dependabot", "renovate", "renovate[bot]", "dependabot[bot]",
+    "hmnd-alphaclaw", "hmnd-alphaclaw[bot]",
+}
+
+
+def _is_bot_author(name: str) -> bool:
+    """Heuristic: did this commit come from a bot / AI agent rather than
+    a real engineer? Used to credit those additions as AI-generated."""
+    if not name:
+        return False
+    n = name.lower().strip()
+    if "[bot]" in n:
+        return True
+    if n in _BOT_NAMES:
+        return True
+    # 'cursor agent', 'claude code agent', 'opencode agent' etc.
+    if "agent" in n and any(tok in n for tok in
+                             ("cursor", "claude", "opencode", "ai", "code")):
+        return True
+    return False
 
 
 def _quartiles(values: list[float]) -> tuple[float, float]:
@@ -171,6 +201,7 @@ def get_git_ai_correlation(period_days: int = 30,
         commits = int(row["commits"] or 0)
         additions = int(row["additions"] or 0)
         deletions = int(row["deletions"] or 0)
+        is_bot = _is_bot_author(row["git_name"])
 
         out.append({
             "canonical_name": row["ai_name"] or row["git_name"],
@@ -178,6 +209,7 @@ def get_git_ai_correlation(period_days: int = 30,
             "git_author_name": row["git_name"],
             "git_email": emails[0] if emails else "",
             "repos": row["repos"] or "",
+            "is_bot": is_bot,
             "ai_cost_usd": ai_cost,
             "ai_lines": ai_lines,
             "agent_completions": agent_completions,
@@ -215,6 +247,7 @@ def get_git_ai_correlation(period_days: int = 30,
             "git_author_name": "",
             "git_email": email,
             "repos": "",
+            "is_bot": False,
             "ai_cost_usd": float(ai["ai_cost_usd"] or 0),
             "ai_lines": int((cursor_hit or {}).get("ai_lines") or 0),
             "agent_completions": int((cursor_hit or {}).get("agent_completions") or 0),
@@ -230,13 +263,19 @@ def get_git_ai_correlation(period_days: int = 30,
             "ai_share_of_additions": None,
         })
 
-    # 5. Classify segments using population quartiles.
-    cost_q1, cost_q3 = _quartiles([r["ai_cost_usd"] for r in out])
-    lines_q1, lines_q3 = _quartiles([r["ai_lines"] for r in out])
-    commits_q1, commits_q3 = _quartiles([r["commits"] for r in out])
-    adds_q1, adds_q3 = _quartiles([r["git_additions"] for r in out])
+    # 5. Classify segments using population quartiles. Skip bot rows so
+    # their (often large) additions don't skew the q1/q3 thresholds against
+    # real developers.
+    humans = [r for r in out if not r.get("is_bot")]
+    cost_q1, cost_q3 = _quartiles([r["ai_cost_usd"] for r in humans])
+    lines_q1, lines_q3 = _quartiles([r["ai_lines"] for r in humans])
+    commits_q1, commits_q3 = _quartiles([r["commits"] for r in humans])
+    adds_q1, adds_q3 = _quartiles([r["git_additions"] for r in humans])
 
     for r in out:
+        if r.get("is_bot"):
+            r["segment"] = "BOT_AUTOMATION"
+            continue
         r["segment"] = _segment(
             r["ai_cost_usd"], r["ai_lines"], r["commits"], r["git_additions"],
             cost_q3=cost_q3, lines_q3=lines_q3,
@@ -248,6 +287,49 @@ def get_git_ai_correlation(period_days: int = 30,
     # visible rows are at the top.
     out.sort(key=lambda r: (r["commits"] + r["ai_cost_usd"] * 0.1), reverse=True)
     return out
+
+
+def get_team_ai_share(period_days: int = 30,
+                      repos: list[str] | None = None) -> dict[str, Any]:
+    """Compute the team-wide % of code lines that came from AI tools.
+
+    Two contributions:
+      1. Bot/automation commits — every addition is 100% AI-generated.
+      2. Human commits with Cursor-reported `ai_lines` — those specific
+         lines came from tab completion / agent mode.
+
+    Returns a dict with the breakdown so the UI can show it clearly:
+        {
+          'human_additions': X,
+          'bot_additions':   Y,
+          'human_ai_lines':  Z,   # Cursor-reported AI lines by humans
+          'total_additions': X + Y,
+          'ai_lines_total':  Y + min(Z, X),   # bots 100% + human Cursor lines
+          'ai_share_pct':    (ai_lines_total / total_additions) * 100,
+          'bot_share_pct':   (Y / total_additions) * 100,
+          'human_ai_share_pct': (min(Z, X) / X) * 100  if X > 0,
+        }
+    """
+    devs = get_git_ai_correlation(period_days=period_days, repos=repos)
+    human_additions = sum(r["git_additions"] for r in devs if not r.get("is_bot"))
+    bot_additions = sum(r["git_additions"] for r in devs if r.get("is_bot"))
+    human_ai_lines = sum(r["ai_lines"] for r in devs if not r.get("is_bot"))
+    total_additions = human_additions + bot_additions
+    capped_human_ai = min(human_ai_lines, human_additions) if human_additions else 0
+    ai_lines_total = bot_additions + capped_human_ai
+    return {
+        "human_additions": human_additions,
+        "bot_additions": bot_additions,
+        "human_ai_lines": human_ai_lines,
+        "total_additions": total_additions,
+        "ai_lines_total": ai_lines_total,
+        "ai_share_pct": round(ai_lines_total / total_additions * 100, 1)
+            if total_additions > 0 else 0.0,
+        "bot_share_pct": round(bot_additions / total_additions * 100, 1)
+            if total_additions > 0 else 0.0,
+        "human_ai_share_pct": round(capped_human_ai / human_additions * 100, 1)
+            if human_additions > 0 else 0.0,
+    }
 
 
 def get_segment_counts(period_days: int = 30) -> dict[str, int]:

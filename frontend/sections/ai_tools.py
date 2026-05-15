@@ -1050,24 +1050,29 @@ with tab_devs:
             "or run the extraction script described in docs/."
         )
     else:
-        # Top-level KPIs: counts + team-wide AI share.
+        # Top-level KPIs: counts + team-wide AI share (now including bots).
+        from backend.services.git_correlation import get_team_ai_share
+        share = get_team_ai_share(
+            period_days=filters.period_days,
+            repos=selected_repos if (selected_repos and _known_repos) else None,
+        )
         counts: dict[str, int] = {}
         for r in devs:
             counts[r["segment"]] = counts.get(r["segment"], 0) + 1
-        total_additions = sum(r["git_additions"] for r in devs) or 0
-        total_ai_lines = sum(r["ai_lines"] for r in devs) or 0
-        team_ai_share = (
-            round(min(total_ai_lines, total_additions) / total_additions * 100, 1)
-            if total_additions > 0 else 0.0
-        )
+        n_humans = sum(1 for r in devs if not r.get("is_bot"))
+        n_bots = sum(1 for r in devs if r.get("is_bot"))
         kpi_row([
-            {"label": "Tracked devs",  "value": str(len(devs))},
-            {"label": "AI + Git",      "value": str(sum(
-                1 for r in devs if r["ai_cost_usd"] > 0 and r["commits"] > 0
-            ))},
-            {"label": "Team AI share", "value": f"{team_ai_share}%"},
-            {"label": "Git only",      "value": str(counts.get("GIT_ACTIVE_BUT_NO_AI", 0))},
+            {"label": "Tracked devs",   "value": f"{n_humans} +{n_bots} bots"},
+            {"label": "Team AI share",  "value": f"{share['ai_share_pct']}%"},
+            {"label": "Bot share",      "value": f"{share['bot_share_pct']}%"},
+            {"label": "Human AI share", "value": f"{share['human_ai_share_pct']}%"},
         ])
+        st.caption(
+            f"📊 AI-generated lines: **{fmt_int(share['ai_lines_total'])}** of "
+            f"**{fmt_int(share['total_additions'])}** total git additions. "
+            f"Bots ({fmt_int(share['bot_additions'])} lines, 100% AI) + Cursor-reported "
+            f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines)."
+        )
 
         section("Segment distribution")
         seg_colors = {
@@ -1077,6 +1082,7 @@ with tab_devs:
             "LOW_AI_SPEND_HIGH_GIT_OUTPUT":  "#6366f1",
             "AI_ACTIVE_BUT_NO_GIT":          "#94a3b8",
             "GIT_ACTIVE_BUT_NO_AI":          "#94a3b8",
+            "BOT_AUTOMATION":                "#a855f7",
             "NORMAL":                        "#cbd5e1",
         }
         seg_html = []
