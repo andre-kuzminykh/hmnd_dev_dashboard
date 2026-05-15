@@ -167,6 +167,81 @@ def test_etl_openai_users_present(tmp_db_pointed_at_real_sources):
 
 
 @pytest.mark.skipif(not _have("OpenAI_*.json"), reason="No OpenAI JSON")
+def test_etl_openai_json_tags_organization(tmp_db_pointed_at_real_sources):
+    """Every event from the JSON loader must be tagged with the requested
+    organization_id so it can coexist with other-org rows."""
+    from data.sources.openai_json import latest_openai_file, load_openai_json
+    from data.db import get_conn
+
+    f = latest_openai_file()
+    report = load_openai_json(f.path, org_label="Humanoid")
+    assert report["org_label"] == "Humanoid"
+    with get_conn() as conn:
+        org_row = conn.execute(
+            """SELECT o.id FROM organizations o
+               JOIN providers p ON p.id = o.provider_id
+               WHERE p.name='openai' AND o.label='Humanoid'"""
+        ).fetchone()
+        assert org_row is not None
+        org_id = org_row["id"]
+        untagged = conn.execute(
+            """SELECT COUNT(*) AS n FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name='openai' AND (ue.organization_id IS NULL OR ue.organization_id != ?)""",
+            (org_id,),
+        ).fetchone()["n"]
+    assert untagged == 0, f"{untagged} JSON-loaded events lack organization_id={org_id}"
+
+
+@pytest.mark.skipif(not _have("OpenAI_*.json"), reason="No OpenAI JSON")
+def test_etl_openai_json_does_not_wipe_other_orgs(tmp_db_pointed_at_real_sources):
+    """Reloading the JSON for org A must not delete rows belonging to org B
+    in the same period — that's how Artem (API) and Humanoid (JSON) coexist."""
+    from data.sources.openai_json import latest_openai_file, load_openai_json
+    from data.db import get_conn
+
+    f = latest_openai_file()
+    load_openai_json(f.path, org_label="Humanoid")
+
+    # Insert a sentinel event tagged to a different org ('Artem') in the same
+    # day window — it must survive a Humanoid reload.
+    with get_conn() as conn:
+        pid = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        conn.execute(
+            "INSERT OR IGNORE INTO organizations(provider_id, label) VALUES(?, 'Artem')",
+            (pid,),
+        )
+        artem_id = conn.execute(
+            "SELECT id FROM organizations WHERE provider_id=? AND label='Artem'", (pid,)
+        ).fetchone()["id"]
+        # Pick any existing user/model so the FK is satisfied.
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        mid = conn.execute(
+            "SELECT id FROM models WHERE provider_id=? LIMIT 1", (pid,)
+        ).fetchone()["id"]
+        any_day = conn.execute(
+            """SELECT date(occurred_at) AS d FROM usage_events
+               WHERE provider_id=? LIMIT 1""", (pid,)
+        ).fetchone()["d"]
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, organization_id,
+                                         occurred_at, tokens_in, tokens_out, tokens_cached,
+                                         cost_usd, is_error, purpose)
+               VALUES(?, ?, ?, ?, ?, 1, 1, 0, 0.01, 0, 'sentinel')""",
+            (uid, pid, mid, artem_id, f"{any_day} 12:00:00"),
+        )
+        conn.commit()
+
+    # Now reload Humanoid JSON — Artem sentinel must survive.
+    load_openai_json(f.path, org_label="Humanoid")
+    with get_conn() as conn:
+        survivors = conn.execute(
+            "SELECT COUNT(*) AS n FROM usage_events WHERE purpose='sentinel'"
+        ).fetchone()["n"]
+    assert survivors == 1, "Humanoid JSON reload deleted Artem-org rows"
+
+
+@pytest.mark.skipif(not _have("OpenAI_*.json"), reason="No OpenAI JSON")
 def test_etl_openai_total_spend_approx_matches(tmp_db_pointed_at_real_sources):
     from data.sources.openai_json import latest_openai_file, load_openai_json
     from data.db import get_conn

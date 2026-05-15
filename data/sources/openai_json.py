@@ -54,7 +54,21 @@ def _ensure_provider() -> int:
         ).fetchone()["id"]
 
 
-def _ensure_user(email: str, name: str) -> int:
+def _ensure_organization(provider_id: int, label: str) -> int:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO organizations(provider_id, label) VALUES(?, ?)",
+            (provider_id, label),
+        )
+        row = conn.execute(
+            "SELECT id FROM organizations WHERE provider_id = ? AND label = ?",
+            (provider_id, label),
+        ).fetchone()
+        conn.commit()
+        return row["id"]
+
+
+def _ensure_user(email: str, name: str, org_id: int | None = None) -> int:
     with get_conn() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)
@@ -64,6 +78,11 @@ def _ensure_user(email: str, name: str) -> int:
         uid = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()["id"]
         if name:
             conn.execute("UPDATE users SET full_name=? WHERE id=?", (name, uid))
+        if org_id is not None:
+            conn.execute(
+                "UPDATE users SET organization_id = ? WHERE id = ? AND organization_id IS NULL",
+                (org_id, uid),
+            )
         conn.commit()
         return uid
 
@@ -80,7 +99,13 @@ def _ensure_model(name: str, provider_id: int) -> int:
         ).fetchone()["id"]
 
 
-def load_openai_json(path: Path | str) -> dict[str, Any]:
+def load_openai_json(path: Path | str, org_label: str = "Humanoid") -> dict[str, Any]:
+    """Load an OpenAI dump (sources/OpenAI_*.json) into usage_events.
+
+    Rows are tagged with `organization_id` for `org_label` (default 'Humanoid')
+    so that they coexist with API-synced rows from other orgs (e.g. Artem)
+    without wiping each other on re-sync.
+    """
     p = Path(path)
     doc = json.loads(p.read_text(encoding="utf-8"))
 
@@ -94,14 +119,17 @@ def load_openai_json(path: Path | str) -> dict[str, Any]:
     end_dt = _parse_iso(end_iso)
 
     pid = _ensure_provider()
+    org_id = _ensure_organization(pid, org_label)
 
-    # Wipe period
+    # Wipe ONLY this org's rows in the period. Otherwise we'd nuke Artem's
+    # API-synced events for the same days.
     with get_conn() as conn:
         conn.execute(
             """DELETE FROM usage_events
                WHERE provider_id = ?
+                 AND organization_id = ?
                  AND date(occurred_at) >= date(?) AND date(occurred_at) <= date(?)""",
-            (pid, start_dt.date().isoformat(), end_dt.date().isoformat()),
+            (pid, org_id, start_dt.date().isoformat(), end_dt.date().isoformat()),
         )
         conn.commit()
 
@@ -146,7 +174,7 @@ def load_openai_json(path: Path | str) -> dict[str, Any]:
                 u_meta = users_meta.get(user_id_ext) or {}
                 email = u_meta.get("email") or f"{user_id_ext}@openai-unknown"
                 name = u_meta.get("name") or email.split("@")[0]
-                uid = _ensure_user(email, name)
+                uid = _ensure_user(email, name, org_id=org_id)
                 user_ids_seen.add(uid)
                 model_name = r.get("model") or "unknown"
                 mid = _ensure_model(model_name, pid)
@@ -163,7 +191,7 @@ def load_openai_json(path: Path | str) -> dict[str, Any]:
                     per_request_cost = 0.0
                 cost = round(per_request_cost * n_reqs, 6)
                 rows.append((
-                    uid, pid, mid, None,
+                    uid, pid, mid, None, org_id,
                     day_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     tokens_in, tokens_out, tokens_cached, cost,
                     0, 0, "API",
@@ -171,10 +199,11 @@ def load_openai_json(path: Path | str) -> dict[str, Any]:
             if rows:
                 conn.executemany(
                     """INSERT INTO usage_events(
-                        user_id, provider_id, model_id, api_key_id, occurred_at,
+                        user_id, provider_id, model_id, api_key_id, organization_id,
+                        occurred_at,
                         tokens_in, tokens_out, tokens_cached, cost_usd,
                         latency_ms, is_error, purpose
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     rows,
                 )
                 conn.commit()
@@ -184,6 +213,7 @@ def load_openai_json(path: Path | str) -> dict[str, Any]:
         "provider": "openai",
         "mode": "json",
         "source_file": p.name,
+        "org_label": org_label,
         "inserted": inserted,
         "users": len(user_ids_seen),
         "period_from": start_dt.date().isoformat(),

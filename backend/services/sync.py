@@ -1,6 +1,7 @@
 """Orchestrator вокруг коннекторов: дёргает sync, агрегирует daily_costs."""
 from __future__ import annotations
 
+import os
 from dataclasses import asdict
 from datetime import datetime, timedelta
 from typing import Any
@@ -101,31 +102,48 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
     out: dict[str, Any] = {"reports": {}}
 
     if "openai" in providers:
-        # OpenAI is API-first because we have two admin keys (Artem + Humanoid).
-        # JSON fallback only when no admin keys are configured (the path that
-        # exists for orgs without admin access).
-        if cfg.openai_orgs:
-            # Multi-org sync: one OpenAIConnector per configured admin key.
-            org_reports: list[dict[str, Any]] = []
-            for org in cfg.openai_orgs:
-                org_id = _ensure_organization(provider="openai", label=org.label)
-                c = OpenAIConnector(
-                    api_key=org.api_key, mock=False,
-                    org_label=org.label, org_id=org_id,
-                )
-                r = asdict(c.sync(period_days))
-                r["org_label"] = org.label
-                org_reports.append(r)
-            out["reports"]["openai"] = org_reports if len(org_reports) > 1 else org_reports[0]
-        else:
-            # No admin keys → fall back to JSON drop.
-            from data.sources.openai_json import latest_openai_file, load_openai_json
-            oai_file = latest_openai_file()
-            if oai_file is not None:
-                out["reports"]["openai"] = load_openai_json(oai_file.path)
+        # OpenAI: API for orgs with admin keys (e.g. Artem) + JSON drop for orgs
+        # whose admin key we don't have (e.g. Humanoid — Karen won't grant it).
+        # Both paths coexist: the JSON loader scopes its DELETE by organization_id
+        # so it can't wipe API-synced rows from other orgs.
+        org_reports: list[dict[str, Any]] = []
+        for org in cfg.openai_orgs:
+            org_id = _ensure_organization(provider="openai", label=org.label)
+            c = OpenAIConnector(
+                api_key=org.api_key, mock=False,
+                org_label=org.label, org_id=org_id,
+            )
+            r = asdict(c.sync(period_days))
+            r["org_label"] = org.label
+            r["mode"] = "api"
+            org_reports.append(r)
+
+        # JSON drop in sources/OpenAI_*.json → loaded as the 'Humanoid' org by
+        # default. Override with HMND_OPENAI_JSON_ORG_LABEL if you need a
+        # different label.
+        from data.sources.openai_json import latest_openai_file, load_openai_json
+        oai_file = latest_openai_file()
+        if oai_file is not None:
+            json_label = os.environ.get("HMND_OPENAI_JSON_ORG_LABEL", "Humanoid")
+            # Skip JSON if an org with the same label already synced via API —
+            # avoids double-counting if user moves a key from JSON to API.
+            api_labels = {o["org_label"] for o in org_reports}
+            if json_label in api_labels:
+                org_reports.append({
+                    "provider": "openai", "mode": "json", "skipped": True,
+                    "org_label": json_label,
+                    "reason": f"org '{json_label}' already synced via API",
+                })
             else:
-                c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
-                out["reports"]["openai"] = asdict(c.sync(period_days))
+                _ensure_organization(provider="openai", label=json_label)
+                org_reports.append(load_openai_json(oai_file.path, org_label=json_label))
+
+        if not org_reports:
+            # Last-resort fallback: legacy single-key path.
+            c = OpenAIConnector(api_key=cfg.openai_key, mock=not cfg.openai_key)
+            org_reports.append(asdict(c.sync(period_days)))
+
+        out["reports"]["openai"] = org_reports if len(org_reports) > 1 else org_reports[0]
 
     if "anthropic" in providers:
         out["reports"]["anthropic"] = _sync_anthropic(cfg, period_days)
