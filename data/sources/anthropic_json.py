@@ -13,6 +13,13 @@ Top-level shape:
       }
     }
 
+UNIT NOTE — Anthropic Admin API docs:
+    "Currency: All costs in USD, reported as decimal strings in lowest
+     units (cents)"
+So `amount`, `list_amount`, `rollups.totalSpend`, `rollups.spendByProduct.*`,
+and `rollups.modelSpend.*` are ALL in cents. We divide by 100 on ingest so
+the rest of the dashboard stores actual USD in `cost_usd`.
+
 The loader writes per-user per-product events into `usage_events` with
 the spend split evenly over the period in `_meta`, so all downstream
 dashboards (Overview, Costs by People, Models, AI Tools) just work.
@@ -162,7 +169,9 @@ def load_anthropic_json(path: Path | str) -> dict[str, Any]:
 
         product = rec.get("product") or "other"
         purpose = _PRODUCT_PURPOSE.get(product, product or "Other")
-        amount = float(rec.get("amount") or 0)
+        # Anthropic admin API reports amounts in CENTS (lowest currency unit).
+        # Divide by 100 to get USD before everything downstream.
+        amount = float(rec.get("amount") or 0) / 100.0
         requests = int(rec.get("requests") or 0)
         if amount <= 0 and requests <= 0:
             continue
@@ -224,5 +233,5 @@ def load_anthropic_json(path: Path | str) -> dict[str, Any]:
         "users": len(user_ids),
         "period_from": start_dt.date().isoformat(),
         "period_to": end_dt.date().isoformat(),
-        "total_spend_usd": round(float(rollups.get("totalSpend") or 0), 2),
+        "total_spend_usd": round(float(rollups.get("totalSpend") or 0) / 100.0, 2),
     }

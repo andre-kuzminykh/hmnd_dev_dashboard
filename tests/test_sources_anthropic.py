@@ -10,8 +10,12 @@ from pathlib import Path
 
 def _minimal_anthropic_doc(range_start="2026-05-01T00:00:00Z",
                            range_end="2026-05-07T23:59:59Z",
-                           total_spend=100.0,
+                           total_spend_cents=10000.0,
                            user_records=None) -> dict:
+    """Builds a fixture matching the real Anthropic Admin API shape:
+    every amount/spend value is in CENTS (lowest currency unit).
+    Default totalSpend = 10000 cents = $100 USD.
+    """
     return {
         "_meta": {
             "provider": "anthropic",
@@ -23,11 +27,11 @@ def _minimal_anthropic_doc(range_start="2026-05-01T00:00:00Z",
         "rollups": {
             "provider": "anthropic",
             "totalUsers": 2,
-            "totalSpend": total_spend,
+            "totalSpend": total_spend_cents,
             "totalRequests": 200,
             "totalTokens": 1_000_000,
-            "spendByProduct": {"chat": 30.0, "claude_code": 70.0},
-            "modelSpend": {"claude-opus-4-7": 70.0, "claude-sonnet-4-6": 30.0},
+            "spendByProduct": {"chat": 3000.0, "claude_code": 7000.0},
+            "modelSpend": {"claude-opus-4-7": 7000.0, "claude-sonnet-4-6": 3000.0},
         },
         "raw": {
             "users": [],
@@ -39,7 +43,7 @@ def _minimal_anthropic_doc(range_start="2026-05-01T00:00:00Z",
                                   "user_id": "user_a",
                                   "email": "a@x",
                                   "name": "Alice"},
-                        "amount": "70.0", "requests": 150,
+                        "amount": "7000.0", "requests": 150,  # 7000 cents = $70
                     },
                     {
                         "product": "chat",
@@ -47,7 +51,7 @@ def _minimal_anthropic_doc(range_start="2026-05-01T00:00:00Z",
                                   "user_id": "user_b",
                                   "email": "b@x",
                                   "name": "Bob"},
-                        "amount": "30.0", "requests": 50,
+                        "amount": "3000.0", "requests": 50,   # 3000 cents = $30
                     },
                 ],
             },
@@ -153,8 +157,50 @@ def test_loaded_events_have_cost_and_purpose(tmp_path, monkeypatch):
         total = conn.execute(
             "SELECT ROUND(SUM(cost_usd), 2) AS s FROM usage_events"
         ).fetchone()["s"]
-        # 30 chat + 70 cc = 100
+        # 3000 chat + 7000 cc = 10000 cents = $100 USD after /100
         assert abs(total - 100.0) < 1.0
+
+
+def test_amount_is_converted_from_cents_to_usd(tmp_path, monkeypatch):
+    """Anthropic Admin API returns USD amounts in LOWEST UNIT (cents). The
+    loader must divide by 100 — otherwise totals are 100x inflated (which is
+    what produced the bogus $4.5M reading on Humanoid's dashboard).
+
+    Doc reference:
+        https://platform.claude.com/docs/en/build-with-claude/usage-cost-api
+        > "Currency: All costs in USD, reported as decimal strings in lowest
+        >  units (cents)"
+    """
+    monkeypatch.setenv("HMND_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
+    from data.db import init_schema, get_conn
+    init_schema()
+
+    # Single user record with a known amount: 4500000 cents = $45,000 USD
+    doc = _minimal_anthropic_doc(
+        total_spend_cents=4_500_000.0,
+        user_records=[{
+            "product": "claude_code",
+            "actor": {"type": "user_actor", "user_id": "u1",
+                      "email": "u1@x", "name": "U1"},
+            "amount": "4500000.0", "requests": 100,
+        }],
+    )
+    p = _write(tmp_path, "Anthropic_20260507.json", doc)
+    import importlib
+    from data.sources import anthropic_json
+    importlib.reload(anthropic_json)
+    report = anthropic_json.load_anthropic_json(p)
+
+    # Loader's reported total must also be in USD (not cents)
+    assert report["total_spend_usd"] == 45000.0, report
+
+    # DB sum must be $45,000 — NOT 4,500,000
+    with get_conn() as conn:
+        total = conn.execute(
+            "SELECT ROUND(SUM(cost_usd), 2) AS s FROM usage_events"
+        ).fetchone()["s"]
+    assert abs(total - 45000.0) < 1.0, f"DB total {total} (expected ~$45,000)"
 
 
 def test_fr_14_3_1_1_json_wins_over_cursor_derived(tmp_path, monkeypatch):
