@@ -6,7 +6,9 @@ import plotly.express as px
 import streamlit as st
 
 from backend.config import load_config
-from backend.services.overview import get_daily_spend_series, get_overview_kpis
+from backend.services.overview import (
+    get_daily_spend_series, get_overview_kpis, get_source_freshness,
+)
 from frontend.components import filters_bar, fmt_int, fmt_money, fmt_pct, hero, kpi_row, section
 from frontend.theme import ANTHROPIC, NAVY, OPENAI, PROVIDER_COLORS
 
@@ -17,6 +19,40 @@ hero(
     '<span class="accent">AIOps</span> Dashboard',
     "Who uses AI, how much it costs, how efficiently and how much AI-generated code lands in production.",
 )
+
+# Data freshness chips — makes it obvious WHEN each source last logged
+# data, so a sparse 'Today' view isn't read as a bug. JSON-snapshot
+# sources stop at the dump date; API sources stay live.
+_fresh = get_source_freshness()
+if _fresh:
+    chips = []
+    for s in _fresh:
+        label = s["provider"].capitalize().replace("Openai", "OpenAI").replace("Github", "GitHub")
+        if s["org_label"]:
+            label = f"{label} · {s['org_label']}"
+        if s["is_live"]:
+            badge_color, badge_text = "#16a34a", "live"
+        elif s["days_old"] <= 7:
+            badge_color, badge_text = "#f59e0b", f"{s['days_old']}d old"
+        else:
+            badge_color, badge_text = "#ef4444", f"{s['days_old']}d stale"
+        chips.append(
+            f'<span style="display:inline-flex;align-items:center;gap:6px;'
+            f'padding:4px 10px;border-radius:999px;background:#f1f5f9;'
+            f'color:#475569;font-size:12px;font-weight:500;margin-right:6px;'
+            f'margin-bottom:6px">'
+            f'<span style="width:6px;height:6px;border-radius:50%;background:{badge_color}"></span>'
+            f'{label}<span style="color:#94a3b8">·</span>'
+            f'<span style="color:{badge_color}">{badge_text}</span>'
+            f'<span style="color:#94a3b8">last {s["last_day"]}</span>'
+            f'</span>'
+        )
+    st.markdown(
+        '<div style="margin: -8px 0 14px 0; display:flex; flex-wrap:wrap">'
+        + "".join(chips) + "</div>",
+        unsafe_allow_html=True,
+    )
+
 filters = filters_bar()
 
 kpis = get_overview_kpis(filters)

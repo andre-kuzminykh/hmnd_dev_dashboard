@@ -113,6 +113,44 @@ def _provider_reported_total(conn, start: datetime, end: datetime, provider: str
     return None
 
 
+def get_source_freshness() -> list[dict[str, Any]]:
+    """Per-source data-freshness summary: when did each provider last log
+    a usage event. Used to show 'last data May 13' / 'live (today)' chips
+    so the user doesn't think a sparse 'Today' view is a bug — it just
+    reflects which sources actually have data for today.
+    """
+    out: list[dict[str, Any]] = []
+    today = datetime.utcnow().date()
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT p.name AS provider,
+                      COALESCE(o.label, '') AS org_label,
+                      MAX(date(ue.occurred_at)) AS last_day,
+                      MIN(date(ue.occurred_at)) AS first_day,
+                      COUNT(*) AS events
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               LEFT JOIN organizations o ON o.id = ue.organization_id
+               GROUP BY p.id, o.id
+               ORDER BY p.name, o.label"""
+        ).fetchall()
+    for r in rows:
+        if not r["last_day"]:
+            continue
+        last = datetime.fromisoformat(r["last_day"]).date()
+        days_old = (today - last).days
+        out.append({
+            "provider": r["provider"],
+            "org_label": r["org_label"] or "",
+            "first_day": r["first_day"],
+            "last_day": r["last_day"],
+            "days_old": days_old,
+            "events": int(r["events"] or 0),
+            "is_live": days_old <= 1,
+        })
+    return out
+
+
 def get_overview_kpis(filters: Filters | None = None, now: datetime | None = None) -> dict[str, Any]:
     """FR-01.1.1.1, FR-01.1.1.2, FR-01.1.1.3.
 
