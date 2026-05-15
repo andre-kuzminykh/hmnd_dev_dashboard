@@ -12,6 +12,10 @@ services:
       - "127.0.0.1:7501:8501"
     volumes:
       - ./data:/app/data
+      # Source CSV/JSON drops live on the host so they survive image rebuilds.
+      # Without this mount, extract_git_stats writes inside container and the
+      # next `up --build` wipes them.
+      - ./sources:/app/sources
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health || exit 1"]
       interval: 30s
@@ -29,6 +33,7 @@ services:
     env_file: .env
     volumes:
       - ./data:/app/data
+      - ./sources:/app/sources
     entrypoint: ["sh", "-c"]
     command:
       - |
