@@ -53,13 +53,14 @@ keys     = st.Page("sections/api_keys.py",     title="API Keys",         icon=":
 projects = st.Page("sections/projects.py",     title="Projects",         icon=":material/folder_open:")
 models   = st.Page("sections/models.py",       title="Models",           icon=":material/smart_toy:")
 alerts   = st.Page("sections/alerts.py",       title="Alerts",           icon=":material/notifications:")
+insights = st.Page("sections/insights.py",     title="Insights",         icon=":material/insights:")
 settings = st.Page("sections/settings.py",     title="Settings",         icon=":material/settings:")
 
-pages = [overview, ai_tools, costs, seats, devs, keys, projects, models, alerts, settings]
+pages = [overview, ai_tools, insights, costs, seats, devs, keys, projects, models, alerts, settings]
 if CFG.github_enabled:
     repos   = st.Page("sections/repositories.py", title="Repositories", icon=":material/folder:")
     pr_qual = st.Page("sections/pr_quality.py",   title="PR Quality",   icon=":material/rule:")
-    pages = [overview, ai_tools, costs, seats, devs, keys, projects, repos, pr_qual, models, alerts, settings]
+    pages = [overview, ai_tools, insights, costs, seats, devs, keys, projects, repos, pr_qual, models, alerts, settings]
 
 # Hide the auto-rendered page picker so we can fully control sidebar order.
 nav = st.navigation(pages, position="hidden")
