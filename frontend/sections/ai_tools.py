@@ -123,6 +123,13 @@ with tab_overview:
     if f.organization and f.organization != "all":
         _org_clause = " AND ue.organization_id IN (SELECT id FROM organizations WHERE label = ?) "
         _org_params = [f.organization]
+    # Also honour the API-key narrowing so 'ceo_brain_prod' on Source=Artem
+    # narrows the AI Tools Overview tab to that key, just like the top KPIs.
+    _key_clause = ""
+    _key_params: list = []
+    if f.api_key_id:
+        _key_clause = " AND ue.api_key_id = ? "
+        _key_params = [f.api_key_id]
 
     _empty = {"s": 0, "u": 0, "c": 0}
     with _gc() as _conn:
@@ -131,8 +138,8 @@ with tab_overview:
                 f"""SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
                    FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
                    WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?
-                   {_org_clause}""",
-                [s_iso, e_iso] + _org_params,
+                   {_org_clause} {_key_clause}""",
+                [s_iso, e_iso] + _org_params + _key_params,
             ).fetchone()
         else:
             _claude_spend = _empty
@@ -141,8 +148,8 @@ with tab_overview:
                 f"""SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
                    FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
                    WHERE p.name='openai' AND ue.occurred_at BETWEEN ? AND ?
-                   {_org_clause}""",
-                [s_iso, e_iso] + _org_params,
+                   {_org_clause} {_key_clause}""",
+                [s_iso, e_iso] + _org_params + _key_params,
             ).fetchone()
         else:
             _gpt_spend = _empty
@@ -159,10 +166,11 @@ with tab_overview:
     if _show_cursor:
         with _gc() as _conn:
             _cursor_spend_row = _conn.execute(
-                """SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(*) AS c
+                f"""SELECT COALESCE(SUM(ue.cost_usd), 0) AS s, COUNT(*) AS c
                    FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-                   WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?""",
-                (s_iso, e_iso),
+                   WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?
+                   {_key_clause}""",
+                [s_iso, e_iso] + _key_params,
             ).fetchone()
         _cursor_spend_actual = float(_cursor_spend_row["s"] or 0)
     else:
@@ -541,6 +549,47 @@ with tab_gpt:
         )
     rows = get_users_for_provider("openai", period_days=filters.period_days,
                                    api_key_id=filters.api_key_id)
+    # Honor the organization filter (Artem vs Humanoid) — get_users_for_provider
+    # itself doesn't take it, so post-filter by joining each row to the org.
+    if filters.organization and filters.organization != "all":
+        from data.db import get_conn as _gc_gpt
+        with _gc_gpt() as _conn_gpt:
+            _allowed_uids = {
+                r[0] for r in _conn_gpt.execute(
+                    """SELECT DISTINCT ue.user_id
+                       FROM usage_events ue
+                       JOIN providers p ON p.id = ue.provider_id
+                       JOIN organizations o ON o.id = ue.organization_id
+                       WHERE p.name='openai' AND o.label = ?
+                         AND ue.occurred_at >= datetime('now', ?)""",
+                    (filters.organization, f"-{filters.period_days} days"),
+                ).fetchall()
+            }
+        # Rebuild rows from scratch via SQL filtered by org so message/cost
+        # counts are also org-scoped (not just user-list filtering).
+        with _gc_gpt() as _conn_gpt:
+            org_rows = _conn_gpt.execute(
+                """SELECT u.full_name AS user_name,
+                          COUNT(*)                          AS messages,
+                          ROUND(SUM(ue.cost_usd), 2)        AS cost,
+                          SUM(ue.tokens_in)                 AS tokens_in,
+                          SUM(ue.tokens_out)                AS tokens_out
+                   FROM usage_events ue
+                   JOIN users u ON u.id = ue.user_id
+                   JOIN providers p ON p.id = ue.provider_id
+                   JOIN organizations o ON o.id = ue.organization_id
+                   WHERE p.name='openai' AND o.label = ?
+                     AND ue.occurred_at >= datetime('now', ?)
+                   GROUP BY u.id
+                   ORDER BY messages DESC""",
+                (filters.organization, f"-{filters.period_days} days"),
+            ).fetchall()
+        rows = [dict(r) | {"sessions": None, "lines_added": None, "commits": None,
+                            "tokens_in": int(r["tokens_in"] or 0),
+                            "tokens_out": int(r["tokens_out"] or 0),
+                            "cost": float(r["cost"] or 0),
+                            "messages": int(r["messages"])}
+                for r in org_rows]
     total_msgs = sum(r["messages"] for r in rows)
     total_spend = sum(r["cost"] for r in rows)
     high = [r for r in rows if r["cost"] >= 200]
@@ -776,7 +825,11 @@ with tab_models:
     # spend from the JSON rollup. Total Anthropic spend stays the same; we
     # just attribute it to actual model names so the landscape doesn't
     # collapse to one row.
-    anthropic_rollup = get_anthropic_model_spend_from_json()
+    # Skip the Anthropic-rollup substitution when Source filter is narrowed
+    # to a non-anthropic provider (otherwise picking 'OpenAI · Artem' would
+    # still inject Claude rows from rollup into the landscape).
+    _anth_in_scope = filters.provider in ("all", "anthropic")
+    anthropic_rollup = get_anthropic_model_spend_from_json() if _anth_in_scope else []
     if anthropic_rollup:
         rows_api = [r for r in rows_api if not (
             r["provider"] == "anthropic" and r["model"] == "claude-generic"
