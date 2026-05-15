@@ -64,6 +64,43 @@ def test_main_page_with_period(tmp_db, preset):
     assert not app.exception, f"main period={preset} raised: {app.exception}"
 
 
+AI_TOOLS_TABS = [
+    "Overview", "Claude Users", "Claude Code", "ChatGPT",
+    "Cursor", "Models", "⚠ High Spenders",
+]
+
+
+@pytest.mark.parametrize("source", SOURCE_COMBOS)
+def test_every_ai_tools_tab_renders(tmp_db, source):
+    """Render the single page under each Source filter. Streamlit's AppTest
+    evaluates every tab's contents at the same module-level pass, so a single
+    .run() exercises all 7 AI Tools tabs. A bug in any tab (KeyError, stale
+    model lookup, NameError) shows up in app.exception.
+
+    Specifically defends against the live regressions the user has hit:
+      - KeyError 'cost' (column renamed in get_spend_by_model → 'spend')
+      - claude-generic placeholder bypass in Models tab
+      - Cursor/OpenAI org filter mismatches
+    """
+    app = AppTest.from_file(str(MAIN), default_timeout=30)
+    prov, org = source
+    app.session_state["source"] = "all" if prov == "all" else (
+        f"{prov}|{org}" if org and org != "all" else prov
+    )
+    app.session_state["organization"] = org or "all"
+    app.session_state["provider"] = prov
+    app.session_state["preset"] = "Last 30 days"
+    app.session_state["api_key_id"] = None
+    app.run()
+    assert not app.exception, (
+        f"Page (source={source}) raised: {[str(e) for e in app.exception]}"
+    )
+    # Sanity: the page must include AI Tools tabs.
+    assert app.tabs and len(app.tabs) >= 7, (
+        f"Expected ≥7 tabs (AI Tools), got {len(app.tabs) if app.tabs else 0}"
+    )
+
+
 def test_no_raw_html_tags_in_rendered_output(tmp_db):
     """Catches the High-Spenders bug where embedded newlines in
     cards_html caused Streamlit's markdown parser to bail out and dump

@@ -698,8 +698,10 @@ with tab_models:
         )]
         # rescale rollup to the events-window total so percentages match
         # what the rest of the dashboard shows.
+        # NOTE: get_spend_by_model() returns 'spend' (not 'cost') as the
+        # money column — different name than get_models_breakdown().
         anth_total_events = next(
-            (r["cost"] for r in get_spend_by_model("anthropic", period_days=f.period_days)
+            (r["spend"] for r in get_spend_by_model("anthropic", period_days=f.period_days)
              if r["model"] == "claude-generic"),
             None,
         )
