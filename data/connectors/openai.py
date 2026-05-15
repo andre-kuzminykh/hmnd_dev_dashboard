@@ -564,16 +564,18 @@ class OpenAIConnector(BaseConnector):
                         api_key_id = keys_by_external.get(api_key_ext) if api_key_ext else None
                         for _ in range(requests_n):
                             rows.append((
-                                user_id, provider_id, model_id, api_key_id, ts_str,
+                                user_id, provider_id, model_id, api_key_id,
+                                self.org_id, ts_str,
                                 per_in, per_out, per_cached, per_cost, 0, "API",
                             ))
                     if rows:
                         conn.executemany(
                             """INSERT INTO usage_events(
-                                user_id, provider_id, model_id, api_key_id, occurred_at,
+                                user_id, provider_id, model_id, api_key_id,
+                                organization_id, occurred_at,
                                 tokens_in, tokens_out, tokens_cached, cost_usd,
                                 is_error, purpose
-                            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                             rows,
                         )
                         report.inserted += len(rows)
@@ -672,16 +674,18 @@ class OpenAIConnector(BaseConnector):
                             api_key_id = keys_by_external.get(api_key_ext) if api_key_ext else None
                             for _ in range(requests_n):
                                 rows.append((
-                                    user_id, provider_id, model_id, api_key_id, ts_str,
+                                    user_id, provider_id, model_id, api_key_id,
+                                    self.org_id, ts_str,
                                     per_in, per_out, 0, per_cost, 0, endpoint,
                                 ))
                         if rows:
                             conn.executemany(
                                 """INSERT INTO usage_events(
-                                    user_id, provider_id, model_id, api_key_id, occurred_at,
+                                    user_id, provider_id, model_id, api_key_id,
+                                    organization_id, occurred_at,
                                     tokens_in, tokens_out, tokens_cached, cost_usd,
                                     is_error, purpose
-                                ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                                 rows,
                             )
                             report.inserted += len(rows)

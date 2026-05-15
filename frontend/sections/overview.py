@@ -80,34 +80,20 @@ if filters.provider == "anthropic" and kpis["total_spend"] == 0 and kpis["active
         unsafe_allow_html=True,
     )
 
-reported = kpis.get("reported_total")
-events_total = kpis.get("total_spend_events")
-total_note = "vs prev period"
-if reported is not None and reported > 0:
-    # When we have authoritative billing-API totals (e.g. OpenAI /costs,
-    # Anthropic /cost_report), the headline Total Spend IS that number.
-    # Show the events-derived figure as a transparency footnote so the user
-    # can spot when /usage/completions undersees /costs.
-    total_note = f"from billing API · events sum: {fmt_money(events_total or 0)}"
-
-cached_note = (
-    f"+ {fmt_int(kpis['tokens_cached'])} cached"
-    if kpis.get("tokens_cached") else "billable (uncached)"
-)
 kpi_row([
     {"label": "Total spend",  "value": fmt_money(kpis["total_spend"]),
-     "delta": kpis["total_spend_delta"], "note": total_note},
+     "delta": kpis["total_spend_delta"]},
     {"label": "Tokens in",    "value": fmt_int(kpis["tokens_in"]),
-     "delta": kpis["tokens_in_delta"], "note": cached_note},
+     "delta": kpis["tokens_in_delta"]},
     {"label": "Tokens out",   "value": fmt_int(kpis["tokens_out"]),
-     "delta": kpis["tokens_out_delta"], "note": "output tokens"},
+     "delta": kpis["tokens_out_delta"]},
     {"label": "Active users", "value": str(kpis["active_users"]),
-     "delta": kpis["active_users_delta"], "note": "with activity in period"},
+     "delta": kpis["active_users_delta"]},
 ])
 if CFG.github_enabled:
     kpi_row([{
         "label": "AI code share", "value": fmt_pct(kpis["ai_code_share"]),
-        "delta": kpis["ai_code_share_delta"], "note": "merged AI lines / total",
+        "delta": kpis["ai_code_share_delta"],
     }])
 
 section("Spend over time")

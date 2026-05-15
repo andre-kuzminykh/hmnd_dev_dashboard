@@ -1,8 +1,8 @@
 """HMND AIOps Dashboard — entry script.
 
-Uses Streamlit's `st.navigation(position="hidden")` to suppress the auto
-page picker, then renders our own brand + page_link list so the HUMANOID
-logo sits at the top-left of the sidebar above all page entries.
+Single-page layout: Overview hero + KPIs + spend chart on top, AI Tools
+tabs (Overview / Claude Users / Claude Code / ChatGPT / Cursor / Models /
+High Spenders) below. Sidebar is hidden — the dashboard is one page.
 """
 from __future__ import annotations
 
@@ -19,16 +19,29 @@ import streamlit as st
 from backend.config import load_config
 from data.db import DB_PATH, init_schema
 from data.seed import seed
-from frontend.theme import inject, render_brand
+from frontend.theme import inject
 
 
 st.set_page_config(
     page_title="HMND · AIOps",
     page_icon="https://i.ibb.co/nsfMVMGM/1.png",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 inject()
+
+# Hide sidebar / nav entirely — this is a single-page dashboard.
+st.markdown(
+    """
+    <style>
+      [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"],
+      header[data-testid="stHeader"] { display: none !important; }
+      [data-testid="stAppViewContainer"] > .main { margin-left: 0 !important; }
+      .block-container { padding-top: 1.5rem !important; max-width: 1280px; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 CFG = load_config()
 
@@ -42,36 +55,16 @@ def _bootstrap_db() -> None:
 
 _bootstrap_db()
 
-
-# Build page registry (always defined; some hidden behind feature flags).
-overview = st.Page("sections/overview.py",     title="Overview",         icon=":material/dashboard:", default=True)
-ai_tools = st.Page("sections/ai_tools.py",     title="AI Tools",         icon=":material/auto_awesome:")
-costs    = st.Page("sections/costs.py",        title="Costs by People",  icon=":material/payments:")
-seats    = st.Page("sections/seats.py",        title="Seats & Licenses", icon=":material/badge:")
-devs     = st.Page("sections/developers.py",   title="Developer Usage",  icon=":material/code:")
-keys     = st.Page("sections/api_keys.py",     title="API Keys",         icon=":material/key:")
-projects = st.Page("sections/projects.py",     title="Projects",         icon=":material/folder_open:")
-models   = st.Page("sections/models.py",       title="Models",           icon=":material/smart_toy:")
-alerts   = st.Page("sections/alerts.py",       title="Alerts",           icon=":material/notifications:")
-insights = st.Page("sections/insights.py",     title="Insights",         icon=":material/insights:")
-# Settings page is intentionally not registered in the navigation —
-# kept on disk so admins can re-enable it by adding `settings` back to
-# the `pages` list below.
-
-pages = [overview, ai_tools, insights, costs, seats, devs, keys, projects, models, alerts]
-if CFG.github_enabled:
-    repos   = st.Page("sections/repositories.py", title="Repositories", icon=":material/folder:")
-    pr_qual = st.Page("sections/pr_quality.py",   title="PR Quality",   icon=":material/rule:")
-    pages = [overview, ai_tools, insights, costs, seats, devs, keys, projects, repos, pr_qual, models, alerts]
-
-# Hide the auto-rendered page picker so we can fully control sidebar order.
-nav = st.navigation(pages, position="hidden")
-
-# 1. Brand at the very top-left of the sidebar.
-render_brand()
-
-# 2. Manual page links — appear BELOW the brand, with Material icons.
-for page in pages:
-    st.sidebar.page_link(page)
-
-nav.run()
+# Render the single page directly — no navigation, no sidebar.
+# overview.py renders the Executive Overview block (hero + freshness chips +
+# filters bar + KPI cards + spend-over-time chart). Then ai_tools.py is
+# sourced into the SAME globals dict, picking up the `filters` variable
+# Overview just set, and renders the AI Tools tabbed section underneath.
+shared_globals: dict = {"__name__": "__main__"}
+for rel in ["frontend/sections/overview.py", "frontend/sections/ai_tools.py"]:
+    path = ROOT / rel
+    code = path.read_text(encoding="utf-8")
+    # Drop 'from __future__' lines — exec() rejects future imports.
+    code = "\n".join(l for l in code.splitlines() if not l.startswith("from __future__"))
+    shared_globals["__file__"] = str(path)
+    exec(compile(code, str(path), "exec"), shared_globals)

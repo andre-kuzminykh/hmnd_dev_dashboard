@@ -86,17 +86,11 @@ def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class: str,
 
 
 # ----------------- main render -----------------
-
-hero(
-    "AI Tools",
-    'AI Tools <span class="accent">Overview</span>',
-    "Per-tool view across Claude, ChatGPT and Cursor with cross-provider High Spenders.",
-)
-_provider_chips()
-_freshness_header()
-
-filters = filters_bar()
-
+# This file is now sourced into overview.py's globals via main.py — hero,
+# freshness chips and the filters bar are rendered by Overview ABOVE this
+# tabbed section, so we don't re-render them. The `filters` variable below
+# is the Filters object already set by overview.py.
+section("AI Tools")
 
 (tab_overview, tab_claude, tab_cc, tab_gpt, tab_cursor,
  tab_models, tab_high) = st.tabs([
@@ -462,12 +456,12 @@ with tab_cursor:
         prefer_claude = sum(1 for r in leaders if "claude" in r["favorite_model"].lower())
         prefer_gpt = sum(1 for r in leaders if r["favorite_model"].lower().startswith("gpt"))
         kpi_row([
-            {"label": "Active developers", "value": str(active_devs), "note": "in latest period"},
+            {"label": "Active developers", "value": str(active_devs)},
             {"label": "Total AI lines",    "value": fmt_int(total_ai_lines)},
             {"label": "Prefer Claude",     "value": f"{prefer_claude} devs",
              "note": f"vs {prefer_gpt} on GPT"},
             {"label": "Period",
-             "value": leaders[0]["period_start"][5:] + " — " + leaders[0]["period_end"][5:]
+             "value": (leaders[0]["period_start"][5:10] + " — " + leaders[0]["period_end"][5:10])
              if leaders else "—"},
         ])
 

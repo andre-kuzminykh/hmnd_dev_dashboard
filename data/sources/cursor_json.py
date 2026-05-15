@@ -112,11 +112,31 @@ def parse_cursor_json(path: Path | str) -> dict[str, Any]:
             (int(sr.get("spendCents") or 0) + int(sr.get("includedSpendCents") or 0)) / 100.0
         for sr in spend_rows
     }
+    # Derive per-user favorite_model by aggregating raw.usage.data[*].mostUsedModel
+    # — Cursor's members.teamMembers entries don't carry favoriteModel, but the
+    # daily usage rows do (one mostUsedModel per (user, day)). The mode across
+    # days IS the user's favorite model.
+    from collections import Counter
+    daily_usage = (raw.get("usage") or {}).get("data") or []
+    fav_counter: dict[str, Counter] = {}
+    for row in daily_usage:
+        email = (row.get("email") or "").lower().strip()
+        model = (row.get("mostUsedModel") or "").strip()
+        if not email or not model:
+            continue
+        fav_counter.setdefault(email, Counter())[model] += 1
+    favorite_by_email: dict[str, str] = {
+        email: ctr.most_common(1)[0][0] for email, ctr in fav_counter.items()
+    }
 
     users_out: list[dict[str, Any]] = []
     seen = set()
-    # Build the union of users we know about (rollup keys + member rows).
-    emails = set(per_user_rollup.keys()) | set(members_by_email.keys())
+    # Build the union of users we know about (rollup + members + usage rows).
+    emails = (
+        set(per_user_rollup.keys())
+        | set(members_by_email.keys())
+        | set(favorite_by_email.keys())
+    )
     for email_raw in emails:
         email = (email_raw or "").lower().strip()
         if not email or email in seen:
@@ -127,15 +147,15 @@ def parse_cursor_json(path: Path | str) -> dict[str, Any]:
         users_out.append({
             "email": email,
             "name": m.get("name") or email.split("@")[0],
-            # Cursor's "agent" counter == roughly agent completions; treat
-            # "accepts" as total completions (agent + tab).
             "agent_completions": int(roll.get("agent") or 0),
             "tab_completions":   max(int(roll.get("accepts") or 0)
                                     - int(roll.get("agent") or 0), 0),
             "agent_lines":       int(roll.get("lines") or 0),
             "tab_lines":         0,
             "ai_lines":          int(roll.get("lines") or 0),
-            "favorite_model":    m.get("favoriteModel") or "",
+            # Favorite model preference: explicit per-member field (legacy
+            # CSV path) → aggregated mostUsedModel from daily usage → empty.
+            "favorite_model":    m.get("favoriteModel") or favorite_by_email.get(email, ""),
             "spend_usd":         round(spend_by_email.get(email, 0.0), 2),
         })
     users_out.sort(key=lambda r: r["ai_lines"], reverse=True)

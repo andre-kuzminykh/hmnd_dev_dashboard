@@ -119,7 +119,7 @@ def get_source_freshness() -> list[dict[str, Any]]:
     so the user doesn't think a sparse 'Today' view is a bug — it just
     reflects which sources actually have data for today.
     """
-    out: list[dict[str, Any]] = []
+    raw: list[dict[str, Any]] = []
     today = datetime.utcnow().date()
     with get_conn() as conn:
         rows = conn.execute(
@@ -139,7 +139,7 @@ def get_source_freshness() -> list[dict[str, Any]]:
             continue
         last = datetime.fromisoformat(r["last_day"]).date()
         days_old = (today - last).days
-        out.append({
+        raw.append({
             "provider": r["provider"],
             "org_label": r["org_label"] or "",
             "first_day": r["first_day"],
@@ -148,7 +148,16 @@ def get_source_freshness() -> list[dict[str, Any]]:
             "events": int(r["events"] or 0),
             "is_live": days_old <= 1,
         })
-    return out
+
+    # Hide untagged residual rows for providers that also have at least one
+    # properly-tagged row — those are legacy events from before org tagging
+    # was wired in. Showing them as 'OpenAI · 10d stale · last 2026-05-05'
+    # looks like a phantom source to the user.
+    providers_with_orgs = {r["provider"] for r in raw if r["org_label"]}
+    return [
+        r for r in raw
+        if r["org_label"] or r["provider"] not in providers_with_orgs
+    ]
 
 
 def get_overview_kpis(filters: Filters | None = None, now: datetime | None = None) -> dict[str, Any]:
