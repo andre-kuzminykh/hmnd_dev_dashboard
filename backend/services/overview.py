@@ -178,15 +178,22 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
     # provider_totals is stored at the (provider, day) grain — no
     # organization_id, no api_key_id, no team. So it only matches the user's
     # filter when those narrower filters aren't active. Otherwise we'd show an
-    # org-wide total against a user-narrowed events breakdown — exactly the
-    # bug Andrei spotted ($160 reported vs $123 events, $114 in OpenAI UI
-    # filtered by api_key).
+    # org-wide total against a user-narrowed events breakdown.
+    # Additionally, only OpenAI populates provider_totals today (via /costs
+    # admin API). Anthropic and Cursor are JSON-only and have no rows there.
+    # So 'All sources' must use events-sum — otherwise the headline collapses
+    # to JUST the OpenAI portion (the $537 vs $25k bug).
     narrowed = bool(
         f.api_key_id
         or (f.organization and f.organization != "all")
         or (f.team and f.team != "all")
     )
-    if reported_total is not None and reported_total > 0 and not narrowed:
+    use_billing_api = (
+        reported_total is not None and reported_total > 0
+        and not narrowed
+        and (f.provider or "all") != "all"
+    )
+    if use_billing_api:
         total_spend = reported_total
         total_spend_prev = reported_total_prev if reported_total_prev is not None else prev["total_spend"]
         spend_source = "billing_api"
@@ -238,20 +245,21 @@ def get_daily_spend_series(filters: Filters | None = None, now: datetime | None 
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
 
-    # provider_totals can only stand in for events when no narrower filter
-    # is active — see _kpis_in_window for the same guard.
+    # provider_totals can only stand in for events when no narrower filter is
+    # active — see _kpis_in_window for the same guard. Plus: skip when the
+    # filter is 'All sources' because provider_totals is sparse (only OpenAI
+    # populates it today) and would silently undercount Anthropic + Cursor.
     narrowed = bool(
         f.api_key_id
         or (f.organization and f.organization != "all")
         or (f.team and f.team != "all")
     )
+    use_billing_api = not narrowed and (f.provider or "all") != "all"
 
     with get_conn() as conn:
         # 1) Daily authoritative numbers from provider_totals (e.g. OpenAI /costs).
-        #    Skipped entirely when a narrower filter is set — that filter can't
-        #    be honored by the org-wide totals table.
         pt_rows = []
-        if not narrowed:
+        if use_billing_api:
             pt_rows = conn.execute(
                 """SELECT pt.day, p.name AS provider, pt.cost_usd AS cost
                    FROM provider_totals pt

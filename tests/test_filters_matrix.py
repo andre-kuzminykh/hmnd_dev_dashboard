@@ -280,6 +280,60 @@ def test_overview_kpi_shape_complete(tmp_db):
         assert kpis[k] is None or isinstance(kpis[k], (int, float))
 
 
+def test_all_sources_does_not_use_billing_api(tmp_db):
+    """Bug the user spotted: 'All sources' headline showed $537 when the
+    actual cross-source sum is ~$25k. Root cause: provider_totals is sparse
+    (only OpenAI populates it via /costs admin API). When filter=all, we
+    must SUM events across all providers — otherwise Anthropic + Cursor
+    are silently dropped from the headline.
+    """
+    from data.db import get_conn
+    with get_conn() as conn:
+        # Wipe + seed: $50 OpenAI events, $400 Anthropic events, $0 in
+        # provider_totals so we'd never accidentally fall into billing_api.
+        conn.execute("DELETE FROM usage_events")
+        conn.execute("DELETE FROM provider_totals")
+        pid_o = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        pid_a = conn.execute("SELECT id FROM providers WHERE name='anthropic'").fetchone()["id"]
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        m_o = conn.execute("SELECT id FROM models WHERE provider_id=? LIMIT 1", (pid_o,)).fetchone()["id"]
+        m_a = conn.execute("SELECT id FROM models WHERE provider_id=? LIMIT 1", (pid_a,)).fetchone()["id"]
+        # OpenAI $50 + provider_totals $50 (matches)
+        today = datetime.utcnow().date().isoformat()
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, occurred_at,
+                                         tokens_in, tokens_out, tokens_cached, cost_usd,
+                                         is_error, purpose)
+               VALUES(?, ?, ?, datetime('now', '-1 day'), 100, 50, 0, 50.0, 0, 'API')""",
+            (uid, pid_o, m_o),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO provider_totals(provider_id, day, cost_usd) VALUES(?, ?, 50.0)",
+            (pid_o, today),
+        )
+        # Anthropic $400 in events, NO provider_totals (matches reality: JSON-only source)
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, occurred_at,
+                                         tokens_in, tokens_out, tokens_cached, cost_usd,
+                                         is_error, purpose)
+               VALUES(?, ?, ?, datetime('now', '-1 day'), 100, 50, 0, 400.0, 0, 'Agent')""",
+            (uid, pid_a, m_a),
+        )
+        conn.commit()
+
+    # 'All sources' must SUM both — $450 total.
+    all_k = get_overview_kpis(Filters(period_days=7))
+    assert all_k["total_spend"] == 450.0, (
+        f"All sources should be sum of events ({50+400}=$450), got ${all_k['total_spend']}"
+    )
+    assert all_k["total_spend_source"] == "events"
+
+    # Specific OpenAI filter — IS allowed to use billing_api ($50 matches both).
+    openai_k = get_overview_kpis(Filters(period_days=7, provider="openai"))
+    assert openai_k["total_spend"] == 50.0
+    assert openai_k["total_spend_source"] == "billing_api"
+
+
 def test_invalid_source_falls_back_to_all(tmp_db):
     """If user dropdown carries stale state, dashboard must not crash."""
     # provider not in DB → SQL clause filters it out → 0 results, no error

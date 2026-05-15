@@ -252,11 +252,11 @@ def audit_openai_json() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# DASHBOARD QUERY (post-load): tokens_in should subtract cached
+# DASHBOARD QUERY (post-load): tokens_in matches OpenAI Platform UI
 # ---------------------------------------------------------------------------
 
 def audit_tokens_uncached() -> bool:
-    print(f"\n{HEAD}── DASHBOARD: tokens_in is uncached ──{END}")
+    print(f"\n{HEAD}── DASHBOARD: tokens_in == raw input_tokens (matches OpenAI Platform) ──{END}")
     from data.db import get_conn
     from backend.analytics import Filters
     from backend.services.overview import get_overview_kpis
@@ -274,18 +274,17 @@ def audit_tokens_uncached() -> bool:
     displayed_in = int(kpis["tokens_in"])
     displayed_cached = int(kpis.get("tokens_cached") or 0)
 
-    print(f"  raw Σ tokens_in (with cached)            = {raw_in:>14,d}")
+    print(f"  raw Σ tokens_in                          = {raw_in:>14,d}")
     print(f"  raw Σ tokens_cached                      = {raw_cached:>14,d}")
-    print(f"  raw uncached = tokens_in - tokens_cached = {raw_in - raw_cached:>14,d}")
-    print(f"  KPI tokens_in (should be uncached)       = {displayed_in:>14,d}")
-    print(f"  KPI tokens_cached                        = {displayed_cached:>14,d}")
+    print(f"  KPI tokens_in (= raw, matches OpenAI UI) = {displayed_in:>14,d}")
+    print(f"  KPI tokens_cached (separate aggregate)   = {displayed_cached:>14,d}")
 
-    ok1 = displayed_in <= raw_in
-    ok2 = displayed_in + displayed_cached <= raw_in + 1  # tolerance for rounding
+    ok1 = displayed_in == raw_in
+    ok2 = displayed_cached == raw_cached
     mark1 = OK if ok1 else BAD
     mark2 = OK if ok2 else BAD
-    print(f"  {mark1} displayed tokens_in ≤ raw")
-    print(f"  {mark2} displayed (uncached + cached) ≤ raw")
+    print(f"  {mark1} displayed tokens_in == raw")
+    print(f"  {mark2} displayed tokens_cached == raw cached")
     return ok1 and ok2
 
 
