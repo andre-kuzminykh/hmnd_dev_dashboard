@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HMND_DB_PATH=/app/data/hmnd.db
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl git \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
