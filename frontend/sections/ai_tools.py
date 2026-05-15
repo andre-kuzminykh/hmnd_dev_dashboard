@@ -859,7 +859,11 @@ with tab_models:
         p = r["provider"]
         spend_by_provider[p] = spend_by_provider.get(p, 0) + (r["cost"] or 0)
 
-    cursor_rows = model_usage_summary()
+    # Hide Cursor models from the landscape when Source filter is narrowed
+    # to a non-cursor provider (otherwise picking 'OpenAI · Artem' still
+    # listed claude-* and gpt-* Cursor models).
+    _cursor_in_scope = filters.provider in ("all", "cursor")
+    cursor_rows = model_usage_summary() if _cursor_in_scope else []
     cursor_total_reqs = sum(m["requests"] for m in cursor_rows)
 
     section(f"Model landscape — {f.date_range()[0].date()} → {f.date_range()[1].date()}")
