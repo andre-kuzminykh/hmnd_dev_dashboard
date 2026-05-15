@@ -1027,6 +1027,10 @@ with tab_devs:
     from backend.services.git_correlation import (
         get_git_ai_correlation, get_segment_counts,
     )
+    from backend.services.git_quality import (
+        get_ai_spend_per_fix, get_high_churn_files, get_quality_per_author,
+        get_team_quality,
+    )
     from data.sources.git_csv import list_known_repos
     _known_repos = list_known_repos()
     selected_repos: list[str] = []
@@ -1068,11 +1072,14 @@ with tab_devs:
             {"label": "Bot share",      "value": f"{share['bot_share_pct']}%"},
             {"label": "Human AI share", "value": f"{share['human_ai_share_pct']}%"},
         ])
-        st.caption(
-            f"📊 AI-generated lines: **{fmt_int(share['ai_lines_total'])}** of "
-            f"**{fmt_int(share['total_additions'])}** total git additions. "
+        st.markdown(
+            f'<div style="margin:14px 0 4px 0;color:#475569;font-size:13px;">'
+            f"📊 AI-generated lines: <b>{fmt_int(share['ai_lines_total'])}</b> of "
+            f"<b>{fmt_int(share['total_additions'])}</b> total git additions. "
             f"Bots ({fmt_int(share['bot_additions'])} lines, 100% AI) + Cursor-reported "
             f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines)."
+            f"</div>",
+            unsafe_allow_html=True,
         )
 
         # Segment colours + human-readable labels (ordered by "interestingness"
@@ -1133,6 +1140,217 @@ with tab_devs:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+        # ---------------- Code Quality (Git × AI) ----------------
+        # Subject-regex classification: bug-fix / revert / feature / refactor.
+        # Honest scope: directional signal — won't catch sneaky bug fixes that
+        # don't say so, no severity. Useful for AI-vs-human comparison and
+        # high-churn problem-area surfacing. Placed BEFORE the segment
+        # drill-down tables because team-level quality summary is more
+        # valuable than per-person details.
+        repo_arg = selected_repos if (selected_repos and _known_repos) else None
+        tq = get_team_quality(period_days=filters.period_days, repos=repo_arg)
+        if tq["commits"] > 0:
+            section("Code Quality (Git × AI)")
+            st.caption(
+                "Subject-line regex classification on commit messages "
+                "(`fix:`, `Revert \"…\"`, `feat:`, `refactor:`, …). Directional "
+                "signal — captures self-declared bug-fixes, not severity."
+            )
+            kpi_row([
+                {"label": "Commits", "value": fmt_int(tq["commits"])},
+                {"label": "Bug-fix rate",
+                 "value": f"{tq['bug_rate_pct']:.1f}%" if tq["bug_rate_pct"] is not None else "—"},
+                {"label": "Human bug rate",
+                 "value": f"{tq['human_bug_rate_pct']:.1f}%"
+                          if tq["human_bug_rate_pct"] is not None else "—"},
+                {"label": "Bot bug rate",
+                 "value": f"{tq['bot_bug_rate_pct']:.1f}%"
+                          if tq["bot_bug_rate_pct"] is not None else "—"},
+                {"label": "Revert rate",
+                 "value": f"{tq['revert_rate_pct']:.2f}%"
+                          if tq["revert_rate_pct"] is not None else "—"},
+            ])
+
+            # Composition strip: features vs fixes vs refactors vs tests vs docs.
+            tags_total = (tq["fixes"] + tq["features"] + tq["refactors"]
+                          + tq["tests"] + tq["docs"] + tq["reverts"])
+            if tags_total > 0:
+                parts = [
+                    ("Features",  tq["features"],  "#10b981"),
+                    ("Bug fixes", tq["fixes"],     "#ef4444"),
+                    ("Refactors", tq["refactors"], "#6366f1"),
+                    ("Tests",     tq["tests"],     "#f59e0b"),
+                    ("Docs",      tq["docs"],      "#94a3b8"),
+                    ("Reverts",   tq["reverts"],   "#0f172a"),
+                ]
+                bar_html_q = []
+                legend_html_q = []
+                for label, n, color in parts:
+                    if n <= 0:
+                        continue
+                    pct = n / tags_total * 100
+                    inside = f"{pct:.0f}%" if pct >= 5 else ""
+                    bar_html_q.append(
+                        f'<div title="{label}: {n} ({pct:.1f}%)" '
+                        f'style="background:{color};width:{pct:.2f}%;display:flex;'
+                        f'align-items:center;justify-content:center;color:white;'
+                        f'font-weight:600;font-size:12px;min-width:0;overflow:hidden;'
+                        f'white-space:nowrap;">{inside}</div>'
+                    )
+                    legend_html_q.append(
+                        f'<span style="display:inline-flex;align-items:center;gap:6px;'
+                        f'margin-right:18px;font-size:13px;color:#475569;">'
+                        f'<span style="width:10px;height:10px;border-radius:3px;'
+                        f'background:{color};"></span>'
+                        f'<span style="color:#06091c;">{label}</span> '
+                        f'<b style="color:#06091c;">{fmt_int(n)}</b> '
+                        f'<span style="color:#94a3b8;">({pct:.1f}%)</span>'
+                        f'</span>'
+                    )
+                st.markdown(
+                    f'<div style="border:1px solid #e8edf3;border-radius:18px;'
+                    f'padding:18px 22px;background:#fff;margin:14px 0;">'
+                    f'<div style="display:flex;justify-content:space-between;'
+                    f'align-items:center;margin-bottom:10px;">'
+                    f'<div style="font-weight:600;color:#06091c;">Commit composition</div>'
+                    f'<div style="color:#64748b;font-size:12px;">Tagged '
+                    f'<b style="color:#06091c">{fmt_int(tags_total)}</b> of '
+                    f'{fmt_int(tq["commits"])} commits (multi-tag possible)</div>'
+                    f'</div>'
+                    f'<div style="display:flex;height:32px;border-radius:8px;'
+                    f'overflow:hidden;background:#f1f5f9;">{"".join(bar_html_q)}</div>'
+                    f'<div style="margin-top:12px;display:flex;flex-wrap:wrap;'
+                    f'gap:6px 0;">{"".join(legend_html_q)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # $/fix debt indicator + AI vs human breakdown side-by-side
+            col_cost, col_breakdown = st.columns(2)
+            with col_cost:
+                section("AI spend per bug-fix")
+                spf = get_ai_spend_per_fix(period_days=min(filters.period_days, 90))
+                spend_val = spf["ai_spend_per_fix"]
+                spend_txt = fmt_money(spend_val) if spend_val is not None else "—"
+                spend_color = (
+                    "#ef4444" if spend_val is not None and spend_val >= 500 else
+                    "#f59e0b" if spend_val is not None and spend_val >= 100 else
+                    "#10b981" if spend_val is not None else
+                    "#94a3b8"
+                )
+                st.markdown(
+                    f'<div style="border:1px solid #e8edf3;border-radius:18px;'
+                    f'padding:22px;background:#fff;">'
+                    f'<div style="font-size:11px;color:#64748b;text-transform:uppercase;'
+                    f'letter-spacing:.12em;margin-bottom:8px;">'
+                    f'AI $ per bug-fix ({spf["period_days"]}d)</div>'
+                    f'<div style="font-size:34px;font-weight:300;color:{spend_color};">'
+                    f'{spend_txt}</div>'
+                    f'<div style="color:#475569;font-size:13px;margin-top:10px;">'
+                    f'{fmt_money(spf["ai_spend"])} AI spend · '
+                    f'{fmt_int(spf["fixes"])} bug-fix commits'
+                    f'</div>'
+                    f'<div style="color:#94a3b8;font-size:12px;margin-top:6px;'
+                    f'font-style:italic;">High $/fix ⇒ team debugs heavily '
+                    f'with AI <i>or</i> AI-generated code needs many fixes.</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with col_breakdown:
+                section("AI vs human bug rate")
+                hrate = tq["human_bug_rate_pct"]
+                brate = tq["bot_bug_rate_pct"]
+                hmax = max(hrate or 0, brate or 0, 1)
+                def _qbar(label: str, val: float | None, color: str, count: int) -> str:
+                    if val is None:
+                        return (
+                            f'<div style="margin-bottom:12px;">'
+                            f'<div style="display:flex;justify-content:space-between;'
+                            f'font-size:13px;color:#475569;margin-bottom:4px;">'
+                            f'<span>{label}</span><span>—</span></div>'
+                            f'<div style="background:#f1f5f9;height:14px;'
+                            f'border-radius:7px;"></div>'
+                            f'<div style="color:#94a3b8;font-size:12px;margin-top:2px;">'
+                            f'no commits in window</div></div>'
+                        )
+                    pct = max(2, (val / hmax) * 100)
+                    return (
+                        f'<div style="margin-bottom:12px;">'
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'font-size:13px;color:#475569;margin-bottom:4px;">'
+                        f'<span>{label}</span>'
+                        f'<b style="color:#06091c;">{val:.1f}%</b></div>'
+                        f'<div style="background:#f1f5f9;height:14px;border-radius:7px;'
+                        f'overflow:hidden;">'
+                        f'<div style="background:{color};height:100%;width:{pct:.2f}%;'
+                        f'border-radius:7px;"></div></div>'
+                        f'<div style="color:#94a3b8;font-size:12px;margin-top:2px;">'
+                        f'{fmt_int(count)} commits in scope</div></div>'
+                    )
+                st.markdown(
+                    f'<div style="border:1px solid #e8edf3;border-radius:18px;'
+                    f'padding:22px;background:#fff;">'
+                    + _qbar("Humans", hrate, "#3b82f6", tq["human_commits"])
+                    + _qbar("Bots / agents", brate, "#a855f7", tq["bot_commits"])
+                    + '</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Per-author bug-fix breakdown
+            section("Per-author bug-fix breakdown")
+            quality_rows = get_quality_per_author(
+                period_days=filters.period_days, repos=repo_arg, limit=50,
+            )
+            if quality_rows:
+                qdf = pd.DataFrame(quality_rows)
+                def _qpct(v):
+                    if v is None or (isinstance(v, float) and v != v):
+                        return "—"
+                    return f"{v:.1f}%"
+                view_q = pd.DataFrame({
+                    "Name":         qdf["canonical_name"],
+                    "Kind":         qdf["is_bot"].map(lambda b: "🤖 bot" if b else "👤 human"),
+                    "Commits":      qdf["commits"].map(lambda v: fmt_int(int(v))),
+                    "Bug-fixes":    qdf["fixes"].map(lambda v: fmt_int(int(v))),
+                    "Reverts":      qdf["reverts"].map(lambda v: fmt_int(int(v))),
+                    "Features":     qdf["features"].map(lambda v: fmt_int(int(v))),
+                    "Refactors":    qdf["refactors"].map(lambda v: fmt_int(int(v))),
+                    "Tests":        qdf["tests"].map(lambda v: fmt_int(int(v))),
+                    "Bug rate":     qdf["bug_rate_pct"].map(_qpct),
+                    "Revert rate":  qdf["revert_rate_pct"].map(_qpct),
+                })
+                st.markdown(
+                    view_q.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No commits in the selected window / repos.")
+
+            # High-churn files: built at runtime from the granular CSV
+            # (git_commits collapses per-commit, so file-level rollup lives
+            # outside the DB).
+            churn = get_high_churn_files(
+                period_days=filters.period_days, repos=repo_arg, limit=15,
+            )
+            if churn:
+                section("High-churn files (problem areas)")
+                st.caption(
+                    "Files most often touched in the window — proxy for hot "
+                    "spots worth refactor attention or extra review."
+                )
+                cdf = pd.DataFrame(churn)
+                view_c = pd.DataFrame({
+                    "File":      cdf["file"],
+                    "Commits":   cdf["commits"].map(lambda v: fmt_int(int(v))),
+                    "+lines":    cdf["additions"].map(lambda v: fmt_int(int(v))),
+                    "-lines":    cdf["deletions"].map(lambda v: fmt_int(int(v))),
+                    "Repos":     cdf["repos"],
+                })
+                st.markdown(
+                    view_c.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
 
         # 2. Multi-select: which segment(s) to show as tables below
         section("Drill into segments")
