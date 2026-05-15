@@ -66,6 +66,8 @@ def init_schema(db_path: Path | str | None = None) -> None:
         _ensure_column(conn, "users", "organization_id", "INTEGER")
         _ensure_column(conn, "daily_costs", "organization_id", "INTEGER")
         _ensure_column(conn, "provider_totals", "organization_id", "INTEGER")
+        # git_authors table sometimes pre-exists with older columns
+        _ensure_column(conn, "git_authors", "loaded_at", "TEXT")
         conn.commit()
 
 

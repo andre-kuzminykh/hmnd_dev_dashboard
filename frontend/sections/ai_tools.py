@@ -99,9 +99,9 @@ def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class: str,
 section("AI Tools")
 
 (tab_overview, tab_claude, tab_cc, tab_gpt, tab_cursor,
- tab_models, tab_high) = st.tabs([
+ tab_models, tab_devs, tab_high) = st.tabs([
     "Overview", "Claude Users", "Claude Code", "ChatGPT",
-    "Cursor", "Models", "⚠ High Spenders",
+    "Cursor", "Models", "Devs (Git × AI)", "⚠ High Spenders",
 ])
 
 
@@ -1011,6 +1011,118 @@ def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
         share = (top3 / total * 100) if total else 0
         bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
     return bullets[:4]
+
+
+with tab_devs:
+    # Cross-source view (git × ai). Ignores Source filter by design — the
+    # whole point of this tab is to join all sources per person.
+    st.caption(
+        "ℹ️ Cross-source view — joins each person's git activity with their AI "
+        "spend / lines / completions. Source filter is ignored by design."
+    )
+
+    # Period picker honored — re-uses top filter.
+    # Plus a repo multi-select if the user dropped the granular per-commit
+    # CSV (`git_commit_file_stats.csv`) and we built per-repo rollups.
+    from backend.services.git_correlation import (
+        get_git_ai_correlation, get_segment_counts,
+    )
+    from data.sources.git_csv import list_known_repos
+    _known_repos = list_known_repos()
+    selected_repos: list[str] = []
+    if _known_repos:
+        selected_repos = st.multiselect(
+            "Repositories",
+            options=_known_repos,
+            default=_known_repos,
+            help="Narrow git-side stats to specific repos. "
+                 "Clear all to see only AI activity.",
+        )
+    devs = get_git_ai_correlation(
+        period_days=filters.period_days,
+        repos=selected_repos if (selected_repos and _known_repos) else None,
+    )
+    if not devs:
+        st.info(
+            "No git authors loaded yet. Drop a `git_authors_YYYYMMDD.csv` into "
+            "`sources/` (columns: git_author_name, git_author_emails, repos, "
+            "commits, additions, deletions, net_lines, first_commit, last_commit) "
+            "or run the extraction script described in docs/."
+        )
+    else:
+        # Top-level KPIs: counts + team-wide AI share.
+        counts: dict[str, int] = {}
+        for r in devs:
+            counts[r["segment"]] = counts.get(r["segment"], 0) + 1
+        total_additions = sum(r["git_additions"] for r in devs) or 0
+        total_ai_lines = sum(r["ai_lines"] for r in devs) or 0
+        team_ai_share = (
+            round(min(total_ai_lines, total_additions) / total_additions * 100, 1)
+            if total_additions > 0 else 0.0
+        )
+        kpi_row([
+            {"label": "Tracked devs",  "value": str(len(devs))},
+            {"label": "AI + Git",      "value": str(sum(
+                1 for r in devs if r["ai_cost_usd"] > 0 and r["commits"] > 0
+            ))},
+            {"label": "Team AI share", "value": f"{team_ai_share}%"},
+            {"label": "Git only",      "value": str(counts.get("GIT_ACTIVE_BUT_NO_AI", 0))},
+        ])
+
+        section("Segment distribution")
+        seg_colors = {
+            "HIGH_AI_SPEND_HIGH_GIT_OUTPUT": "#10b981",
+            "HIGH_AI_SPEND_LOW_GIT_OUTPUT":  "#ef4444",
+            "HIGH_AI_LINES_LOW_COMMITS":     "#f59e0b",
+            "LOW_AI_SPEND_HIGH_GIT_OUTPUT":  "#6366f1",
+            "AI_ACTIVE_BUT_NO_GIT":          "#94a3b8",
+            "GIT_ACTIVE_BUT_NO_AI":          "#94a3b8",
+            "NORMAL":                        "#cbd5e1",
+        }
+        seg_html = []
+        for name, color in seg_colors.items():
+            n = counts.get(name, 0)
+            if n == 0:
+                continue
+            seg_html.append(
+                f'<div style="display:flex;align-items:center;gap:10px;'
+                f'margin-bottom:6px;">'
+                f'<div style="width:10px;height:10px;border-radius:2px;'
+                f'background:{color};"></div>'
+                f'<div style="flex:1;font-size:13px;color:#06091c;">{name}</div>'
+                f'<div style="font-weight:600;color:#06091c;">{n}</div>'
+                f'</div>'
+            )
+        st.markdown("".join(seg_html), unsafe_allow_html=True)
+
+        section("Per-developer table")
+        df = pd.DataFrame(devs)
+        # Format cost columns with $ and rounding
+        def _money(v):
+            return fmt_money(v) if v is not None and v > 0 else "—"
+        def _num(v):
+            return fmt_int(int(v)) if v else "0"
+        def _pct(v):
+            return f"{v:.0f}%" if v is not None else "—"
+        view = pd.DataFrame({
+            "Name":           df["canonical_name"],
+            "Segment":        df["segment"],
+            "AI cost":        df["ai_cost_usd"].map(_money),
+            "AI lines":       df["ai_lines"].map(_num),
+            "Commits":        df["commits"].map(_num),
+            "Git +lines":     df["git_additions"].map(_num),
+            "Git -lines":     df["git_deletions"].map(_num),
+            "AI share %":     df["ai_share_of_additions"].map(_pct),
+            "$/commit":       df["cost_per_commit"].map(_money),
+            "$/1k git adds":  df["cost_per_1000_git_additions"].map(_money),
+            "ailines/commit": df["ai_lines_per_commit"].map(
+                lambda v: f"{v:.0f}" if v is not None else "—"
+            ),
+        })
+        st.markdown(
+            view.to_html(escape=False, index=False, classes="hmnd-table"),
+            unsafe_allow_html=True,
+        )
 
 
 with tab_high:

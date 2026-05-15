@@ -159,5 +159,21 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)
         out["reports"]["github"] = asdict(c.sync(period_days))
 
+    # Git authors CSV — same drop-the-file pattern as the JSON sources.
+    # The user runs `analysis/git_authors.csv` extraction script outside
+    # the dashboard, then drops the file into sources/ (or repo root).
+    from data.sources.git_csv import (
+        latest_git_authors_file, latest_git_commits_file,
+        load_git_authors_csv, load_git_commits_csv,
+    )
+    git_csv = latest_git_authors_file()
+    if git_csv is not None:
+        out["reports"]["git_authors"] = load_git_authors_csv(git_csv.path)
+    # Granular per-(author, repo) rollup if the user also dropped the
+    # raw per-commit-file CSV (`analysis/git_commit_file_stats.csv`).
+    commits_csv = latest_git_commits_file()
+    if commits_csv is not None:
+        out["reports"]["git_commits"] = load_git_commits_csv(commits_csv.path)
+
     out["daily_costs_refreshed"] = _refresh_daily_costs(period_days)
     return out

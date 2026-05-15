@@ -190,3 +190,39 @@ CREATE TABLE IF NOT EXISTS provider_totals (
     UNIQUE(provider_id, day)
 );
 CREATE INDEX IF NOT EXISTS ix_provider_totals_day ON provider_totals(day);
+
+-- Per-author git-activity rollup loaded from sources/git_authors_*.csv.
+-- One row per unique git author (name) with aggregated counts across all
+-- repos in the input. user_id links to the canonical AI-side user when
+-- email-matched, else NULL (= git-only contributor).
+CREATE TABLE IF NOT EXISTS git_authors (
+    id              INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL UNIQUE,
+    emails          TEXT,                  -- ';'-separated
+    repos           TEXT,                  -- ';'-separated
+    commits         INTEGER NOT NULL DEFAULT 0,
+    additions       INTEGER NOT NULL DEFAULT 0,
+    deletions       INTEGER NOT NULL DEFAULT 0,
+    first_commit    TEXT,
+    last_commit     TEXT,
+    user_id         INTEGER REFERENCES users(id),
+    loaded_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS ix_git_authors_user ON git_authors(user_id);
+
+-- Per (author, repo) rollup — built from the raw per-commit-file CSV.
+-- Lets the Devs tab filter by repository.
+CREATE TABLE IF NOT EXISTS git_author_repo_stats (
+    id              INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    repo            TEXT NOT NULL,
+    commits         INTEGER NOT NULL DEFAULT 0,
+    additions       INTEGER NOT NULL DEFAULT 0,
+    deletions       INTEGER NOT NULL DEFAULT 0,
+    first_commit    TEXT,
+    last_commit     TEXT,
+    user_id         INTEGER REFERENCES users(id),
+    UNIQUE(name, repo)
+);
+CREATE INDEX IF NOT EXISTS ix_garstats_repo ON git_author_repo_stats(repo);
+CREATE INDEX IF NOT EXISTS ix_garstats_user ON git_author_repo_stats(user_id);
