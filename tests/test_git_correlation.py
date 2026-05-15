@@ -14,6 +14,8 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timedelta
 
+import pytest
+
 
 def _write_authors_csv(path, rows):
     with open(path, "w", newline="", encoding="utf-8") as f:
@@ -236,6 +238,82 @@ def test_segments_classify_into_seven_buckets(tmp_db, tmp_path):
     }
     for r in devs:
         assert r["segment"] in valid_segments, f"{r['canonical_name']}: bad segment {r['segment']}"
+
+
+def test_repo_filter_changes_correlation_totals(tmp_db, tmp_path):
+    """Selecting 'hmnd' must give different totals than selecting both
+    'hmnd' and 'hmnd-cloud'. Pinpoints the UI bug user reported:
+    'когда репозитории тыкаю - то ничего не меняется'.
+    """
+    csv_path = tmp_path / "git_commit_file_stats.csv"
+    _write_commits_csv(csv_path, [
+        ("hmnd",       "s1", "Alice", "a@x", "2026-05-01T00:00:00", "Alice", "a@x", "2026-05-01T00:00:00", "f", "a.py", "100", "10", "False"),
+        ("hmnd-cloud", "s2", "Alice", "a@x", "2026-05-02T00:00:00", "Alice", "a@x", "2026-05-02T00:00:00", "f", "b.py", "900", "90", "False"),
+        ("hmnd-sim",   "s3", "Alice", "a@x", "2026-05-03T00:00:00", "Alice", "a@x", "2026-05-03T00:00:00", "f", "c.py", "200", "20", "False"),
+    ])
+    from data.sources.git_csv import load_git_commits_csv
+    load_git_commits_csv(csv_path)
+
+    from backend.services.git_correlation import get_git_ai_correlation
+    hmnd = get_git_ai_correlation(period_days=30, repos=["hmnd"])
+    hmnd_cloud = get_git_ai_correlation(period_days=30, repos=["hmnd", "hmnd-cloud"])
+    all_three = get_git_ai_correlation(period_days=30, repos=["hmnd", "hmnd-cloud", "hmnd-sim"])
+
+    a_hmnd = next(r for r in hmnd if r["git_author_name"] == "Alice")
+    a_two = next(r for r in hmnd_cloud if r["git_author_name"] == "Alice")
+    a_all = next(r for r in all_three if r["git_author_name"] == "Alice")
+    assert a_hmnd["git_additions"] == 100
+    assert a_two["git_additions"] == 1000
+    assert a_all["git_additions"] == 1200
+    assert a_hmnd["git_additions"] != a_two["git_additions"] != a_all["git_additions"]
+
+
+def test_bot_author_marked_and_segmented(tmp_db, tmp_path):
+    """Authors like 'github-actions[bot]', 'Cursor Agent' get is_bot=True
+    and segment 'BOT_AUTOMATION'; their additions don't poison the human
+    quartile thresholds.
+    """
+    csv_path = tmp_path / "git_authors.csv"
+    _write_authors_csv(csv_path, [
+        ("github-actions[bot]", "actions@github.com", "hmnd", 500, 50000, 0, 50000, "2026-04-01", "2026-05-10"),
+        ("Cursor Agent",        "agent@cursor.sh",    "hmnd", 100, 10000, 0, 10000, "2026-04-01", "2026-05-10"),
+        ("Alice",               "alice@x",            "hmnd",  10,   200, 50,  150, "2026-04-01", "2026-05-10"),
+    ])
+    from data.sources.git_csv import load_git_authors_csv
+    load_git_authors_csv(csv_path)
+
+    from backend.services.git_correlation import get_git_ai_correlation
+    devs = get_git_ai_correlation(period_days=30)
+    by_name = {r["git_author_name"]: r for r in devs}
+    assert by_name["github-actions[bot]"]["is_bot"] is True
+    assert by_name["github-actions[bot]"]["segment"] == "BOT_AUTOMATION"
+    assert by_name["Cursor Agent"]["is_bot"] is True
+    assert by_name["Cursor Agent"]["segment"] == "BOT_AUTOMATION"
+    assert by_name["Alice"]["is_bot"] is False
+    assert by_name["Alice"]["segment"] != "BOT_AUTOMATION"
+
+
+def test_team_ai_share_includes_bots(tmp_db, tmp_path):
+    """get_team_ai_share treats every bot addition as 100% AI."""
+    csv_path = tmp_path / "git_authors.csv"
+    _write_authors_csv(csv_path, [
+        ("github-actions[bot]", "ga@github.com", "hmnd", 100, 2000, 0, 2000, "2026-04-01", "2026-05-10"),
+        ("Alice",               "alice@x",       "hmnd",  10, 1000, 0, 1000, "2026-04-01", "2026-05-10"),
+    ])
+    from data.sources.git_csv import load_git_authors_csv
+    load_git_authors_csv(csv_path)
+
+    from backend.services.git_correlation import get_team_ai_share
+    s = get_team_ai_share(period_days=30)
+    assert s["total_additions"] == 3000  # 2000 bot + 1000 human
+    assert s["bot_additions"] == 2000
+    assert s["human_additions"] == 1000
+    # No Cursor leaderboard hit for Alice so human_ai_lines = 0
+    assert s["human_ai_lines"] == 0
+    # ai_lines_total = bot (2000) + human_ai (0) = 2000
+    assert s["ai_lines_total"] == 2000
+    # ai_share = 2000 / 3000 = 66.7%
+    assert s["ai_share_pct"] == pytest.approx(66.7, abs=0.1)
 
 
 def test_ai_share_percent(tmp_db, tmp_path):

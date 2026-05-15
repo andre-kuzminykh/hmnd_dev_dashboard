@@ -1035,6 +1035,7 @@ with tab_devs:
             "Repositories",
             options=_known_repos,
             default=_known_repos,
+            key="devs_repos_filter",
             help="Narrow git-side stats to specific repos. "
                  "Clear all to see only AI activity.",
         )
@@ -1074,61 +1075,131 @@ with tab_devs:
             f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines)."
         )
 
-        section("Segment distribution")
-        seg_colors = {
-            "HIGH_AI_SPEND_HIGH_GIT_OUTPUT": "#10b981",
-            "HIGH_AI_SPEND_LOW_GIT_OUTPUT":  "#ef4444",
-            "HIGH_AI_LINES_LOW_COMMITS":     "#f59e0b",
-            "LOW_AI_SPEND_HIGH_GIT_OUTPUT":  "#6366f1",
-            "AI_ACTIVE_BUT_NO_GIT":          "#94a3b8",
-            "GIT_ACTIVE_BUT_NO_AI":          "#94a3b8",
-            "BOT_AUTOMATION":                "#a855f7",
-            "NORMAL":                        "#cbd5e1",
-        }
-        seg_html = []
-        for name, color in seg_colors.items():
-            n = counts.get(name, 0)
-            if n == 0:
-                continue
-            seg_html.append(
-                f'<div style="display:flex;align-items:center;gap:10px;'
-                f'margin-bottom:6px;">'
-                f'<div style="width:10px;height:10px;border-radius:2px;'
-                f'background:{color};"></div>'
-                f'<div style="flex:1;font-size:13px;color:#06091c;">{name}</div>'
-                f'<div style="font-weight:600;color:#06091c;">{n}</div>'
-                f'</div>'
-            )
-        st.markdown("".join(seg_html), unsafe_allow_html=True)
+        # Segment colours + human-readable labels (ordered by "interestingness"
+        # so the bar reads left→right from most-positive to most-passive).
+        SEGMENT_META = [
+            ("HIGH_AI_SPEND_HIGH_GIT_OUTPUT", "High AI · High Output",   "#10b981"),  # green
+            ("LOW_AI_SPEND_HIGH_GIT_OUTPUT",  "Low AI · High Output",    "#3b82f6"),  # blue
+            ("HIGH_AI_LINES_LOW_COMMITS",     "Lots of AI lines, few commits", "#f59e0b"),  # amber
+            ("HIGH_AI_SPEND_LOW_GIT_OUTPUT",  "High AI · Low Output",    "#ef4444"),  # red
+            ("BOT_AUTOMATION",                "Bots / Agents",           "#a855f7"),  # purple
+            ("AI_ACTIVE_BUT_NO_GIT",          "AI active, no git",       "#94a3b8"),  # gray
+            ("GIT_ACTIVE_BUT_NO_AI",          "Git active, no AI",       "#cbd5e1"),  # light gray
+            ("NORMAL",                        "Normal",                  "#e2e8f0"),  # near white
+        ]
 
-        section("Per-developer table")
-        df = pd.DataFrame(devs)
-        # Format cost columns with $ and rounding
+        # 1. Stacked-bar segment distribution (mirrors Spend Breakdown style)
+        section("Segment distribution")
+        total_devs = len(devs)
+        present = [(s, lbl, c) for s, lbl, c in SEGMENT_META if counts.get(s, 0) > 0]
+        bar_segments_html = []
+        legend_html = []
+        for seg_id, label, color in present:
+            n = counts[seg_id]
+            pct = n / total_devs * 100 if total_devs else 0
+            # Show the percentage inside the bar only when there's room for it
+            # (very thin segments would just clip the text).
+            inside = f'{pct:.0f}%' if pct >= 5 else ''
+            bar_segments_html.append(
+                f'<div title="{label}: {n} ({pct:.1f}%)" '
+                f'style="background:{color};width:{pct:.2f}%;display:flex;'
+                f'align-items:center;justify-content:center;color:white;'
+                f'font-weight:600;font-size:12px;min-width:0;overflow:hidden;'
+                f'white-space:nowrap;">{inside}</div>'
+            )
+            legend_html.append(
+                f'<span style="display:inline-flex;align-items:center;gap:6px;'
+                f'margin-right:18px;font-size:13px;color:#475569;">'
+                f'<span style="width:10px;height:10px;border-radius:3px;'
+                f'background:{color};"></span>'
+                f'<span style="color:#06091c;">{label}</span> '
+                f'<b style="color:#06091c;">{n}</b> '
+                f'<span style="color:#94a3b8;">({pct:.1f}%)</span>'
+                f'</span>'
+            )
+        st.markdown(
+            f'<div style="border:1px solid #e8edf3;border-radius:18px;'
+            f'padding:18px 22px;background:#fff;margin-bottom:14px;">'
+            f'<div style="display:flex;justify-content:space-between;'
+            f'align-items:center;margin-bottom:10px;">'
+            f'<div style="font-weight:600;color:#06091c;">Distribution</div>'
+            f'<div style="color:#64748b;font-size:12px;">Total '
+            f'<b style="color:#06091c">{total_devs} devs</b></div>'
+            f'</div>'
+            f'<div style="display:flex;height:36px;border-radius:8px;'
+            f'overflow:hidden;background:#f1f5f9;">{"".join(bar_segments_html)}</div>'
+            f'<div style="margin-top:12px;display:flex;flex-wrap:wrap;'
+            f'gap:6px 0;">{"".join(legend_html)}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # 2. Multi-select: which segment(s) to show as tables below
+        section("Drill into segments")
+        seg_options = [s for s, _, _ in SEGMENT_META if counts.get(s, 0) > 0]
+        seg_labels_map = {s: lbl for s, lbl, _ in SEGMENT_META}
+        seg_colors_map = {s: c for s, _, c in SEGMENT_META}
+        picked_segments = st.multiselect(
+            "Show tables for:",
+            options=seg_options,
+            default=seg_options,
+            format_func=lambda s: f"{seg_labels_map[s]}  ({counts.get(s, 0)})",
+            key="devs_segments_filter",
+            help="Pick one or more segments to render their developers as "
+                 "individual tables.",
+        )
+
+        # 3. Format helpers + per-segment tables
         def _money(v):
             return fmt_money(v) if v is not None and v > 0 else "—"
         def _num(v):
             return fmt_int(int(v)) if v else "0"
         def _pct(v):
             return f"{v:.0f}%" if v is not None else "—"
-        view = pd.DataFrame({
-            "Name":           df["canonical_name"],
-            "Segment":        df["segment"],
-            "AI cost":        df["ai_cost_usd"].map(_money),
-            "AI lines":       df["ai_lines"].map(_num),
-            "Commits":        df["commits"].map(_num),
-            "Git +lines":     df["git_additions"].map(_num),
-            "Git -lines":     df["git_deletions"].map(_num),
-            "AI share %":     df["ai_share_of_additions"].map(_pct),
-            "$/commit":       df["cost_per_commit"].map(_money),
-            "$/1k git adds":  df["cost_per_1000_git_additions"].map(_money),
-            "ailines/commit": df["ai_lines_per_commit"].map(
-                lambda v: f"{v:.0f}" if v is not None else "—"
-            ),
-        })
-        st.markdown(
-            view.to_html(escape=False, index=False, classes="hmnd-table"),
-            unsafe_allow_html=True,
-        )
+
+        df_all = pd.DataFrame(devs)
+        if df_all.empty or not picked_segments:
+            st.caption("No segments selected — pick at least one above.")
+        else:
+            for seg_id in picked_segments:
+                seg_devs = [r for r in devs if r["segment"] == seg_id]
+                if not seg_devs:
+                    continue
+                color = seg_colors_map[seg_id]
+                label = seg_labels_map[seg_id]
+                # Colored header
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;'
+                    f'margin:20px 0 8px 0;border-left:4px solid {color};'
+                    f'padding:6px 12px;background:{color}1a;border-radius:0 8px 8px 0;">'
+                    f'<span style="font-weight:600;color:#06091c;font-size:15px;">'
+                    f'{label}</span>'
+                    f'<span style="color:#64748b;font-size:13px;">'
+                    f'{len(seg_devs)} devs · '
+                    f'{len(seg_devs)/total_devs*100:.1f}% of team</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                seg_df = pd.DataFrame(seg_devs)
+                view = pd.DataFrame({
+                    "Name":           seg_df["canonical_name"],
+                    "AI cost":        seg_df["ai_cost_usd"].map(_money),
+                    "AI lines":       seg_df["ai_lines"].map(_num),
+                    "Commits":        seg_df["commits"].map(_num),
+                    "Git +lines":     seg_df["git_additions"].map(_num),
+                    "Git -lines":     seg_df["git_deletions"].map(_num),
+                    "AI share %":     seg_df["ai_share_of_additions"].map(_pct),
+                    "$/commit":       seg_df["cost_per_commit"].map(_money),
+                    "$/1k git adds":  seg_df["cost_per_1000_git_additions"].map(_money),
+                    "ailines/commit": seg_df["ai_lines_per_commit"].map(
+                        lambda v: f"{v:.0f}" if v is not None else "—"
+                    ),
+                    "Repos":          seg_df["repos"],
+                })
+                st.markdown(
+                    view.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
 
 
 with tab_high:
