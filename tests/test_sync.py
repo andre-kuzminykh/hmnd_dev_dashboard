@@ -7,9 +7,10 @@ def test_run_sync_mock_no_keys(tmp_db, monkeypatch, tmp_path):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("HMND_GITHUB_ENABLED", raising=False)
-    # Point cursor exports at an empty dir so we fall through to the mock
-    # path (otherwise the orchestrator picks up real CSV files at repo root).
+    # Point cursor exports + sources at an empty dir so we fall through to
+    # the mock path (otherwise the orchestrator picks up real files at repo root).
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
 
     from importlib import reload
     import backend.config as cfgmod

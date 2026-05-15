@@ -80,10 +80,15 @@ def _to_float(v: Any) -> float:
 
 
 def load_user_leaderboard() -> list[dict[str, Any]]:
-    """Combine User_Leaderboard_*.csv files; later periods override earlier
-    by (email).
+    """Combine all sources. Priority: JSON (sources/Cursor_*.json) > CSV.
+
+    JSON overrides because vendors usually export it as the canonical
+    weekly snapshot and CSVs can be stale. Within each source, later
+    period overrides earlier per email.
     """
     by_email: dict[str, dict[str, Any]] = {}
+
+    # 1. CSVs first (lowest priority, may be overwritten by JSON below).
     for period, path in _files("User_Leaderboard_*.csv"):
         with path.open() as f:
             for row in csv.DictReader(f):
@@ -102,6 +107,35 @@ def load_user_leaderboard() -> list[dict[str, Any]]:
                     "period_start": period.start.isoformat(),
                     "period_end": period.end.isoformat(),
                 }
+
+    # 2. JSON sources/Cursor_*.json — higher priority than CSV, override
+    #    per email.
+    try:
+        from data.sources.cursor_json import find_cursor_files, load_cursor_json
+        for sf in find_cursor_files():
+            doc = load_cursor_json(sf.path)
+            ps = doc.get("period_start") or ""
+            pe = doc.get("period_end") or ""
+            for u in doc.get("users", []):
+                email = u.get("email") or ""
+                if not email:
+                    continue
+                by_email[email] = {
+                    "email": email,
+                    "name": u.get("name") or email.split("@")[0],
+                    "agent_completions": int(u.get("agent_completions") or 0),
+                    "agent_lines": int(u.get("agent_lines") or 0),
+                    "tab_completions": int(u.get("tab_completions") or 0),
+                    "tab_lines": int(u.get("tab_lines") or 0),
+                    "ai_lines": int(u.get("ai_lines") or 0),
+                    "favorite_model": (u.get("favorite_model") or "").strip(),
+                    "period_start": ps,
+                    "period_end": pe,
+                }
+    except Exception:
+        # Sources module / files absent — fall back to CSV-only behaviour.
+        pass
+
     return sorted(by_email.values(), key=lambda r: r["ai_lines"], reverse=True)
 
 

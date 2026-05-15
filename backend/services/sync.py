@@ -30,6 +30,47 @@ def _ensure_organization(provider: str, label: str) -> int:
     return row["id"]
 
 
+def _sync_anthropic(cfg, period_days: int) -> dict[str, Any]:
+    """Anthropic decision tree (most authoritative first):
+
+    1. sources/Anthropic_*.json  → load JSON (FR-14.3.1.1)
+    2. cursor leaderboard        → derive Claude usage from Cursor
+    3. HMND_ANTHROPIC_MOCK=true  → synthetic random demo data
+    4. real Admin API            → AnthropicConnector
+    """
+    # 1. JSON sources win
+    from data.sources.anthropic_json import latest_anthropic_file, load_anthropic_json
+    anthro_file = latest_anthropic_file()
+    if anthro_file is not None:
+        from data.anthropic_mock import purge_anthropic_mock
+        purge_anthropic_mock()
+        return load_anthropic_json(anthro_file.path)
+
+    # 2. Cursor-derived
+    from backend.services.cursor_analytics import claude_users as _cu
+    cursor_rows = _cu()
+    if cursor_rows:
+        from data.anthropic_mock import purge_anthropic_mock
+        from data.cursor_to_anthropic import derive_anthropic_from_cursor
+        purge_anthropic_mock()
+        return derive_anthropic_from_cursor()
+
+    # 3. Mock
+    if cfg.anthropic_mock:
+        from data.anthropic_mock import synth_anthropic
+        return {"provider": "anthropic", "mode": "mock", **synth_anthropic(period_days)}
+
+    # 4. Real Admin API
+    from data.anthropic_mock import purge_anthropic_mock
+    purged = purge_anthropic_mock()
+    c = AnthropicConnector(api_key=cfg.anthropic_key, mock=not cfg.anthropic_key)
+    report = c.sync(period_days)
+    report_dict = asdict(report)
+    if any(v for v in purged.values()):
+        report_dict["purged_mock"] = purged
+    return report_dict
+
+
 def _refresh_daily_costs(period_days: int) -> int:
     """Wipe daily_costs in the period and re-aggregate from usage_events.
 
@@ -78,38 +119,7 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
             out["reports"]["openai"] = asdict(c.sync(period_days))
 
     if "anthropic" in providers:
-        # Decision tree:
-        #   1) Cursor CSV exports present → use them as the truth for Claude.
-        #   2) HMND_ANTHROPIC_MOCK=true    → synthetic random demo data.
-        #   3) Otherwise                   → call the real Admin API.
-        from backend.services.cursor_analytics import claude_users as _cu
-        cursor_rows = _cu()
-        if cursor_rows:
-            from data.anthropic_mock import purge_anthropic_mock
-            from data.cursor_to_anthropic import derive_anthropic_from_cursor
-
-            # Drop any previously-synthesised mock rows so the dashboard is
-            # consistent regardless of how the previous sync ran.
-            purge_anthropic_mock()
-            out["reports"]["anthropic"] = derive_anthropic_from_cursor()
-        elif cfg.anthropic_mock:
-            from data.anthropic_mock import synth_anthropic
-
-            out["reports"]["anthropic"] = {
-                "provider": "anthropic",
-                "mode": "mock",
-                **synth_anthropic(period_days),
-            }
-        else:
-            from data.anthropic_mock import purge_anthropic_mock
-
-            purged = purge_anthropic_mock()
-            c = AnthropicConnector(api_key=cfg.anthropic_key, mock=not cfg.anthropic_key)
-            report = c.sync(period_days)
-            report_dict = asdict(report)
-            if any(v for v in purged.values()):
-                report_dict["purged_mock"] = purged
-            out["reports"]["anthropic"] = report_dict
+        out["reports"]["anthropic"] = _sync_anthropic(cfg, period_days)
 
     if "github" in providers and cfg.github_enabled:
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)

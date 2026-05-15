@@ -484,7 +484,90 @@ Then фильтр применяется ко всем расчётам
 
 ---
 
-## Сводная карта тестов → требования
+## F-14 — Multi-source data ingestion (API + JSON)
+
+**Цель:** Дашборд должен получать данные из двух типов источников:
+* **API push** — там где у нас есть admin-ключ (OpenAI, в будущем Anthropic Admin API).
+* **JSON pull из репо** — там где доступа к API нет: пользователь кладёт файл `<Provider>_YYYYMMDD.json` в `sources/`, дашборд **сам** подхватывает самый свежий и обновляет данные.
+
+### US-14.1 — JSON files как авторитетный источник
+
+> *As a* admin without provider Admin API access
+> *I want* положить JSON-файл с user/spend разбивкой в репо
+> *so that* дашборд сразу покажет реальные данные без коммита кода.
+
+#### SC-14.1.1 — Anthropic JSON
+
+```gherkin
+Given в sources/ лежит Anthropic_20260515.json по схеме F-14.1.1
+When дашборд / sync рендерится
+Then в usage_events создаются строки для каждого user × product (chat / claude_code / cowork_other)
+And cost_usd распределяется пропорционально из products[].spend_usd
+And models таблица обновляется списком из models[]
+```
+
+**Требования:**
+
+- **FR-14.1.1.1** — Схема Anthropic JSON документирована в `docs/SOURCES_SCHEMA.md`. Обязательные ключи: `period_start`, `period_end`, `users[]`, `products{}`, `models[]`.
+- **FR-14.1.1.2** — Loader `load_anthropic_json(path)` идемпотентен — DELETE-then-INSERT per period.
+- **FR-14.1.1.3** — Если для одного провайдера в `sources/` несколько файлов, побеждает **самый свежий по дате в имени**.
+- **FR-14.1.1.4** — Loader auto-discovery: pattern `Anthropic*_YYYYMMDD.json` (с трейлинговой `s` тоже принимается — `Anthropics_*`).
+
+#### SC-14.1.2 — Cursor JSON
+
+```gherkin
+Given Cursor_20260515.json по схеме F-14.1.2
+When дашборд читает sources
+Then leaderboard данные подменяют CSV из data_ne/ (JSON priority)
+```
+
+**Требования:**
+
+- **FR-14.1.2.1** — Loader `load_cursor_json(path)` принимает users + models + summary.
+- **FR-14.1.2.2** — Если JSON и CSV конфликтуют — JSON приоритетнее (свежее и финальный snapshot вендора).
+
+### US-14.2 — API источник: OpenAI multi-org
+
+> *As an* admin с двумя OpenAI организациями (Artem + Humanoid)
+> *I want* положить оба admin-ключа в `OPENAI_API_KEYS` и видеть данные обеих org-ов в одном дашборде
+> *so that* не переключаться между источниками вручную.
+
+#### SC-14.2.1 — Multi-org sync
+
+```gherkin
+Given OPENAI_API_KEYS = [{label:Artem,key:...},{label:Humanoid,key:...}]
+When run_sync()
+Then для каждого ключа создаётся локальная organizations строка
+And usage_events помечаются organization_id для filter по org
+```
+
+**Требования:**
+
+- **FR-14.2.1.1** — Loader пропускает Org admin-key (`sk-admin-...`); project keys (`sk-proj-...`) идут в отдельный `OPENAI_PROJECT_KEYS` (inventory only).
+- **FR-14.2.1.2** — `organizations` таблица + `organization_id` колонка на `usage_events / api_keys / users`.
+- **FR-14.2.1.3** — UI фильтр Org позволяет смотреть данные одной org или All.
+
+### US-14.3 — Приоритет JSON over API при дублировании
+
+> *As an* admin
+> *I want* при наличии JSON-файла и API данных за тот же период видеть JSON
+> *so that* JSON всегда отражает финальное состояние (вендор UI), а API может отставать.
+
+#### SC-14.3.1 — JSON для Anthropic вместо cursor-derived
+
+```gherkin
+Given sources/Anthropic_20260515.json существует
+And data/cursor_to_anthropic.derive_anthropic_from_cursor() даёт другие цифры
+When run_sync()
+Then JSON loader выполняется первым
+And cursor-derived skipped с пометкой "skipped: JSON source present"
+```
+
+**Требования:**
+
+- **FR-14.3.1.1** — В run_sync для каждого провайдера: scan `sources/`, если JSON найден — используй его и пропусти fallback path.
+
+
 
 Каждый тест в `tests/` именуется `test_<req_id_lower>` и проверяет ровно одно требование.
 
@@ -522,6 +605,13 @@ Then фильтр применяется ко всем расчётам
 | `tests/test_filters.py::test_fr_13_1_2_4_month_to_date` | FR-13.1.2.4 |
 | `tests/test_filters.py::test_fr_13_2_1_1_api_key_filter_in_costs` | FR-13.2.1.1 |
 | `tests/test_filters.py::test_fr_13_3_1_2_project_filter_field` | FR-13.3.1.2 |
+| `tests/test_sources_anthropic.py::test_fr_14_1_1_1_schema_required_keys` | FR-14.1.1.1 |
+| `tests/test_sources_anthropic.py::test_fr_14_1_1_2_idempotent` | FR-14.1.1.2 |
+| `tests/test_sources_anthropic.py::test_fr_14_1_1_3_latest_file_wins` | FR-14.1.1.3 |
+| `tests/test_sources_anthropic.py::test_fr_14_1_1_4_filename_pattern` | FR-14.1.1.4 |
+| `tests/test_sources_cursor.py::test_fr_14_1_2_1_shape` | FR-14.1.2.1 |
+| `tests/test_sources_cursor.py::test_fr_14_1_2_2_json_over_csv_priority` | FR-14.1.2.2 |
+| `tests/test_sources_anthropic.py::test_fr_14_3_1_1_json_wins_over_cursor_derived` | FR-14.3.1.1 |
 
 ## Архитектура слоёв
 
