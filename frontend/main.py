@@ -19,7 +19,7 @@ import streamlit as st
 from backend.config import load_config
 from data.db import DB_PATH, init_schema
 from data.seed import seed
-from frontend.theme import inject, render_brand
+from frontend.theme import inject
 
 
 st.set_page_config(
@@ -55,10 +55,8 @@ def _bootstrap_db() -> None:
 
 _bootstrap_db()
 
-# HUMANOID brand at the top of the page (was in the sidebar before).
-render_brand()
-
 # Render the single page directly — no navigation, no sidebar.
+# Brand/title is rendered inline by overview.py (logo + "AIOps Dashboard").
 # overview.py renders the Executive Overview block (hero + freshness chips +
 # filters bar + KPI cards + spend-over-time chart). Then ai_tools.py is
 # sourced into the SAME globals dict, picking up the `filters` variable

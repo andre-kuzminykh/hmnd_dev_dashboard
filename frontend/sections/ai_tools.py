@@ -266,12 +266,9 @@ with tab_claude:
             len(claude_rows) / max(len(all_rows), 1) * 100 if all_rows else 0.0
         )
         kpi_row([
-            {"label": "Claude users",       "value": str(len(claude_rows)),
-             "note": f"{share_pct:.0f}% of team"},
+            {"label": "Claude users",       "value": str(len(claude_rows))},
             {"label": "Total AI lines",     "value": fmt_int(total_ai_lines)},
             {"label": "Total completions",  "value": fmt_int(total_completions)},
-            {"label": "Period",
-             "value": claude_rows[0]["period_start"][5:] + " — " + claude_rows[0]["period_end"][5:]},
         ])
 
         c1, c2 = st.columns(2)
@@ -352,13 +349,10 @@ with tab_cc:
     cc_share = (total_spend / all_anthropic_spend * 100) if all_anthropic_spend > 0 else 0.0
 
     kpi_row([
-        {"label": "CC Requests", "value": _fmt_int(total_reqs),
-         "note": f"{len(cc_rows)} users"},
-        {"label": "CC Spend", "value": fmt_money(total_spend),
-         "note": f"{cc_share:.1f}% of Claude total"},
+        {"label": "CC Requests", "value": _fmt_int(total_reqs)},
+        {"label": "CC Spend", "value": fmt_money(total_spend)},
         {"label": "Top Spender",
-         "value": fmt_money(top_spender['spend']) if top_spender else "—",
-         "note": (top_spender['name'] or top_spender['email'].split('@')[0])[:24] if top_spender else "—"},
+         "value": fmt_money(top_spender['spend']) if top_spender else "—"},
         {"label": "Avg / user",
          "value": fmt_money(total_spend / max(len(cc_rows), 1)) if cc_rows else "—"},
     ])
@@ -391,10 +385,10 @@ with tab_gpt:
     total_spend = sum(r["cost"] for r in rows)
     high = [r for r in rows if r["cost"] >= 200]
     kpi_row([
-        {"label": "Active Users",   "value": str(len(rows)), "note": "with API activity"},
+        {"label": "Active Users",   "value": str(len(rows))},
         {"label": "Total Messages", "value": _fmt_int(total_msgs)},
         {"label": "Total Spend",    "value": fmt_money(total_spend)},
-        {"label": "High Spenders",  "value": str(len(high)), "note": "≥ $200"},
+        {"label": "High Spenders",  "value": str(len(high))},
     ])
 
     section("All ChatGPT Users")
@@ -458,11 +452,8 @@ with tab_cursor:
         kpi_row([
             {"label": "Active developers", "value": str(active_devs)},
             {"label": "Total AI lines",    "value": fmt_int(total_ai_lines)},
-            {"label": "Prefer Claude",     "value": f"{prefer_claude} devs",
-             "note": f"vs {prefer_gpt} on GPT"},
-            {"label": "Period",
-             "value": (leaders[0]["period_start"][5:10] + " — " + leaders[0]["period_end"][5:10])
-             if leaders else "—"},
+            {"label": "Prefer Claude",     "value": f"{prefer_claude} devs"},
+            {"label": "Prefer GPT",        "value": f"{prefer_gpt} devs"},
         ])
 
         c1, c2 = st.columns(2)
@@ -704,11 +695,10 @@ with tab_high:
     share_high = (len(high) / total_users * 100) if total_users else 0
 
     kpi_row([
-        {"label": "High Spenders", "value": str(len(high)),
-         "note": f"of {total_users} users · ≥ {fmt_money(threshold)} · {share_high:.0f}%"},
-        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—",
-         "note": (f"{top['user_name']} · {top['messages']} msgs") if top else "—"},
+        {"label": "High Spenders", "value": f"{len(high)} / {total_users}"},
+        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—"},
         {"label": "Combined spend", "value": fmt_money(combined)},
+        {"label": "Share of users", "value": f"{share_high:.0f}%"},
     ])
 
     if high:

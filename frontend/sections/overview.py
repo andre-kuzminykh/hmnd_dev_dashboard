@@ -14,10 +14,19 @@ from frontend.theme import ANTHROPIC, NAVY, OPENAI, PROVIDER_COLORS
 
 CFG = load_config()
 
-hero(
-    "Executive Overview",
-    '<span class="accent">AIOps</span> Dashboard',
-    "Who uses AI, how much it costs, how efficiently and how much AI-generated code lands in production.",
+st.markdown(
+    """
+    <div style="display:flex; align-items:center; gap:14px; margin: 4px 0 18px 0;">
+        <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="HMND"
+             style="width:36px; height:36px; border-radius:10px;" />
+        <h1 style="margin:0; font-family:Inter, sans-serif; font-weight:500;
+                   font-size:34px; line-height:1;">
+            <span style="color:#4953d8;">AIOps</span>
+            <span style="color:#06091c;">Dashboard</span>
+        </h1>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 # Data freshness chips — makes it obvious WHEN each source last logged
