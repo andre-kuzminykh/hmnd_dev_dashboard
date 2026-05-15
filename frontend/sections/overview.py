@@ -50,11 +50,15 @@ if reported is not None and kpis["total_spend"]:
     diff_pct = (kpis["total_spend"] - reported) / reported * 100 if reported else 0
     total_note = f"reported by provider: {fmt_money(reported)}  ·  Δ {diff_pct:+.1f}%"
 
+cached_note = (
+    f"+ {fmt_int(kpis['tokens_cached'])} cached"
+    if kpis.get("tokens_cached") else "billable (uncached)"
+)
 kpi_row([
     {"label": "Total spend",  "value": fmt_money(kpis["total_spend"]),
      "delta": kpis["total_spend_delta"], "note": total_note},
     {"label": "Tokens in",    "value": fmt_int(kpis["tokens_in"]),
-     "delta": kpis["tokens_in_delta"], "note": "input tokens"},
+     "delta": kpis["tokens_in_delta"], "note": cached_note},
     {"label": "Tokens out",   "value": fmt_int(kpis["tokens_out"]),
      "delta": kpis["tokens_out_delta"], "note": "output tokens"},
     {"label": "Active users", "value": str(kpis["active_users"]),

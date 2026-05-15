@@ -20,6 +20,54 @@ def test_fr_01_1_1_1_kpi_keys(tmp_db):
         assert isinstance(kpis[k], (int, float))
 
 
+def test_tokens_in_subtracts_cached(tmp_db):
+    """Tokens In KPI must show UNCACHED input only, so the number matches
+    the OpenAI Platform billing UI (which shows uncached only). Stored
+    tokens_in includes cached, so the SQL aggregate subtracts tokens_cached.
+    """
+    from data.db import get_conn
+    with get_conn() as conn:
+        pid = conn.execute("SELECT id FROM providers WHERE name='openai'").fetchone()["id"]
+        uid = conn.execute("SELECT id FROM users LIMIT 1").fetchone()["id"]
+        mid = conn.execute(
+            "SELECT id FROM models WHERE provider_id = ? LIMIT 1", (pid,)
+        ).fetchone()["id"]
+        # Insert 1 event with tokens_in=100 incl. tokens_cached=70 → display = 30.
+        conn.execute(
+            """INSERT INTO usage_events(user_id, provider_id, model_id, occurred_at,
+                                         tokens_in, tokens_out, tokens_cached, cost_usd,
+                                         is_error, purpose)
+               VALUES(?, ?, ?, datetime('now', '-1 day'), 100, 50, 70, 0.5, 0, 'API')""",
+            (uid, pid, mid),
+        )
+        conn.commit()
+
+    kpis = get_overview_kpis(Filters(period_days=7, provider="openai"))
+    # The KPI exposes the cached portion separately, and tokens_in must be
+    # strictly smaller than raw SUM(tokens_in) because we subtract cached.
+    assert kpis["tokens_cached"] >= 70
+    with get_conn() as conn:
+        raw_in = conn.execute(
+            """SELECT COALESCE(SUM(tokens_in), 0) AS s
+               FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name = 'openai' AND ue.occurred_at >= datetime('now', '-7 days')"""
+        ).fetchone()["s"]
+    # Display value must equal raw minus cached (clamped at zero per row to
+    # defend against any individual event where cached > input).
+    assert kpis["tokens_in"] < raw_in
+    assert kpis["tokens_in"] >= 0
+    # Drop in tokens_in across the new row must equal exactly 100-70=30, even
+    # if other fixture rows already existed (they're stable).
+    # Re-running with the row deleted should bump tokens_in by 30 less.
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM usage_events WHERE tokens_in=100 AND tokens_cached=70"
+        )
+        conn.commit()
+    kpis2 = get_overview_kpis(Filters(period_days=7, provider="openai"))
+    assert kpis["tokens_in"] - kpis2["tokens_in"] == 30
+
+
 def test_fr_01_1_1_2_zero_users(tmp_db, monkeypatch):
     """cost_per_user не должен делиться на ноль."""
     from backend.services import overview as ov
