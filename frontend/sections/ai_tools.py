@@ -641,13 +641,68 @@ with tab_models:
                       css_class=_row_class, value_formatter=fmt_int)
 
 
+def _hs_note(s: dict[str, Any]) -> str:
+    """Heuristic one-liner describing the spend pattern."""
+    spend = s["spend"] or 0
+    msgs = s["messages"] or 0
+    dpm = (spend / msgs) if msgs > 0 else None
+    if dpm is not None and dpm >= 100:
+        return f"anomalous: ~${dpm:,.0f} per message — possible API/automation"
+    if dpm is not None and dpm >= 20:
+        return f"high cost/message (${dpm:,.1f}/msg) — likely reasoning model"
+    if msgs >= 1000:
+        return "high volume, proportionate spend"
+    return f"avg ${dpm:,.2f}/msg" if dpm is not None else "non-message billing"
+
+
+def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
+    """Generate up to 4 narrative bullets for the analysis card."""
+    bullets: list[str] = []
+    if not high:
+        return bullets
+    top = high[0]
+    bullets.append(
+        f"<b>{top['user_name']}</b> — {fmt_money(top['spend'])} on "
+        f"{top['messages']:,} messages, top single spender."
+    )
+    # anomalous $/msg
+    anomalies = [s for s in high
+                 if s["messages"] and (s["spend"] / s["messages"]) >= 100]
+    if anomalies:
+        a = anomalies[0]
+        dpm = a["spend"] / a["messages"]
+        bullets.append(
+            f"<b>{a['user_name']}</b> — {fmt_money(a['spend'])} on {a['messages']} messages "
+            f"(~${dpm:,.0f}/msg). Likely API/automation, not chat usage."
+        )
+    # high msg volume
+    volume = sorted(high, key=lambda r: r["messages"] or 0, reverse=True)
+    if volume and volume[0]["messages"] >= 1000 and volume[0] != top:
+        v = volume[0]
+        bullets.append(
+            f"<b>{v['user_name']}</b> — {v['messages']:,} messages at "
+            f"{fmt_money(v['spend'])}. High volume, normal $/msg."
+        )
+    # concentration
+    if len(high) >= 3:
+        top3 = sum(s["spend"] for s in high[:3])
+        total = sum(s["spend"] for s in high)
+        share = (top3 / total * 100) if total else 0
+        bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
+    return bullets[:4]
+
+
 with tab_high:
     # Threshold slider — default $1k per the design screenshot.
     threshold = st.slider("High-spender threshold ($)", 200, 5000, 1000, 100,
                           key="hs_threshold")
+    # High Spenders is a cross-tool view by design — it ranks people across
+    # OpenAI/Anthropic/Cursor in one list. So we deliberately ignore the
+    # Source filter here (otherwise picking 'OpenAI · Artem' would show only
+    # users with OpenAI spend, defeating the cross-tool purpose).
     all_spenders = get_high_spenders(period_days=filters.period_days,
                                       threshold_usd=0,
-                                      api_key_id=filters.api_key_id)
+                                      api_key_id=None)
     high = [r for r in all_spenders if r["spend"] >= threshold]
     combined = sum(r["spend"] for r in high)
     top = high[0] if high else None
@@ -716,54 +771,3 @@ with tab_high:
             )
     else:
         st.info(f"No users at or above {fmt_money(threshold)} in the period.")
-
-
-def _hs_note(s: dict[str, Any]) -> str:
-    """Heuristic one-liner describing the spend pattern."""
-    spend = s["spend"] or 0
-    msgs = s["messages"] or 0
-    dpm = (spend / msgs) if msgs > 0 else None
-    if dpm is not None and dpm >= 100:
-        return f"anomalous: ~${dpm:,.0f} per message — possible API/automation"
-    if dpm is not None and dpm >= 20:
-        return f"high cost/message (${dpm:,.1f}/msg) — likely reasoning model"
-    if msgs >= 1000:
-        return "high volume, proportionate spend"
-    return f"avg ${dpm:,.2f}/msg" if dpm is not None else "non-message billing"
-
-
-def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
-    """Generate up to 4 narrative bullets for the analysis card."""
-    bullets: list[str] = []
-    if not high:
-        return bullets
-    top = high[0]
-    bullets.append(
-        f"<b>{top['user_name']}</b> — {fmt_money(top['spend'])} on "
-        f"{top['messages']:,} messages, top single spender."
-    )
-    # anomalous $/msg
-    anomalies = [s for s in high
-                 if s["messages"] and (s["spend"] / s["messages"]) >= 100]
-    if anomalies:
-        a = anomalies[0]
-        dpm = a["spend"] / a["messages"]
-        bullets.append(
-            f"<b>{a['user_name']}</b> — {fmt_money(a['spend'])} on {a['messages']} messages "
-            f"(~${dpm:,.0f}/msg). Likely API/automation, not chat usage."
-        )
-    # high msg volume
-    volume = sorted(high, key=lambda r: r["messages"] or 0, reverse=True)
-    if volume and volume[0]["messages"] >= 1000 and volume[0] != top:
-        v = volume[0]
-        bullets.append(
-            f"<b>{v['user_name']}</b> — {v['messages']:,} messages at "
-            f"{fmt_money(v['spend'])}. High volume, normal $/msg."
-        )
-    # concentration
-    if len(high) >= 3:
-        top3 = sum(s["spend"] for s in high[:3])
-        total = sum(s["spend"] for s in high)
-        share = (top3 / total * 100) if total else 0
-        bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
-    return bullets[:4]

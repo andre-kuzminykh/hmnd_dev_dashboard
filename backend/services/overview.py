@@ -133,19 +133,25 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         reported_total = _provider_reported_total(conn, start, end, f.provider)
         reported_total_prev = _provider_reported_total(conn, prev_start, prev_end, f.provider)
 
-    # FR-01.x — Total Spend prefers the authoritative billing-API number
-    # (provider_totals from /v1/organization/costs etc.) over SUM(usage_events).
-    # OpenAI's /usage/completions endpoint is incomplete (missing some
-    # buckets, audio/whisper, batch API, etc.), so summing events under-counts
-    # by 20-40%. /costs is the source of truth — that's what the provider's
-    # own billing UI shows. We still show the events-derived value as a note
-    # for transparency.
-    if reported_total is not None and reported_total > 0:
+    # provider_totals is stored at the (provider, day) grain — no
+    # organization_id, no api_key_id, no team. So it only matches the user's
+    # filter when those narrower filters aren't active. Otherwise we'd show an
+    # org-wide total against a user-narrowed events breakdown — exactly the
+    # bug Andrei spotted ($160 reported vs $123 events, $114 in OpenAI UI
+    # filtered by api_key).
+    narrowed = bool(
+        f.api_key_id
+        or (f.organization and f.organization != "all")
+        or (f.team and f.team != "all")
+    )
+    if reported_total is not None and reported_total > 0 and not narrowed:
         total_spend = reported_total
         total_spend_prev = reported_total_prev if reported_total_prev is not None else prev["total_spend"]
+        spend_source = "billing_api"
     else:
         total_spend = cur["total_spend"]
         total_spend_prev = prev["total_spend"]
+        spend_source = "events"
 
     cost_per_user = safe_div(total_spend, cur["active_users"], default=0.0)
     cost_per_user_prev = safe_div(total_spend_prev, prev["active_users"], default=0.0)
@@ -153,6 +159,7 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
     out = {
         "total_spend": round(total_spend, 2),
         "total_spend_events": round(cur["total_spend"], 2),  # for transparency
+        "total_spend_source": spend_source,                  # 'billing_api' or 'events'
         "tokens_in": int(cur["tokens_in"]),
         "tokens_out": int(cur["tokens_out"]),
         "tokens_cached": int(cur.get("tokens_cached") or 0),
@@ -189,15 +196,27 @@ def get_daily_spend_series(filters: Filters | None = None, now: datetime | None 
     now = now or datetime.utcnow()
     start, end = f.date_range(now)
 
+    # provider_totals can only stand in for events when no narrower filter
+    # is active — see _kpis_in_window for the same guard.
+    narrowed = bool(
+        f.api_key_id
+        or (f.organization and f.organization != "all")
+        or (f.team and f.team != "all")
+    )
+
     with get_conn() as conn:
-        # 1) Daily authoritative numbers from provider_totals (e.g. OpenAI /costs)
-        pt_rows = conn.execute(
-            """SELECT pt.day, p.name AS provider, pt.cost_usd AS cost
-               FROM provider_totals pt
-               JOIN providers p ON p.id = pt.provider_id
-               WHERE pt.day BETWEEN ? AND ?""",
-            (start.date().isoformat(), end.date().isoformat()),
-        ).fetchall()
+        # 1) Daily authoritative numbers from provider_totals (e.g. OpenAI /costs).
+        #    Skipped entirely when a narrower filter is set — that filter can't
+        #    be honored by the org-wide totals table.
+        pt_rows = []
+        if not narrowed:
+            pt_rows = conn.execute(
+                """SELECT pt.day, p.name AS provider, pt.cost_usd AS cost
+                   FROM provider_totals pt
+                   JOIN providers p ON p.id = pt.provider_id
+                   WHERE pt.day BETWEEN ? AND ?""",
+                (start.date().isoformat(), end.date().isoformat()),
+            ).fetchall()
         providers_with_totals = {r["provider"] for r in pt_rows}
 
         # 2) Daily events-summed for providers that don't have totals (JSON sources).
