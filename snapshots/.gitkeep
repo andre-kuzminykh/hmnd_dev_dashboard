@@ -1,0 +1,3 @@
+# Keep this directory in version control. Daily Report I data dumps land
+# here via the `snapshotter` sidecar (see docker-compose.yml). Files
+# themselves are git-ignored — see ../.gitignore.

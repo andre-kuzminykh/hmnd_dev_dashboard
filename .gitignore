@@ -15,3 +15,8 @@ htmlcov/
 .idea/
 .vscode/
 .DS_Store
+# Daily Report I dumps land in snapshots/ — keep the folder (.gitkeep)
+# but don't commit the dumps themselves.
+snapshots/*.txt
+snapshots/*.json
+!snapshots/.gitkeep
