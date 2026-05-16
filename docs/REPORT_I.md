@@ -1,10 +1,10 @@
 # Report I — AI Usage, Adoption & Economics
 
-**Period:** Last 30 days unless noted; some lifetime context where indicated.
-**Generated from:** HMND AIOps Dashboard, audited 2026-05-16 (17/17 data audits ✓).
-**Audience:** HMND leadership (CEO / COO / CTO).
+**Period:** Last 30 days (2026-04-16 → 2026-05-16) unless otherwise noted.
+**Source:** HMND AIOps Dashboard, audited 2026-05-16 (17/17 data audits ✓).
+**Audience:** HMND leadership.
 
-> Methodology note: this report covers AI usage, adoption, behavior and economics. It does NOT claim AI directly wrote X% of production code — that requires Git/PR correlation which is Report II's scope. Findings are labelled **[Fact]** (from dashboard), **[Estimate]** (derived), or **[Hypothesis]** (requires Git/PR/Jira correlation).
+> **Methodology**: This report covers AI usage, adoption, behaviour, and economics. It does NOT claim AI directly wrote X% of production code — that requires Git/PR correlation (Report II). Findings are tagged **[Fact]** (verified in dashboard), **[Estimate]** (derived from dashboard numbers), or **[Hypothesis]** (requires Git/PR/Jira correlation).
 
 ---
 
@@ -12,290 +12,351 @@
 
 ### Key Findings
 
-- **[Fact]** HMND spent **$24,112** on AI tools in the last 30 days (Claude + ChatGPT + Cursor combined). Annualised: ~$290k.
-- **[Fact]** **161 unique active users** in the last 30 days — broad adoption across engineering and beyond.
-- **[Fact]** Tool mix is **strongly Anthropic-skewed**: Claude ($44,731 lifetime) > Cursor ($23,444) > OpenAI ($3,407). For a robotics-AI company, this is consistent with reasoning-heavy workflows.
-- **[Fact]** **226 git-tracked devs** (213 humans + 13 bots/CI agents). Of humans, only ~25 have meaningful AI-coupled output (segments "High AI · High Output" + "Low AI · High Output").
-- **[Estimate]** **Top 5 users account for ~60% of AI spend** — classic Pareto distribution, healthy for power-user tools.
-- **[Hypothesis]** Bots/agents produce a higher proportion of bug-fix commits (**24.8% bot vs 18.8% human** bug-fix rate) — suggests AI agents either ship messier code OR are tasked specifically with mechanical fixes. Needs Git correlation in Report II.
+- **[Fact]** HMND spent **$24,104** on AI tools in the last 30 days. Annualised run-rate: **~$293,000/yr**.
+- **[Fact]** **160 unique active users** across the company — broad adoption beyond engineering.
+- **[Fact]** Tool mix:  **Anthropic 57.2% / Cursor 29.9% / OpenAI 12.9%** by 30d spend.
+- **[Fact]** Within Anthropic, **Claude Code (Agent) is 83% of Anthropic spend ($11,489)** — agentic coding is the dominant Claude workflow.
+- **[Fact]** **Top 5 spenders = 44.9% of total spend; Top 10 = 62.7%** — textbook Pareto.
+- **[Fact]** **OpenAI Artem org** = 1 user × 57,250 events × $0.01/msg = automation (the `n8n_artem` service account). OpenAI Humanoid is the real human-facing OpenAI usage.
+- **[Hypothesis]** ChatGPT $/message ratios reveal **clear reasoning-model overuse**: 4 top OpenAI spenders pay $7-$23 PER MESSAGE — they're hitting o-series for routine tasks.
 
 ### Overall AI Adoption
 
-| Cohort | Count | Interpretation |
-|--------|-------|----------------|
-| Total active AI users (30d) | 161 | broad reach beyond just engineers |
-| Tracked devs in git (90d) | 213 humans + 13 bots | engineering proper |
-| High AI · High git output | 15 | the "AI-first power users" — most valuable cohort |
-| Low AI · High git output | 10 | productive engineers under-using AI — coaching opportunity |
-| AI active, no git | 99 | non-engineers using AI (ops, PM, exec, etc.) |
-| Git active, no AI | 42 | engineers shipping code without AI assist — coaching target |
-| Normal (mid both) | 47 | mainstream adoption |
-| Bots / Agents | 13 | github-actions, Cursor Agent, Renovate, etc. |
+| Cohort | Count | Comment |
+|--------|-------|---------|
+| Active AI users (30d) | **160** | broad reach |
+| Cursor team members | 81 | 63 with ≥ 1 completion |
+| Claude users (any purpose, 30d) | 111 | dominant tool |
+| OpenAI users (30d) | 7 | tiny user base, high $/user |
+| Git-tracked devs | 213 humans + 13 bots | engineering proper |
+| AI-coupled productive engineers | 25 (15 High-High + 10 Low-High) | the cohort worth scaling |
+| "AI active, no git" | 89 | non-engineers (PM/ops/exec/research) |
+| "Git active, no AI" | 44 | engineers not yet on AI — coaching target |
 
-**AI adoption among engineers (HUMAN git authors):** ~71% touch AI tools at least sometimes. ~12% are clearly AI-first.
+**Engineering AI penetration (humans only)**: ~71% touch AI; ~12% are AI-first.
 
 ### Main Risks and Opportunities
 
-| Category | Risk | Opportunity |
-|----------|------|-------------|
-| **Cost concentration** | $1k+/month outliers if uncapped | Pareto = simple budget alerts catch 80% of cost drift |
-| **Reasoning-model overuse** | Expensive ($/msg ≥ $20) in ChatGPT for top spenders | Model routing policy — cheaper defaults |
-| **Bot-generated debt** | Bot bug-fix rate > human (24.8% vs 18.8%) | Audit AI-agent PRs — see if their fixes are reverts of their own work |
-| **AI dark matter** | 42 engineers ship code without AI (zero AI cost). | Best-practice training could lift their output |
-| **Tool sprawl** | OpenAI Humanoid ($3,238) vs Anthropic ($44k) — unclear when to use which | Single decision tree for "which tool, which model" |
-| **Source freshness** | JSON sources lag 2-3 days behind reality | Auto-export pipelines (already 15-min sync runs; just need fresh JSON drops) |
+| Theme | Risk | Opportunity |
+|-------|------|-------------|
+| **Cost concentration** | Top 10 = 62.7% of spend ($15,105/mo). Single individual changes can move the line. | Pareto = budget alerts on ~10 people catch most issues. |
+| **Reasoning-model overuse on OpenAI** | 4 of 5 top OpenAI spenders pay $7-$23/msg (o-series) | Routing policy → ~$1,500/mo saving on OpenAI alone |
+| **Claude Code dominance ($11.5k/30d)** | All eggs in one Anthropic basket; one provider outage = team blocked | Maintain GPT/Cursor as fallback workflows |
+| **Bot bug rate > human (24.8% vs 18.8% lifetime)** | AI agents may ship code that they later have to fix | Audit a sample of agent PRs in Report II |
+| **"Git active, no AI" cohort (44 engineers)** | Productivity left on table | Pair with power user 1 sprint each |
+| **Synthesised Claude Code events** | Top CC users all show exactly 56 events — these are Cursor→Anthropic synthesised (not real CC sessions); real CC users hidden behind Cursor's `agent_completions` aggregation | Tag Claude Code events by source in Report II |
 
 ### Common Recommendations
 
-1. **Adopt a model-routing policy** (see §4). Cheaper defaults; reasoning models on demand only.
-2. **Interview top 5 AI users** (Oleg Sinavski, Eugene Lyapustin, Sam Pfeiffer, Saeid Samadi, Daksh Dhingra). Extract their workflow patterns and turn them into team-wide playbooks.
-3. **Budget alerts** at $500/mo and $1k/mo per individual.
-4. **Coach the "Git active, no AI" cohort** (42 engineers) — pair with a power user for 1 sprint each.
-5. **Connect AI telemetry to Git/PR/Jira** (Report II) to validate that high AI spend ↔ high merged code shipped.
+1. **Adopt a model-routing policy** (see §4 table). Route routine queries to cheaper models. Estimated saving: $1,500-$3,000/mo.
+2. **Interview top 5 AI users** (Oleg Sinavski, atin, Eugene Lyapustin, Richard, Sam Pfeiffer) — document workflow playbook, publish team-wide.
+3. **Per-user budget alerts** at $500 and $1,000/mo (Slack). Not caps — early warning.
+4. **Reach the 44 "Git active, no AI" engineers** — pair each with a power user for 1 sprint.
+5. **Connect AI telemetry to Git/PR/Jira** (Report II) to convert "cost report" into "cost-per-engineering-outcome report".
 
 ---
 
 ## 2. Tools / Usage / Workflows
 
-### Tool Summary Table
+### Tool Summary Table (Last 30 days)
 
-| Tool | Users (30d) | Activity | Spend (30d) | Share | Primary Usage | Key Risk | Recommendation |
-|------|-------------|----------|-------------|-------|---------------|----------|----------------|
-| **Claude (all products)** | ~125 | 25,629 events | ~$15k (30d est.) | ~62% | Chat + Claude Code (Agent) + Cowork | Expensive reasoning, large context bills | High-value usage; keep but route models by task |
-| **Cursor** | 67 active | 9,234 completions, 36.4M AI lines (lifetime) | ~$8k (30d est.) + sub | ~33% | Everyday IDE coding | Lifetime AI-lines metric over-interpreted | Map AI-lines to Git additions for real conversion |
-| **ChatGPT (OpenAI API)** | ~30 | ~21k requests | ~$200 (30d) | ~5% | Reasoning, research, debugging | $/msg outliers reach $100+ | Route routine questions to cheaper models |
-
-*Lifetime totals visible: $44,731 Anthropic + $23,444 Cursor + $3,238 Humanoid + $169 Artem = **$71,582 total to date**.*
+| Tool | Users | Activity | Spend | Share | Primary Usage | Key Risk | Recommendation |
+|------|-------|----------|-------|-------|---------------|----------|----------------|
+| **Anthropic (all Claude products)** | 111 | 6,808 events | **$13,779** | **57.2%** | Claude Code (Agent), Chat, Cowork | High-context reasoning calls are expensive | Reserve `claude-opus` for hard tasks |
+| **Cursor** | 67 active (81 seats) | 1,876 spend-events (excl. free Tab) | **$7,214** | **29.9%** | Everyday IDE coding | `ai_lines` is lifetime not period | Correlate with Git in Report II |
+| **OpenAI** | 7 humans + 1 bot | 57,392 events (mostly automation) | **$3,112** | **12.9%** | Reasoning, automation (n8n) | $23/msg outliers on reasoning models | Route to cheaper models for routine work |
+| **TOTAL** | 160 unique | 66,076 events | **$24,104** | 100% | | | |
 
 ### Claude / Claude Code
 
-**[Fact]** Claude is the **dominant tool by spend**. Within Anthropic, three product surfaces:
-- **Chat** — direct claude.ai usage
-- **Claude Code** (`purpose='Agent'`) — agentic CLI for software work
-- **Cowork / Other** — chrome extension, design, misc
+**[Fact]** Anthropic spend split by `purpose` (last 30d):
 
-The dashboard splits these on the "Claude Users" tab. CC (Claude Code) is the high-leverage but high-cost lane — single sessions span 50-500 agent calls.
+| Purpose | Spend (30d) | Share of Anthropic | Requests | Users |
+|---------|-------------|---------------------|----------|-------|
+| **Agent (Claude Code)** | **$11,489** | **83.4%** | 2,344 | 62 |
+| Chat | $1,334 | 9.7% | 2,658 | 76 |
+| Cowork | $819 | 5.9% | 1,331 | 37 |
+| Chrome | $103 | 0.7% | 321 | 12 |
+| Design | $33 | 0.2% | 56 | 2 |
+| Other | $1.26 | <0.1% | 98 | 4 |
 
-**Top Claude Code users** (lifetime, by spend):
-- See "Claude Code → Top Claude Code Users" panel for the full list. The top 5-10 individuals consistently account for the bulk of CC spend.
+**Claude Code is the dominant workflow** ($11.5k/30d). Chat and Cowork are minor.
+
+**[Caveat]** Some "Agent" events are *synthesised* from Cursor's `agent_completions` (via `data/cursor_to_anthropic.py`). This shows up as the top-10 CC users having an identical 56 requests each — that's the synthesis quantum, not real session count. Real Claude Code via Anthropic Admin API mixes in. Report II should separate these by event source.
+
+**Top Claude Code (Agent) spenders (30d, may include synthesised entries):**
+
+| Name | Spend |
+|------|-------|
+| atin | $2,422 |
+| Eugene Lyapustin | $2,404 |
+| Richard | $1,616 |
+| Andy | $963 |
+| Sam Pfeiffer | $851 |
+| Daksh Dhingra | $509 |
+| Richard Osterloh | $441 |
 
 **Recommendations**:
-- **Use Claude / CC for**: complex debugging, multi-file refactors, architecture reasoning, hard technical decisions, agentic workflows with review.
-- **Don't use Claude reasoning models for**: simple lookups, boilerplate, single-line autocomplete (Cursor Tab is faster + cheaper).
-- **Action**: interview top Claude Code spenders to document their playbook, then publish team-wide.
+- **Use for**: complex debugging, multi-file refactors, agentic workflows with review, architecture reasoning.
+- **Avoid for**: simple lookups, boilerplate (Cursor Tab is cheaper and faster).
+- **Action**: interview Eugene, atin, Richard, Andy — extract the workflow patterns that drive their high CC usage. Codify into a HMND playbook.
 
 ### Cursor
 
-**[Fact]** **67 active developers** with $23,444 spend lifetime. Strong adoption baseline.
+**[Fact]** 81 team members; 63 active (≥ 1 completion lifetime). 30-day overage spend $7,214.
 
-**Usage split** (lifetime, from Cursor JSON):
-- Tab completions (inline autocomplete): the majority of completions
-- Agent completions (Composer / Cmd+I): bigger blocks of generated code
+**Favorite model preferences** (lifetime):
+- **Claude family**: 27 devs (e.g. claude-4.6-opus-high-thinking, claude-4.6-sonnet-medium)
+- **GPT family**: 20 devs (e.g. gpt-5.3-codex, gpt-5.4-xhigh-fast)
+- Other / default: ~16
 
-**Favorite-model preferences** in Cursor team:
-- Claude-favorite users vs GPT-favorite users — visible in the Cursor tab.
+**Top 10 by AI lines (LIFETIME — Cursor's metric, not period-filtered):**
 
-**Key caveat**: Cursor's `ai_lines` metric is a **lifetime total per user**, NOT period-filtered. The dashboard caption explicitly says this. Comparing `ai_lines` to git additions is suggestive, not proof — it's a Report II correlation job.
+| Name | AI lines | Tab | Agent | Favorite model |
+|------|---------:|----:|------:|----------------|
+| Oleg Sinavski | 10,920,238 | 10.92M | 0 | claude-4.6-opus-high-thinking |
+| Andy Park | 8,617,280 | 8.53M | 0 | gpt-5.3-codex |
+| Luke Bierbaum | 556,543 | 31k | 0 | claude-4.6-sonnet-medium |
+| Vaibhav Mehta | 444,956 | 3k | 40 | claude-4.6-opus-high-thinking |
+| Saeid Samadi | 338,812 | 322k | 1,299 | gpt-5.4-xhigh-fast |
+| batr | 259,234 | 198k | 0 | default |
+| Sam Pfeiffer | 255,581 | 144k | 0 | claude-4.6-opus-high-thinking |
+| Amir Torabi | 244,331 | 31k | 0 | claude-4.6-opus-high-thinking |
+| Atindra Nair | 165,661 | 110k | 0 | claude-4.6-opus-high-thinking |
+| Cheerag Sharma | 161,919 | 99k | 0 | gpt-5.4-medium |
+
+**Caveat**: Oleg's 10.9M AI lines is a *lifetime* total — it represents months of work. Converting to "real productive code" requires Git correlation (Report II).
 
 **Recommendations**:
-- **Use Cursor for**: everyday coding, autocomplete, boilerplate, small edits, test scaffolding.
-- **Watch**: extreme outliers (e.g. one dev with 244k AI lines on 1 commit) — likely a one-off paste or generated-config file, not real productive coding.
-- **Action**: cross-reference Cursor's top-AI-lines users with their Git additions in the same period. If the ratio diverges by >5x, dig into workflow.
+- **Use for**: everyday coding, autocomplete, boilerplate, small edits, test scaffolding.
+- **Watch**: Oleg & Andy are outliers worth understanding (10M+ AI lines is *unusual* — confirm workflow isn't an artefact like ingesting generated config).
+- **Action**: have Saeid Samadi present at an internal demo — he's the most balanced Tab+Agent user.
 
-### ChatGPT
+### ChatGPT (OpenAI)
 
-**[Fact]** Small spend (~$200/30d) but **high $/msg outliers**. Average looks fine, but a few users spend $100+/message — almost certainly reasoning models (o1, o3) or accidental API loops.
+**[Fact]** 7 human users, $3,112 spend. **Severely concentrated**:
+
+| Name | Spend (30d) | Messages | $/msg | Pattern |
+|------|------------:|---------:|------:|---------|
+| Cody Griffin | $1,178 | 51 | **$23.11** | Reasoning model overuse |
+| Dr. Klingensmith (Matt) | $791 | 34 | **$23.25** | Reasoning model overuse |
+| Artem (`n8n_artem`) | $541 | **57,250** | $0.01 | Automation bot (n8n cron) |
+| Sam Pfeiffer | $464 | 26 | **$17.85** | Reasoning model overuse |
+| Tobias Jacob | $134 | 18 | $7.46 | Mixed |
+
+**Top models by spend (30d):**
+
+| Provider | Model | Spend | Requests | $/req |
+|----------|-------|------:|---------:|------:|
+| anthropic | claude-generic | $13,779 | 6,808 | $2.02 |
+| cursor | cursor-team | $7,214 | 1,876 | $3.84 |
+| openai | **gpt-5.4-2026-03-05** | $1,617 | 4,377 | **$0.37** |
+| openai | gpt-5.5-2026-04-23 | $525 | 4,067 | $0.13 |
+| openai | gpt-4o-mini-tts | $484 | 8 | $60.46 |
+| openai | gpt-5.4-mini-2026-03-17 | $161 | 11 | $14.64 |
+| openai | gpt-4o-2024-08-06 | $112 | 9,248 | $0.012 |
+| openai | gpt-4.1-2025-04-14 | $82 | 7,475 | $0.011 |
+| openai | gpt-5.4-nano-2026-03-17 | $73 | 5 | $14.60 |
+| openai | **gpt-4.1-mini-2025-04-14** | $26 | **21,803** | **$0.001** |
+
+**[Insight]** Compare gpt-4.1-mini ($0.001/req) with gpt-5.4 ($0.37/req) — 370× cost difference. Most "what's wrong with this code?" questions don't need the expensive one.
 
 **Recommendations**:
 - **Use ChatGPT for**: reasoning, research, documentation, debugging explanation, non-IDE tasks.
-- **Avoid**: routine questions on expensive reasoning models — default to cheaper gpt-4-mini class.
-- **Action**: surface high-$/msg users; have a 15-min conversation about workflow.
+- **Avoid**: routing routine questions to reasoning models. Default to gpt-4.1-mini class.
+- **Action**: 15-min calls with Cody Griffin, Dr. Klingensmith, Sam Pfeiffer — confirm if they really need o-series or if they default to it out of habit.
 
 ### Tool-Specific Recommendations Summary
 
-- **Claude**: keep; ration reasoning models; interview power users.
-- **Cursor**: keep; monitor outliers; correlate with Git in Report II.
-- **ChatGPT**: keep; route routine queries to cheaper models; cap reasoning model usage.
+| Tool | Action this week | Expected impact |
+|------|------------------|-----------------|
+| Claude Code | Interview top 5 CC users → playbook | Documented best practice → team-wide leverage |
+| Cursor | Investigate Oleg & Andy lifetime AI lines | Confirm workflow is genuine vs artefact |
+| ChatGPT | Coach 3 reasoning-overusers | Estimated saving: $1k-$1.5k/mo |
 
 ---
 
 ## 3. People / Adoption
 
-### Top Spenders (cross-tool, 30d)
+### Top 15 Cross-Tool Spenders (30 days)
 
-> Cross-tool view ignores the Source filter — sums Claude + ChatGPT + Cursor per person.
-
-| Rank | Name | Spend (30d) | Main Tool | Pattern | Interpretation | Recommendation |
-|------|------|-------------|-----------|---------|----------------|----------------|
-| 1 | **Oleg Sinavski** | $3,045 | Claude | 10.9M AI lines (Cursor), 392 commits | AI-first engineer at full throttle | Keep, interview for playbook |
-| 2 | **atin** | $2,425 | Claude (no git) | AI active, no git authorship | Likely non-engineer (PM/ops/exec) | Validate non-eng usage is on-budget |
-| 3 | **Eugene Lyapustin** | $2,405 | Claude + Cursor | 1.6k commits, $1.52/commit | Productive AI-first engineer | Keep; benchmark candidate |
-| 4 | **Richard** | $1,616 | Claude (no git) | AI active, no git | Likely exec/research role | Confirm intended use |
-| 5 | **Sam Pfeiffer** | $1,320 | Mixed | 1.5k commits, 22% AI share | Healthy mid-AI heavy-output | Keep |
-| 6 | **Cody Griffin** | $1,188 | ChatGPT | Few commits, high $/msg | Reasoning-heavy non-coding work | Route to cheaper models if possible |
-| 7 | **Andy Park** | $990 | Cursor | 672 commits, 100% Cursor AI share | Cursor-dominant flow | Healthy |
-| 8 | **Artem** | $696 | Claude (no git) | Exec / brand "Artem" | Confirm — duplicate display name risk |
+| # | Name | Total | Claude | GPT | Cursor | Events | Pattern |
+|---|------|------:|-------:|----:|-------:|-------:|---------|
+| 1 | **Oleg Sinavski** | $3,045 | $60 | $0 | **$2,985** | 112 | Cursor-dominant power user, 10.9M AI lines lifetime |
+| 2 | **atin** | $2,425 | **$2,425** | $0 | $0 | 112 | Claude Code only — likely PM/exec doing agentic work |
+| 3 | **Eugene Lyapustin** | $2,405 | **$2,405** | $0 | $0 | 112 | Claude Code only, also 1.6k git commits |
+| 4 | **Richard** | $1,616 | **$1,616** | $0 | $0 | 56 | Pure Claude Code, no git activity → likely exec/research |
+| 5 | Sam Pfeiffer | $1,320 | $852 | $464 | $3 | 138 | Balanced multi-tool engineer |
+| 6 | Cody Griffin | $1,188 | $0 | **$1,178** | $10 | 79 | ChatGPT only, $23/msg → reasoning overuse |
+| 7 | **Andy** | $990 | **$990** | $0 | $0 | 112 | Pure Claude Code |
+| 8 | Dr. Klingensmith (Matt) | $791 | $0 | **$791** | $0 | 34 | ChatGPT only, $23/msg → reasoning overuse |
+| 9 | Artem | $692 | $152 | $541 | $0 | **57,278** | n8n automation account, high event volume |
+| 10 | Saeid Samadi | $633 | $0 | $0 | $633 | 28 | Cursor power user, 338k AI lines |
+| 11 | Daksh Dhingra | $513 | $509 | $0 | $4 | 84 | Claude Code-heavy engineer |
+| 12 | Richard Osterloh | $449 | $449 | $0 | $0 | 140 | Pure Claude Code |
+| 13 | ber131 | $368 | $368 | $0 | $0 | 56 | Pure Claude Code |
+| 14 | Vaibhav Mehta | $367 | $0 | $0 | $367 | 28 | Cursor-only, 444k AI lines |
+| 15 | cfil | $356 | $0 | $0 | $356 | 28 | Cursor-only |
 
 **Spend concentration**:
-- Top 5: ~$10.8k of $24.1k = **~45% of 30-day spend** [Estimate]
-- Top 10: ~$15k = **~62%** [Estimate]
-- Pareto distribution confirmed; healthy for power-user economics.
+- **Top 5**: $10,811 = **44.9%** of $24,104
+- **Top 10**: $15,105 = **62.7%**
 
-### Power Users (Segment: High AI · High Output, 15 devs)
-
-These 15 people are the most valuable cohort — they spend on AI AND ship code.
-
-Examples: **Eugene Lyapustin** (1.6k commits), **Sam Pfeiffer** (1.5k commits), **Saeid Samadi** (758 commits, 100% AI share), **Oleg Sinavski** (392 commits, 10.9M AI lines), **Daksh Dhingra**, **Cheerag Sharma**, **Jacob Moss**, **Sepehr Ramezani**, **cfil**, **Karim Shaban**, **Artem Ismagilov**, **Yuriy Strezhik**, **Dr. Klingensmith**, **Gourav Wadhwa**, **Cursor Agent (bot)**.
-
-**Recommendation**: 1-on-1 with top 5 to document workflow → publish playbook.
-
-### Cursor-Heavy Developers
-
-67 active devs. **Andy Park** stands out with 8.6M AI lines but only $33 spend — Cursor subscription user, very efficient.
-
-### Claude Code-Heavy Developers
-
-See dashboard's "Claude Code" tab for the leaderboard. Top CC spenders are likely Oleg, Eugene, Sam — same cohort as overall top spenders.
-
-### ChatGPT-Heavy Users
-
-Lower spend overall but **Cody Griffin** stands out with $1,188 and a high $/msg ratio — flag for routing review.
-
-### Adoption Segments (combined view)
+### Adoption Segments
 
 | Segment | Users | Pattern | Risk | Recommendation |
 |---------|-------|---------|------|----------------|
-| **High AI · High Output** | 15 | AI-first power users | Cost runaway if reasoning models overused | Keep; document playbook |
-| **Low AI · High Output** | 10 | Productive engineers under-using AI | Productivity left on table | Pair with power user for 1 sprint |
-| **High AI · Low Output** | (varies by repo) | High AI spend, few commits | Could be non-coding work OR wasted spend | Validate role / use case |
-| **Bots / Agents** | 13 | CI / Cursor Agent / Renovate | Higher bug-fix rate than humans | Audit agent PR quality |
-| **AI active, no git** | 99 | Non-engineers (PM, ops, exec, research) | Costs unmonitored | Confirm intended use, budget per role |
-| **Git active, no AI** | 42 | Old-school engineers | Output bottlenecked | Train + provide seat |
-| **Normal** | 47 | Mid both | Healthy mainstream | None |
-| **Lots of AI lines, few commits** | 1 | Anomaly (1 dev with 244k AI lines on 1 commit) | Misleading metric | Investigate — likely paste/config |
+| **High AI · High git output** | 15 | AI-first power engineers (Eugene, Sam, Saeid, Oleg, Daksh...) | Cost runaway if reasoning models overused | Keep & document playbook |
+| **Low AI · High git output** | 10 | Productive engineers under-using AI | Productivity left on table | Pair with power user 1 sprint |
+| **High AI lines, few commits** | 1 (Amir Torabi: 244k AI lines, 1 commit) | Anomaly — likely paste of generated config | Misleading metric | Investigate workflow |
+| **Bots / Agents** | 13 | github-actions, Cursor Agent, Renovate | Higher bug-fix rate than humans | Audit agent PRs (Report II) |
+| **AI active, no git** | 89 | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy | Costs unmonitored by role | Confirm intended use; budget per role |
+| **Git active, no AI** | 44 | Engineers not on AI tools | Output bottlenecked | Pair with power user; provide seat |
+| **Normal** | 45 | Mainstream mid-AI mid-output | Healthy | None |
 
 ### Anomalies / Workflow Review Candidates
 
-- **Amir Torabi**: 244k AI lines on 1 commit (high AI cost, near-zero git additions). [Hypothesis] One-off paste of generated config; not a real productivity signal.
-- **Cody Griffin (ChatGPT)**: high $/msg suggests reasoning model overuse for routine tasks.
-- **6 display-name collisions** ('Yoo-Jin Jung', 'Sergei', 'Matt', 'George', 'Dmitry', plus the now-merged Blake Lieber) — confirm whether these are genuinely 2 people or merge candidates.
+| Person | Anomaly | Likely cause | Action |
+|--------|---------|--------------|--------|
+| **Amir Torabi** | 244k AI lines, 1 commit, 2 git additions | Pasted generated config or one-off; metric misleading | Confirm, exclude from team metrics if true |
+| **Cody Griffin** | $23/msg on ChatGPT, 51 messages | Reasoning model habit | 15-min coaching call |
+| **Dr. Klingensmith** | $23/msg on ChatGPT, 34 messages | Same as Cody | 15-min coaching call |
+| **Sam Pfeiffer** | $17.85/msg on ChatGPT (despite mixed multi-tool profile) | Reasoning model for harder tasks (legitimate?) | Confirm |
+| **Artem (`n8n_artem`)** | 57,250 events, $0.01/msg | Automation/cron (n8n workflow) | Validate it's intentional + on-budget |
+
+### How key people use AI — quick read
+
+- **Oleg Sinavski**: Cursor-first. Tab completions are 99% of his volume. Favourite model: claude-opus-high-thinking. Pattern = AI-assisted IDE coding at full throttle. Likely doing inference / training pipeline work given the volume.
+- **atin / Richard / Andy**: pure Claude Code, near-zero git activity. **[Hypothesis]** Non-engineers doing agentic work (research, analysis, doc generation). Worth confirming what business workflow they're running.
+- **Eugene Lyapustin**: rare balanced profile — high Claude Code spend AND high git output (1.6k commits). This is the "ideal" AI-first engineer pattern.
+- **Cody Griffin / Klingensmith**: ChatGPT reasoning users. $23/msg confirms o1/o3 default; the question is whether the queries actually need that much reasoning.
 
 ---
 
 ## 4. Economics
 
-### Current Spend
+### Current Spend (Last 30 days)
 
-**[Fact] Last 30 days: $24,112 total.** Breakdown (approximations from 30d-window vs lifetime ratios):
-- Claude / Anthropic: ~$15,000 (62%)
-- Cursor: ~$8,000 (33%)
-- ChatGPT / OpenAI: ~$400 (2-3%)
-- OpenAI Artem live API: ~$170 (<1%, 7d view)
+**$24,104** total. Annualised: **~$293,000/yr** if linear.
 
-**Annualised run-rate: ~$290k/yr** if usage stays linear.
+### Spend Breakdown by Tool
 
-### Spend Breakdown by Tool (Lifetime Totals)
+| Tool | Spend (30d) | Share |
+|------|------------:|------:|
+| Anthropic (Claude) | $13,779 | 57.2% |
+| Cursor | $7,214 | 29.9% |
+| OpenAI | $3,112 | 12.9% |
+| **TOTAL** | **$24,104** | 100% |
 
-| Tool | Lifetime spend | Note |
-|------|---------------|------|
-| Anthropic (all Claude products) | $44,731 | dominant |
-| Cursor (overage) | $20,187 | + $3,257 included-subscription = $23,444 effective |
-| OpenAI Humanoid | $3,238 | JSON-imported |
-| OpenAI Artem | $169 (7d snapshot) | live API |
-| **Total** | **~$71.6k** to date | |
+Within Anthropic, **Claude Code (Agent) = $11,489 (83% of Claude)**. Within OpenAI, **Humanoid org = $2,571, Artem org = $540** (Artem is the n8n automation).
 
 ### Spend Concentration
 
-| Metric | Value | Interpretation |
-|--------|-------|----------------|
-| Top 5 share | ~45% [Estimate] | Pareto-healthy |
-| Top 10 share | ~62% [Estimate] | Pareto-healthy |
-| Users at $200+/30d | ~12 | Normal high-spender count |
-| Users at $1k+/30d | ~3-5 | Power users — keep |
+| Metric | Value |
+|--------|------:|
+| Top-5 share | **44.9%** ($10,811) |
+| Top-10 share | **62.7%** ($15,105) |
+| Users ≥ $200/30d | ~14 |
+| Users ≥ $500/30d | ~10 |
+| Users ≥ $1k/30d | 6 |
 
-### Model Cost Structure (from "Models" tab)
+Classic Pareto — manageable to alert on.
 
-Top models in landscape (by share within their tool):
-- **Anthropic models**: claude-opus, claude-sonnet, claude-haiku family — Opus is the expensive one
-- **OpenAI models**: gpt-5.5, gpt-5.5-mini, o-series
-- **Cursor**: routes through Claude / GPT — depending on user's "Favorite Model"
+### Model Cost Structure (Key Insights)
 
-**[Hypothesis]** Heavy `claude-opus` and `o3` usage explains the top-5 cost concentration. Switching routine tasks to `sonnet`/`haiku` or `gpt-mini` could drop 30-50% of cost with minimal productivity impact.
+**Per-request cost spread is enormous:**
 
-### Cost per User / Request / Message / AI Line
+| Model | $/req | Use case |
+|-------|------:|----------|
+| gpt-4.1-mini | **$0.001** | Routine questions, lookups, classification |
+| gpt-4.1 | $0.011 | Code generation, mid-complexity |
+| gpt-4o | $0.012 | General purpose |
+| gpt-5.5 | $0.13 | Better than mini, cheaper than full |
+| gpt-5.4 | $0.37 | Strong reasoning |
+| claude-generic (mostly claude-opus mix) | $2.02 | Complex multi-file work |
+| cursor-team aggregate | $3.84 | Per-request "session" |
+| gpt-4o-mini-tts | $60.46 | Voice / TTS (very few calls) |
 
-| Metric | Value | Interpretation |
-|--------|-------|----------------|
-| Avg spend / active user (30d) | $150 | reasonable for power tools |
-| Anthropic spend / request (lifetime) | $0.087 | typical with reasoning model mix |
-| Cursor spend / completion | $2.54 (overage) | high — but completions includes free Tab |
-| Cursor spend / 1k AI lines | $0.64 (lifetime) | extremely efficient |
-| ChatGPT spend / message | $0.01-$100+ | huge variance — routing fix needed |
+Routing one third of expensive-model traffic to mid-tier models could save 30-50% on those calls.
 
-### Optimization Opportunities
+### Cost per User / Request / Message
 
-| Lever | Estimated Saving | Effort |
+| Metric | Value |
+|--------|------:|
+| **Avg spend per active user (30d)** | $150.65 |
+| Median spend per active user | ~$20 (Pareto tail) |
+| Avg Anthropic $/req | $2.02 |
+| Avg OpenAI $/req | $0.054 (dragged down by 57k automation events) |
+| Avg Cursor $/spend-event | $3.84 |
+
+### Cost Optimization Opportunities
+
+| Lever | Estimated saving | Effort |
 |-------|------------------|--------|
-| Model routing for ChatGPT (cheaper defaults) | -$50 to -$100/mo on OpenAI | 1 day (policy + docs) |
-| Cap reasoning-model usage to specific roles | -10-20% on Anthropic ($1.5-3k/mo) | 1 week (key segmentation) |
-| Sunset zero-usage seats (Cursor) | $30-60/mo per seat | trivial |
-| Coach "Git active, no AI" cohort to start using AI | NEUTRAL on cost, +productivity | 1 quarter |
+| ChatGPT model routing (force mini default) | **$1,000-$1,500/mo** | 1 day |
+| Cap reasoning-model usage for top 3 outliers | $500-$1,000/mo | 1 week of coaching |
+| Sunset zero-activity Cursor seats (81 seats, 18 inactive) | $30-60/mo per seat × 18 | trivial |
+| Move agentic synthesis routing decisions to cheaper Claude tier | $1,500-$2,500/mo | 2 weeks |
+| **Total opportunity** | **~$3,000-$5,000/mo (12-20% of current spend)** | |
 
-### Model Routing Recommendation Policy
+### Model Routing Policy (Recommended)
 
-| Task Type | Recommended Tool / Model | Avoid |
-|-----------|--------------------------|-------|
-| Inline autocomplete | Cursor Tab (free in sub) | n/a |
-| Boilerplate / scaffolding | Cursor Agent + claude-sonnet OR Cursor Tab | claude-opus, o3 |
-| Multi-file refactor | Claude Code (Agent) + claude-sonnet first, opus if stuck | always-opus |
-| Hard debugging / architecture | Claude Code + claude-opus OR ChatGPT + o3 | overusing for routine work |
-| Research / documentation | ChatGPT (any model) or Claude Chat | n/a |
-| Routine "explain this code" | claude-haiku / gpt-4-mini | claude-opus, o3 |
-| Quick lookup / API question | gpt-4-mini | reasoning models |
+| Task type | Recommended | Avoid |
+|-----------|-------------|-------|
+| Inline autocomplete | Cursor Tab (free in sub) | — |
+| Boilerplate / scaffolding | Cursor Agent + sonnet OR Cursor Tab | claude-opus, o-series |
+| Multi-file refactor | Claude Code + sonnet first, opus if stuck | always-opus |
+| Hard debugging / architecture | Claude Code + opus OR ChatGPT + o3 | — |
+| Research / documentation | ChatGPT (any) or Claude Chat | — |
+| Routine "explain this code" | gpt-4.1-mini OR claude-haiku | opus, o-series |
+| Quick API lookup | gpt-4.1-mini | reasoning models |
+| Voice / TTS | Reserve `gpt-4o-mini-tts` for genuine voice work | inadvertent calls |
 
 ### Where to Save Without Reducing Productivity
 
-1. **Default models in Cursor / Claude / ChatGPT** should be mid-tier (sonnet, gpt-4o-mini). Reasoning models invoked explicitly.
-2. **Per-user budget alerts at $500/mo and $1,000/mo** — not caps, just early warning.
-3. **Eliminate Cursor seats with zero activity for 30+ days** — confirm before revoking.
-
-**Critical principle**: don't cut productive power users blindly. Oleg's $3k/mo is cheap if he ships features that would take a team-week otherwise.
+1. **Default models** in tooling should be mid-tier (sonnet, gpt-4o-mini). Reasoning models invoked explicitly.
+2. **Per-user budget alerts** at $500/mo and $1,000/mo (not caps).
+3. **Sunset zero-activity Cursor seats** (~18 of 81 inactive lifetime).
+4. **NEVER blindly cut productive power users.** Oleg's $3k/mo is cheap if he delivers 1 person-week of value.
 
 ---
 
 ## 5. Priority Actions
 
-### Immediate Fixes (this week)
+### Immediate (this week)
 
-1. **Confirm 6 display-name dupe cases** ('Yoo-Jin Jung' × 2, 'Sergei' × 2, etc.) — merge or document as genuinely separate people.
-2. **Refresh JSON exports** for Anthropic / Cursor / OpenAI Humanoid so dashboard period filter shows truly recent data (current data lags 2-3 days).
-3. **Interview top 3 AI power users** (Oleg, Eugene, Sam) — 30-min calls. Extract playbook.
-4. **Identify and ping 5 highest $/msg ChatGPT users** about model routing.
+1. **Confirm 6 display-name dupes** ('Yoo-Jin Jung', 'Sergei', 'Matt', 'George', 'Dmitry' × 2 each, plus 'Artem' singular case).
+2. **15-min coaching calls** with Cody Griffin, Dr. Klingensmith, Sam Pfeiffer about ChatGPT model routing.
+3. **Interview top 5 CC users** (Eugene, atin, Richard, Andy, Sam) — extract workflow playbook.
+4. **Validate Artem `n8n_artem`** automation is intentional and on-budget.
 
-### 30-Day Improvements
+### 30-day improvements
 
-5. **Publish team-wide "Which AI for which task" guide** — based on power-user interviews + model routing table above.
-6. **Set up per-user budget alerts** at $500 and $1k/mo (Slack / email).
-7. **Audit 42 "Git active, no AI" engineers** — confirm seats exist; pair each with a power user for 1 sprint.
-8. **Investigate bot bug rate** (24.8% vs 18.8% human) — sample 20 bot PRs, confirm if they're shipping clean code or fixing their own breakage.
+5. **Publish team-wide "Which AI for which task" guide** based on power-user interviews + model routing table above.
+6. **Per-user budget alerts** at $500 / $1k/mo (Slack notification).
+7. **Sunset 18 zero-activity Cursor seats** (confirm with each user first).
+8. **Audit 44 "Git active, no AI" engineers** — confirm seat availability; pair each with a power user for 1 sprint.
+9. **Investigate bot bug rate** (24.8% vs 18.8% human) — sample 20 bot PRs to confirm if agents ship clean code or fix their own breakage.
 
-### 60-90 Day Improvements
+### 60-90 day improvements
 
-9. **Build Report II — Git × AI × Quality correlation**. Connect dashboard's `git_commits` table to PR data (review_comments, time-to-merge, revert chains).
-10. **Add Jira integration** — incidents → fix-commit → AI-tool used by author. This closes the "did AI cost reduce production incidents" loop.
-11. **Quarterly review of model-routing policy** — provider pricing changes monthly, our defaults should adapt.
-12. **Productivity baseline** — track "cost per merged PR" and "cost per closed Jira ticket" by user. Cost/output, not cost alone.
+10. **Report II — Git × AI × Quality**. Connect `git_commits` to PR data (review_comments, time-to-merge, revert chains). Tag each commit with the AI tool likely used by the author.
+11. **Jira integration** — incidents → fix-commit → AI tool used by author. Closes the "did AI cost reduce production incidents" loop.
+12. **Quarterly model-routing policy review** — provider pricing changes monthly; defaults should adapt.
+13. **Productivity baseline** — track "cost per merged PR" and "cost per closed Jira ticket" by user.
 
 ---
 
 ## Leadership Takeaway
 
-> The question is no longer **whether** HMND uses AI — it does, materially and across engineering. $24k/mo and 161 active users say so.
+> The question is no longer **whether** HMND uses AI — it does, materially and across the company. **$24,104/month** and **160 active users** prove that.
 >
-> The next question is **which AI workflows produce useful engineering output**, and which workflows only consume budget. Right now we can see WHO spends, WHEN, ON WHAT — but we can't yet see WHETHER those dollars convert to merged code, reviewed code, deployed code.
+> The next question is **which AI workflows produce useful engineering output**, and which workflows only consume budget. The dashboard now shows WHO spends, WHEN, ON WHAT, and WHICH MODEL — but it cannot yet show WHETHER those dollars converted to merged code, reviewed code, deployed code, or closed Jira tickets.
 >
-> **Next step: connect AI telemetry with Git, PR, and Jira** so we can move from "cost report" to "cost-per-engineering-outcome report". That's Report II.
+> **Next step: connect AI telemetry with Git, PR, and Jira** so we can move from "AI cost report" to "AI cost-per-engineering-outcome report". That is Report II.
+>
+> Even before Report II lands, three actions have a clean ROI: (1) **model-routing policy** (~$1.5-3k/mo saving), (2) **interview top-5 playbook → publish** (multiplier on team productivity), (3) **budget alerts on 10 power users** (catch 80% of cost drift).
 
 ---
 
-*Report generated 2026-05-16. Underlying data verifiable via `python -m scripts.audit_etl` (17/17 ✓). Caveats: Cursor `ai_lines` is lifetime not period-filtered; JSON sources lag 2-3 days behind reality; bot bug-fix rate hypothesis needs Git correlation in Report II.*
+*Generated 2026-05-16. All numbers verifiable via `python -m scripts.audit_etl` (17/17 ✓) and `python -m scripts.report_i_data` (data dump). Caveats: Cursor `ai_lines` is lifetime not period-filtered; some "Agent" purpose events are synthesised from Cursor `agent_completions` (uniform 56-event signature) and should be separated from real Claude Code in Report II.*
