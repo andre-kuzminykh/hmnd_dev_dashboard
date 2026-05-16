@@ -22,7 +22,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Сайдкар: каждый час подтягивает свежие данные из OpenAI/Anthropic.
+  # Сайдкар: каждые 15 мин подтягивает свежие данные из OpenAI/Anthropic.
   sync:
     image: hmnd-dashboard:latest
     container_name: hmnd-sync
@@ -34,11 +34,23 @@ services:
     volumes:
       - ./data:/app/data
       - ./sources:/app/sources
+    # Healthcheck for the sync sidecar: it's NOT running Streamlit, so the
+    # image's default /_stcore/health probe would always report unhealthy.
+    # Instead we touch a heartbeat file at the start of every loop iteration
+    # and check that it's been written within the last 25 minutes (sync runs
+    # every 15 min, so 25 gives one missed run of slack before alerting).
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/sync.heartbeat -mmin -25 | grep -q . || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     entrypoint: ["sh", "-c"]
     command:
       - |
         echo "[sync] starting periodic loop (every 15 min)";
         while true; do
+          touch /tmp/sync.heartbeat;
           python -m scripts.sync --days 7 || echo "[sync] failed, will retry";
           sleep 900;
         done
