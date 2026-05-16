@@ -882,6 +882,59 @@ And строки-комментарии, inline `# ...` и пустые стро
 
 ---
 
+### UF-17.3 — User Flow: Cleanup git data when repo list is narrowed
+
+> *As an* admin
+> *I want* удалить из БД данные репо которые я убрал из `sources/git_repos.txt`
+> *so that* dashboard не показывает stale данные по репо которые больше не tracking-ятся.
+
+**Background.** Sync sidecar только **добавляет** строки в `git_commits` / `git_author_repo_stats` — он никогда не **удаляет**. Когда repo list сужается (e.g. 12 → 3 при rollback от 2026-05-16), стейл-rows остаются навечно. `scripts/cleanup_removed_repos.py` решает это.
+
+#### UC-17.3.1 — Dry-run inspection (default mode)
+
+```gherkin
+Given в БД есть git_commits для 5 репо: [hmnd, hmnd-cloud, hmnd-sim, hm-ops, Gripper_Firmware]
+And sources/git_repos.txt содержит только: [hmnd, hmnd-cloud, hmnd-sim]
+When admin запускает `python -m scripts.cleanup_removed_repos` (без --apply)
+Then скрипт печатает KEEP список (3 core) + WOULD REMOVE список (hm-ops, Gripper_Firmware)
+And ни одна строка в БД не удаляется
+And exit code = 0
+```
+
+**Требования:**
+- **FR-17.3.1.1** — Без флага `--apply` скрипт **только печатает план** и не модифицирует БД.
+- **FR-17.3.1.2** — Output разделён на 3 секции: canonical list (что в файле), KEEP (что в БД и в файле), REMOVE/WOULD REMOVE (что в БД и не в файле).
+
+#### UC-17.3.2 — Apply mode — actually remove rows
+
+```gherkin
+Given dry-run показал что нужно удалить 9 репо
+When admin запускает `python -m scripts.cleanup_removed_repos --apply`
+Then DELETE FROM git_commits WHERE repo NOT IN (canonical short_names)
+And DELETE FROM git_author_repo_stats WHERE repo NOT IN (canonical short_names)
+And печатается ✅ summary
+```
+
+**Требования:**
+- **FR-17.3.2.1** — `--apply` запускает `DELETE` за obé таблицы (`git_commits`, `git_author_repo_stats`) в одной транзакции.
+- **FR-17.3.2.2** — Repos из `git_repos.txt` **ни при каких обстоятельствах** не удаляются (whitelist semantic — обратное от deny-list).
+- **NFR-17.3.2.1** — Идемпотентность: повторный run на уже-чистой БД — no-op (печатает "nothing to do").
+
+**Tests by layer:**
+
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Infra | `T-INFRA-17.3.1` | Module imports cleanly, callable entry points |
+| Infra | `T-INFRA-17.3.2` | Production config file exists, parseable |
+| Service | `T-SVC-17.3.1` | `_canonical_short_names` parses file → set of short names |
+| Service | `T-SVC-17.3.2` | Lines without '/' skipped (won't claim "rogue-text" as repo) |
+| Data | `T-DATA-17.3.1` | Dry-run does NOT modify DB rows (worst-case-bug guard) |
+| Data | `T-DATA-17.3.2` | `--apply` removes only non-listed repos, keeps listed |
+| Data | `T-DATA-17.3.3` | Idempotent: 2nd run on clean DB is no-op |
+| Data | `T-DATA-17.3.4` | Core 3 repos in canonical list always survive (whitelist invariant) |
+
+---
+
 ### UF-17.2 — User Flow: Resilience — failed clone не валит batch
 
 > *As an* admin
@@ -1014,6 +1067,14 @@ And `git_commits.repo` column в CSV содержит short_name, не full org/
 | `tests/test_extract_git_stats.py::test_t_svc_17_2_1_2_main_continues_after_skip` | FR-17.2.1.2 (UC-17.2.1, Service) |
 | `tests/test_extract_git_stats.py::test_t_data_17_2_2_1_short_name_after_slash` | FR-17.2.2.1 (UC-17.2.2, Data) |
 | `tests/test_extract_git_stats.py::test_t_data_17_2_2_2_default_short_names_preserved` | FR-17.2.2.2 (UC-17.2.2, Data) |
+| `tests/test_cleanup_removed_repos.py::test_t_infra_17_3_1_script_module_loads` | FR-17.3.1.1 (UC-17.3.1, Infra) |
+| `tests/test_cleanup_removed_repos.py::test_t_infra_17_3_2_committed_config_file_exists` | FR-17.3.1.2 (UC-17.3.1, Infra) |
+| `tests/test_cleanup_removed_repos.py::test_t_svc_17_3_1_canonical_short_names_parses` | FR-17.3.1.2 (UC-17.3.1, Service) |
+| `tests/test_cleanup_removed_repos.py::test_t_svc_17_3_2_skips_lines_without_slash` | FR-17.3.1.2 (UC-17.3.1, Service) |
+| `tests/test_cleanup_removed_repos.py::test_t_data_17_3_1_dry_run_does_not_modify_db` | FR-17.3.1.1 (UC-17.3.1, Data) |
+| `tests/test_cleanup_removed_repos.py::test_t_data_17_3_2_apply_removes_non_listed_repos` | FR-17.3.2.1 (UC-17.3.2, Data) |
+| `tests/test_cleanup_removed_repos.py::test_t_data_17_3_3_idempotent_on_clean_db` | NFR-17.3.2.1 (UC-17.3.2, Data) |
+| `tests/test_cleanup_removed_repos.py::test_t_data_17_3_4_core_repos_never_deleted` | FR-17.3.2.2 (UC-17.3.2, Data) |
 
 ## Архитектура слоёв
 

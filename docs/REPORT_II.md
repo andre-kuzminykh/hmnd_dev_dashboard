@@ -4,12 +4,13 @@
 **Audience:** HMND engineering leadership + CEO
 **Scope:** HumanoidTeam GitHub org (~100+ repos), with deep dives on `hmnd`, `hmnd-cloud`, `hmnd-sim`.
 
-> **Methodology.** Repository structure, file inventory, AGENTS/CLAUDE/CODEOWNERS presence, CI workflows, tests, contributors, and excerpts of agent-instruction files were collected from local clones via `scripts/audit_repos_local.sh` on 2026-05-16. Findings tagged **[Fact]** (verifiable from inventory bytes / git log), **[Estimate]** (derived inference), **[Hypothesis]** (requires deeper source-code read). Source code itself was **not read** — only structural signals + first-60-line excerpts of documentation files.
+> **Methodology.** Repository structure, file inventory, AGENTS/CLAUDE/CODEOWNERS presence, CI workflows, per-module tests, contributors, and excerpts of agent-instruction files were collected from local clones via `scripts/audit_repos_local.sh` on 2026-05-16, **Phase 2** with full directory checkout (LFS skipped, all 14 hmnd modules + 24 subdirs visible). Findings tagged **[Fact]** (verifiable from inventory bytes / git log), **[Estimate]** (derived inference), **[Hypothesis]** (requires deeper source-code read). Source code itself was **not read** — only structural signals + first-60-line excerpts of documentation files.
 >
-> **Known data gaps — read before quoting numbers:**
-> 1. **`hmnd` submodules were not initialized** at clone time (`hmnd_robot/`, `hmnd_training/`, `hmnd_locomotion/`, `hmnd_sim/`, `hmnd_fleet/`, `hmnd_firmware/`, `hmnd_infra/`, `hmnd_flywheel/`, `hmnd_wholebody/`, `hmnd_playground/` — see `git submodule update --init --recursive` in README). LoC / test-count / per-module-README findings for `hmnd` show only the **root + thin top layer (~0.2 MB of code + docs)**. The real `hmnd` codebase (estimated >100 MB across submodules) was inspected via *indirect signals* (hot-directories in git log, CI workflow names, AGENTS.md references). A Phase 2 audit with submodules initialized would refine §3.
-> 2. **LFS files were skipped** (`GIT_LFS_SKIP_SMUDGE=1`). Localization maps, USD models, model checkpoints not in working tree. Doesn't affect readiness assessment; affects size measurements only.
-> 3. **`hmnd-sim` is deprecated** (per its own README) — real simulation code now lives in `hmnd/hmnd_sim` submodule (not initialized, see #1). §5 documents the deprecated repo for completeness.
+> **Known caveats:**
+> 1. **LFS files were skipped** (`GIT_LFS_SKIP_SMUDGE=1`). Localization maps, USD models, model checkpoints, training datasets are 1-line pointer files. Doesn't affect readiness assessment; affects size measurements only.
+> 2. **Third-party submodules inside hmnd_robot/, hmnd_training/, hmnd_sim/** (placo, IsaacLab, robocasa, lerobot, ruckig, etc.) were not initialized — these are vendored ROS / ML deps, not first-party HMND code, so excluding them is correct for readiness scoring.
+> 3. **`hmnd-sim` (separate repo) is deprecated** (per its own README) — real simulation code lives in `hmnd/hmnd_sim/` directory inside hmnd monorepo (covered in §3). §5 documents the deprecated repo for completeness.
+> 4. **Scope:** Phase 2 audit completed on the 3 core repos that the dashboard tracks: `hmnd`, `hmnd-cloud`, `hmnd-sim`. The 9 firmware/driver repos that were briefly added during the F-17 expansion were intentionally removed (per user decision 2026-05-16) — too low-signal for productivity metrics.
 
 ---
 

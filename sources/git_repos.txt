@@ -14,21 +14,29 @@
 #   docker compose exec dashboard python -m scripts.sync --days 90
 #   docker compose kill dashboard && docker compose up -d dashboard
 
-# ── Core monorepos ──
+# ── Core monorepos (3 — reverted to default scope 2026-05-16) ──
 HumanoidTeam/hmnd
 HumanoidTeam/hmnd-cloud
 HumanoidTeam/hmnd-sim
 
-# ── Active first-party engineering (Report II identified) ──
-HumanoidTeam/hm-ops
-HumanoidTeam/Gripper_Firmware
-HumanoidTeam/firmware_hal_aurix_tc3
-HumanoidTeam/firmware_hal_arm_stm32h7
-HumanoidTeam/firmware_hal_c2000ware
-HumanoidTeam/etherlab-ethercat
-HumanoidTeam/manus_ros_drivers
-HumanoidTeam/ros2_xhand
-HumanoidTeam/beta-morphology-analysis-tools
+# History: tried 12-repo expansion with 9 active firmware/drivers, rolled back
+# because firmware repos are too low-signal for productivity metrics (typical
+# 3-50 commits per repo, dominated by Acontis / vendor refactors). Core 3
+# captures ~95%+ of first-party engineering output.
+#
+# To re-expand: uncomment lines below + run scripts/extract_git_stats AND
+# delete this notice. To clean up DB after removing repos: run
+# scripts/cleanup_removed_repos.py.
+#
+#HumanoidTeam/hm-ops
+#HumanoidTeam/Gripper_Firmware
+#HumanoidTeam/firmware_hal_aurix_tc3
+#HumanoidTeam/firmware_hal_arm_stm32h7
+#HumanoidTeam/firmware_hal_c2000ware
+#HumanoidTeam/etherlab-ethercat
+#HumanoidTeam/manus_ros_drivers
+#HumanoidTeam/ros2_xhand
+#HumanoidTeam/beta-morphology-analysis-tools
 
 # Do NOT add: vendored forks (placo, IsaacLab, lerobot_lib, robocasa,
 # BehaviorTree.ROS2, ruckig, ros-noetic, etc.) — changes there belong

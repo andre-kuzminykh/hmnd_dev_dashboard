@@ -140,19 +140,18 @@ def test_t_infra_17_1_4_1_config_file_exists():
         f"Expected committed config file at {COMMITTED_REPO_LIST}"
 
 
-def test_t_infra_17_1_4_2_config_file_has_default_plus_engineering():
-    """T-INFRA-17.1.4.2 — Committed file contains 3 core + ≥9 active engineering repos.
+def test_t_infra_17_1_4_2_config_file_contains_all_core_repos():
+    """T-INFRA-17.1.4.2 — Committed file contains AT LEAST the 3 core repos.
 
-    Catches accidental regression where someone trims the file back to the 3
-    default repos and silently drops the engineering set.
+    The file is allowed to be exactly the 3 defaults (current scope) or
+    extended beyond them. What we guard against is the file silently losing
+    one of the 3 core monorepos — that would break Code Quality, Devs
+    (Git × AI), and segment-distribution panels in the dashboard.
     """
     repos = _parse_committed_repo_list()
-    # All 3 core must be present
     for core in egs.DEFAULT_REPOS:
         assert core in repos, f"core repo {core} missing from committed list"
-    # And at least 9 more (active engineering — Report II selection)
-    assert len(repos) >= 12, \
-        f"Expected ≥12 repos in committed file, found {len(repos)}: {repos}"
+    assert len(repos) >= 3, f"Expected ≥3 repos in committed file, found {len(repos)}: {repos}"
 
 
 def test_t_data_17_1_4_1_file_strips_comments_and_blanks(monkeypatch, tmp_path):
