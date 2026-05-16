@@ -13,7 +13,9 @@
 ### Key Findings
 
 - **[Fact]** HMND spent **$23,353** on AI tools in the last 30 days. Annualised run-rate: **~$284,000/yr**.
-- **[Fact]** **140 unique active humans** in last 30d (post identity-merge on 2026-05-16). ✅ Dual-domain people who used both `@thehumanoid.ai` (engineering) and `@skl.vc` (Sycamore corporate) are now correctly counted as one human each — 20 split identities merged, $19,610 of fragmented spend re-attributed. See Appendix A.10.
+- **[Fact]** **140 active humans in the 30-day AI-usage cohort** (post identity-merge on 2026-05-16). ✅ Dual-domain people who used both `@thehumanoid.ai` (engineering) and `@skl.vc` (Sycamore corporate) are now correctly counted as one human each — 20 split identities merged, $19,610 of fragmented spend re-attributed. See Appendix A.10.
+
+> **Cohort note.** "140 active humans" counts people with ≥ 1 AI usage event in the last 30 days. The Adoption Segments table in §3 sums to **~206** because it works on a **different cohort**: every person ever seen in either `users` (AI events) OR `git_authors` (commits) — lifetime, no time window, plus 13 bots. The numbers SHOULD NOT match; see Appendix A.12 for the reconciliation.
 - **[Fact]** Tool mix:  **Anthropic 57.2% / Cursor 29.9% / OpenAI 12.9%** by 30d spend.
 - **[Fact]** Within Anthropic, **Claude Code (Agent) is 83% of Anthropic spend ($11,489)** — agentic coding is the dominant Claude workflow.
 - **[Fact]** **Top 5 spenders = 44.7% of total spend; Top 10 = 63.2%** — textbook Pareto, robust to identity merge (shifted < 1 pp).
@@ -209,15 +211,20 @@
 
 ### Adoption Segments
 
-| Segment | Users | Pattern | Risk | Recommendation |
-|---------|-------|---------|------|----------------|
-| **High AI · High git output** | **19** ⬆ (+4 vs pre-merge) | AI-first power engineers (Eugene, Sam, Saeid, Oleg, Daksh...). The +4 are dual-domain people whose coupling was hidden before the merge. | Cost runaway if reasoning models overused | Keep & document playbook |
+> **Cohort:** lifetime universe of every person seen in either `users` (any AI event ever) or `git_authors` (any commit ever) — **not** the 30-day AI-active cohort of 140 from §1. Latest audit (2026-05-16) sums to **206 devs** total. This number should NOT match "140 active humans" — see cohort note in §1 and reconciliation in Appendix A.12.
+
+| Segment | Devs | Pattern | Risk | Recommendation |
+|---------|-----:|---------|------|----------------|
+| **High AI · High git output** | **21** ⬆ (+6 vs pre-merge) | AI-first power engineers (Eugene, Sam, Saeid, Oleg, Daksh...). Coupling that was hidden by dual-domain split becomes visible | Cost runaway if reasoning models overused | Keep & document playbook |
 | **Low AI · High git output** | **7** ⬇ (−3 vs pre-merge) | Productive engineers under-using AI; 3 moved into "High AI · High git" after their dual-domain AI spend was reunified with their git output | Productivity left on table | Pair with power user 1 sprint |
 | **High AI lines, few commits** | 1 (Amir Torabi: 244k AI lines, 1 commit) | Anomaly — likely paste of generated config | Misleading metric | Investigate workflow |
 | **Bots / Agents** | 13 | github-actions, Cursor Agent, Renovate | Higher bug-fix rate than humans | Audit agent PRs (Report II) |
-| **AI active, no git** | **72** ⬇ (−17 vs pre-merge) ✅ | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy. **17 phantom rows removed** by the identity merge: these were Cursor-via-`@skl.vc` accounts whose Git activity was logged under their `@thehumanoid.ai` identity. Remaining 72 = real PM / ops / research / executive AI users. | Costs unmonitored by role | Confirm intended use per person; per-role budgets |
-| **Git active, no AI** | 44 | Engineers not on AI tools | Output bottlenecked | Pair with power user; provide seat |
+| **AI active, no git** | **79** ⬇ (−10 vs pre-merge) ✅ | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy. **17 phantom rows initially removed** by the identity merge: these were Cursor-via-`@skl.vc` accounts whose Git activity was logged under their `@thehumanoid.ai` identity. Drift back to 79 after subsequent sync cycles is expected (lifetime cohort grows). | Costs unmonitored by role | Confirm intended use per person; per-role budgets |
+| **Git active, no AI** | 42 | Engineers not on AI tools | Output bottlenecked | Pair with power user; provide seat |
 | **Normal** | 43 | Mainstream mid-AI mid-output | Healthy | None |
+| **TOTAL** | **206** | sum across all segments (lifetime universe) | — | — |
+
+> **Reconciliation:** 206 (lifetime) − 13 (bots) = **193 humans ever seen in HMND**. Of these, **140 used AI in the last 30 days** (the "active" cohort in §1). The 53 difference = humans who committed to git in the past but didn't touch AI in the recent window, plus humans who used AI more than 30d ago but stopped. **Both numbers are correct — they answer different questions.**
 
 ### Anomalies / Workflow Review Candidates
 
@@ -603,3 +610,29 @@ To avoid confusion when reading the "next step" recommendations:
 
 **Bottom line**: when Report I says "next step: connect AI × Git × PR × Jira", READ IT AS "extend the already-connected AI × Git with PR and Jira on top". Git telemetry is in the dashboard today.
 
+
+## A.12 Cohort reconciliation — "140 active humans" vs "206 in segments"
+
+Surfaced 2026-05-16 by leadership review (good catch). The two numbers come from **different SQL queries with different time windows and different sources** — they answer different questions and are NOT supposed to match.
+
+| Metric | SQL (roughly) | Time window | Includes |
+|---|---|---|---|
+| "**140 active humans**" (§1, §4) | `SELECT COUNT(DISTINCT user_id) FROM usage_events WHERE occurred_at >= now − 30d` | **Last 30 days** | Humans with ≥ 1 AI usage event in the window |
+| "**206 devs**" (§3 segments) | `SELECT COUNT(*) FROM <users ∪ git_authors>` | **Lifetime** | Everyone ever seen in either AI usage OR git history; includes 13 bots and inactive lifetime accounts |
+
+**Subtraction sanity check:**
+```
+206 lifetime devs
+−  13 bots/agents (BOT_AUTOMATION segment)
+= 193 humans ever seen in HMND tooling
+− 140 humans active in AI in last 30d
+=  53 humans who are in git/AI history but not active in last 30d
+```
+
+These 53 break down (estimate from segment data) as:
+- ~ 42 in `GIT_ACTIVE_BUT_NO_AI` — engineers who commit but don't use AI tools (or stopped using them in 30d window)
+- ~ 11 in lifetime AI users who haven't logged any AI event in the last 30 days (churned / on leave / job changed)
+
+**Both numbers are correct.** The headline "140 active humans" is the right metric for "how broad is current adoption". The "206 devs" total is the right metric for "what is the full universe we're segmenting against". The two simply answer different questions, and the report should make that clear (§1 cohort note + this appendix).
+
+**Drift over time:** the lifetime cohort grows monotonically (it only adds rows). The 30-day-active cohort moves up or down as people churn in/out of the window. Don't be surprised if next month it's 145 active, 215 lifetime — sync keeps adding new git authors and new AI users.
