@@ -352,6 +352,111 @@ def audit_git_csv() -> bool:
     return ok1 and ok2 and ok3 and ok4
 
 
+def audit_code_quality() -> bool:
+    """Cross-check Code Quality numbers (F-15) against raw CSV.
+
+    For each unique (repo, sha) in the per-commit-file CSV:
+      - Run _classify_subject on the subject line independently
+      - Sum the flags by repo
+      - Compare with what get_team_quality / direct SQL returns
+
+    This is the strongest possible 'do you trust the dashboard'
+    check — we re-derive every Code Quality KPI from raw bytes.
+    """
+    print(f"\n{HEAD}── CODE QUALITY (Git × AI) ──{END}")
+    from data.sources.git_csv import (
+        _classify_subject, latest_git_commits_file,
+    )
+    from data.db import get_conn
+    import csv
+
+    gc = latest_git_commits_file()
+    if gc is None:
+        print(f"  {BAD} no git_commit_file_stats_*.csv — skipping Code Quality audit")
+        return True
+
+    # Re-derive from raw CSV: one classification per unique (repo, sha)
+    seen: set[tuple[str, str]] = set()
+    raw_total = 0
+    raw_fix = raw_revert = raw_feat = raw_refactor = raw_test = raw_doc = 0
+    raw_per_repo_fix: dict[str, int] = {}
+    raw_per_repo_total: dict[str, int] = {}
+    with open(gc.path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            key = (r.get("repo") or "", r.get("commit_sha") or "")
+            if key in seen or not key[0] or not key[1]:
+                continue
+            seen.add(key)
+            tags = _classify_subject(r.get("subject") or "")
+            raw_total += 1
+            raw_fix      += tags["is_bug_fix"]
+            raw_revert   += tags["is_revert"]
+            raw_feat     += tags["is_feature"]
+            raw_refactor += tags["is_refactor"]
+            raw_test     += tags["is_test"]
+            raw_doc      += tags["is_docs"]
+            raw_per_repo_total[key[0]] = raw_per_repo_total.get(key[0], 0) + 1
+            raw_per_repo_fix[key[0]] = raw_per_repo_fix.get(key[0], 0) + tags["is_bug_fix"]
+
+    # Compare with what's in git_commits after load
+    with get_conn() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS commits,
+                      SUM(is_bug_fix)  AS fixes,
+                      SUM(is_revert)   AS reverts,
+                      SUM(is_feature)  AS features,
+                      SUM(is_refactor) AS refactors,
+                      SUM(is_test)     AS tests,
+                      SUM(is_docs)     AS docs
+               FROM git_commits"""
+        ).fetchone()
+        per_repo_db = {
+            r["repo"]: (r["commits"], r["fixes"]) for r in conn.execute(
+                """SELECT repo, COUNT(*) AS commits,
+                          SUM(is_bug_fix) AS fixes
+                   FROM git_commits GROUP BY repo"""
+            ).fetchall()
+        }
+
+    ok_total   = _print("DB git_commits unique == raw", float(raw_total),    float(row["commits"]),   tol=0)
+    ok_fix     = _print("DB Σ is_bug_fix  == raw",      float(raw_fix),      float(row["fixes"]),     tol=0)
+    ok_revert  = _print("DB Σ is_revert   == raw",      float(raw_revert),   float(row["reverts"]),   tol=0)
+    ok_feat    = _print("DB Σ is_feature  == raw",      float(raw_feat),     float(row["features"]),  tol=0)
+    ok_refac   = _print("DB Σ is_refactor == raw",      float(raw_refactor), float(row["refactors"]), tol=0)
+    ok_test    = _print("DB Σ is_test     == raw",      float(raw_test),     float(row["tests"]),     tol=0)
+    ok_doc     = _print("DB Σ is_docs     == raw",      float(raw_doc),      float(row["docs"]),      tol=0)
+
+    print(f"\n  Per-repo cross-check (period_days=0 → all-time):")
+    from backend.services.git_quality import get_team_quality
+    repo_oks: list[bool] = []
+    for repo, (db_commits, db_fixes) in sorted(per_repo_db.items()):
+        tq = get_team_quality(period_days=0, repos=[repo])
+        ok_c = _print(f"  [{repo}] commits service==db",
+                      float(db_commits), float(tq["commits"]), tol=0)
+        ok_f = _print(f"  [{repo}] fixes service==db",
+                      float(db_fixes),  float(tq["fixes"]),    tol=0)
+        ok_r = _print(f"  [{repo}] commits db==raw",
+                      float(raw_per_repo_total.get(repo, 0)), float(db_commits), tol=0)
+        ok_rf = _print(f"  [{repo}] fixes db==raw",
+                       float(raw_per_repo_fix.get(repo, 0)), float(db_fixes),    tol=0)
+        repo_oks.extend([ok_c, ok_f, ok_r, ok_rf])
+
+    # $/fix sanity: numerator team-wide spend, denominator follows repo filter
+    from backend.services.git_quality import get_ai_spend_per_fix
+    spf_all = get_ai_spend_per_fix(period_days=30)
+    print(f"\n  $/fix (team-wide, last 30d): "
+          f"${spf_all['ai_spend']:,.2f} ÷ {spf_all['fixes']} = "
+          f"${spf_all['ai_spend_per_fix'] or 0:.2f}")
+    for repo in sorted(per_repo_db):
+        spf_r = get_ai_spend_per_fix(period_days=30, repos=[repo])
+        print(f"  $/fix [{repo}]: same numerator ${spf_r['ai_spend']:,.2f} ÷ "
+              f"{spf_r['fixes']} fixes (filtered) = "
+              f"${spf_r['ai_spend_per_fix'] or 0:.2f}")
+
+    return all([ok_total, ok_fix, ok_revert, ok_feat, ok_refac, ok_test, ok_doc, *repo_oks])
+
+
 # ---------------------------------------------------------------------------
 
 def main() -> int:
@@ -362,6 +467,7 @@ def main() -> int:
         "OpenAI / Humanoid":  audit_openai_json(),
         "Tokens (uncached)":  audit_tokens_uncached(),
         "Git CSV":            audit_git_csv(),
+        "Code Quality":       audit_code_quality(),
     }
     print(f"\n{HEAD}══════════════════ SUMMARY ══════════════════{END}")
     all_ok = True
