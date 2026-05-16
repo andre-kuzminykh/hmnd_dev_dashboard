@@ -752,43 +752,77 @@ And значок имеет aria-label с тем же текстом для scre
 
 ## F-17 — Configurable repository list for git extraction
 
-**Цель:** Дать админу возможность расширить набор репо, по которым `scripts.extract_git_stats` собирает CSV для дашборда, **без правки кода**. Это нужно потому что Report II identified ~10 active first-party repos beyond the 3 monorepos (firmware, drivers, hm-ops, etc.) — их можно опционально включить в productivity-метрики.
+**Цель:** Дать админу возможность расширить набор репо, по которым `scripts.extract_git_stats` собирает CSV для дашборда, **без правки кода**. Report II identified ~10 active first-party engineering repos beyond the 3 monorepos (firmware, drivers, hm-ops, etc.) — конфигурируемый список позволяет включать их в productivity-метрики по необходимости.
 
-### US-17.1 — Override repo list via CLI / env / config file
+> **Новый формат документации (введён в F-17, применяется ко всем фичам):**
+> `Feature → User Flow → Use Case → FR/NFR → Tests`, где **тесты раскладываются на 4 уровня**:
+> - **Infra** (T-INFRA-...) — окружение: env vars, файлы, permissions, network/auth
+> - **Data** (T-DATA-...) — формат данных: schema, parsing, CSV/JSON contracts
+> - **Service** (T-SVC-...) — бизнес-логика: чистые функции, формулы, сервисный layer
+> - **AI/Prompts** (T-AI-...) — LLM-related: prompt templates, agent instructions (n/a for F-17)
+>
+> Один FR может покрываться несколькими T-LEVEL тестами разных уровней (e.g. infra + service).
 
-> *As an* admin
-> *I want* указать список репо для extract_git_stats через CLI флаг, env-переменную или конфиг-файл
-> *so that* я могу расширять scope аудита без коммита изменений в код.
+---
 
-#### SC-17.1.1 — Default behaviour preserved
+### UF-17.1 — User Flow: Admin расширяет scope аудита без правки кода
+
+> *As an* admin (Engineering Ops)
+> *I want* указать список репозиториев для git-extraction через config-файл / env-переменную / CLI-флаг
+> *so that* я могу включать новые репо в дашборд за минуту, не открывая редактор и не делая PR.
+
+**Шаги flow:**
+1. Admin решает добавить новый репо (например `HumanoidTeam/hm-ops`) в дашборд.
+2. Admin либо раскомментирует строку в `sources/git_repos.txt`, либо передаёт `--repos` / `HMND_GIT_REPOS`.
+3. Запускает `docker compose exec dashboard python -m scripts.extract_git_stats`.
+4. Скрипт читает источник списка по приоритету, клонирует/обновляет каждый репо, пишет CSV.
+5. Sync sidecar (или admin вручную) загружает CSV в `git_commits` / `git_authors`.
+6. Через 15 мин новый репо появляется в Repository dropdown'е дашборда.
+
+#### UC-17.1.1 — Default fallback (no override)
 
 ```gherkin
-Given нет ни `--repos`, ни env-переменной `HMND_GIT_REPOS`, ни `sources/git_repos.txt`
+Given нет ни `--repos`, ни env `HMND_GIT_REPOS`, ни файла `sources/git_repos.txt`
 When запускается `python -m scripts.extract_git_stats`
 Then скрипт использует built-in список из 3 репо: HumanoidTeam/{hmnd, hmnd-cloud, hmnd-sim}
-And поведение идентично pre-F-17 версии — те же CSV-файлы, те же количество строк
+And поведение идентично pre-F-17 версии — те же CSV-файлы, то же количество строк
 ```
 
 **Требования:**
+- **FR-17.1.1.1** — `scripts.extract_git_stats._resolve_repos(cli_arg)` возвращает list[str] согласно priority `CLI > env > config file > built-in default`.
+- **FR-17.1.1.2** — Built-in `DEFAULT_REPOS` = `["HumanoidTeam/hmnd", "HumanoidTeam/hmnd-cloud", "HumanoidTeam/hmnd-sim"]` (3 элемента, тот же порядок, как до F-17).
 
-- **FR-17.1.1.1** — `scripts.extract_git_stats._resolve_repos(cli_arg)` возвращает list[str] согласно priority CLI > env > config file > built-in default.
-- **FR-17.1.1.2** — Built-in default = `["HumanoidTeam/hmnd", "HumanoidTeam/hmnd-cloud", "HumanoidTeam/hmnd-sim"]` (3 элемента, тот же порядок).
+**Tests by layer:**
 
-#### SC-17.1.2 — CLI flag override
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Service | `T-SVC-17.1.1.1` | `_resolve_repos(None)` без env/file → `DEFAULT_REPOS` |
+| Service | `T-SVC-17.1.1.2` | `DEFAULT_REPOS` неизменяем (3 элемента, exact order) |
+| Service | `T-SVC-17.1.1.3` | priority order: CLI > env > file > default (combo test) |
+| Data | `T-DATA-17.1.1.1` | `DEFAULT_REPOS` валиден как формат `org/repo` (no slashes-elsewhere) |
+
+#### UC-17.1.2 — CLI flag override
 
 ```gherkin
 Given пользователь запускает `python -m scripts.extract_git_stats --repos "org/a,org/b,org/c"`
 When _resolve_repos() вызывается
 Then возвращает ["org/a", "org/b", "org/c"]
-And env-переменная и config-файл игнорируются
+And env-переменная и config-файл игнорируются (даже если они заданы)
 ```
 
 **Требования:**
-
 - **FR-17.1.2.1** — `--repos "a/b,c/d"` парсится через split по запятой, whitespace по краям обрезается, пустые элементы выкидываются.
-- **FR-17.1.2.2** — CLI значение имеет приоритет над env и config — если оно непустое.
+- **FR-17.1.2.2** — CLI значение имеет приоритет над env и config — если оно непустое (whitespace-only считается пустым).
 
-#### SC-17.1.3 — Env var override
+**Tests by layer:**
+
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Service | `T-SVC-17.1.2.1` | parsing: `"  a/b ,c/d,, e/f "` → `["a/b","c/d","e/f"]` |
+| Service | `T-SVC-17.1.2.2` | CLI beats env + file when CLI is non-empty |
+| Service | `T-SVC-17.1.2.3` | empty CLI (`""` or whitespace) falls through to env/file/default |
+
+#### UC-17.1.3 — Env var override
 
 ```gherkin
 Given нет `--repos`, но установлен `HMND_GIT_REPOS="x/y, z/w"`
@@ -798,33 +832,57 @@ And config-файл игнорируется
 ```
 
 **Требования:**
-
 - **FR-17.1.3.1** — `HMND_GIT_REPOS` parsing идентичен CLI (split по запятой, strip whitespace, skip empties).
-- **FR-17.1.3.2** — Пустой env-var (`HMND_GIT_REPOS=""` или одни пробелы) trigger-ит fallback к config-файлу.
+- **FR-17.1.3.2** — Пустой env-var (`HMND_GIT_REPOS=""` или whitespace-only) триггерит fallback к config-файлу.
 
-#### SC-17.1.4 — Config file (`sources/git_repos.txt`)
+**Tests by layer:**
+
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Infra | `T-INFRA-17.1.3.1` | env var actually visible in process (`os.environ["HMND_GIT_REPOS"]` set in conftest) |
+| Service | `T-SVC-17.1.3.1` | env parsing: `" x/y ,z/w , "` → `["x/y","z/w"]` |
+| Service | `T-SVC-17.1.3.2` | empty env falls through to file/default |
+
+#### UC-17.1.4 — Config file (`sources/git_repos.txt`)
 
 ```gherkin
 Given нет `--repos`, нет env, но существует `sources/git_repos.txt` со строками:
   """
   # Production repos
   HumanoidTeam/hmnd
-  HumanoidTeam/hmnd-cloud
+  HumanoidTeam/hmnd-cloud  # core infra (inline comment)
 
   #HumanoidTeam/disabled-fork
   HumanoidTeam/hm-ops
   """
 When _resolve_repos(None) вызывается
 Then возвращает ["HumanoidTeam/hmnd", "HumanoidTeam/hmnd-cloud", "HumanoidTeam/hm-ops"]
-And строки-комментарии и пустые строки игнорируются
+And строки-комментарии, inline `# ...` и пустые строки игнорируются
 ```
 
 **Требования:**
+- **FR-17.1.4.1** — Config-файл парсится построчно: всё после `#` отбрасывается, потом `.strip()`. Если результат непустой — добавляется в list. Поддерживает inline-комментарии.
+- **FR-17.1.4.2** — Файл не обязателен. Если отсутствует или содержит только комментарии — fallback к built-in default.
 
-- **FR-17.1.4.1** — Config-файл парсится построчно: всё после `#` отбрасывается, потом `.strip()`. Если результат непустой — добавляется в list. Это поддерживает inline-комментарии (`HumanoidTeam/hmnd  # core monorepo`).
-- **FR-17.1.4.2** — Файл не обязателен. Если отсутствует или пустой — fallback к built-in default.
+**Tests by layer:**
 
-#### SC-17.1.5 — Resilience: одно неудачное клонирование не валит весь run
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Infra | `T-INFRA-17.1.4.1` | `sources/git_repos.txt` exists in committed repo (smoke check) |
+| Infra | `T-INFRA-17.1.4.2` | committed `git_repos.txt` content matches DEFAULT_REPOS + ≥ 9 active engineering |
+| Data | `T-DATA-17.1.4.1` | parsing strips `#` (full-line + inline) + blanks |
+| Data | `T-DATA-17.1.4.2` | every parsed line matches `^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$` format |
+| Service | `T-SVC-17.1.4.1` | missing file or all-comments file → fallback to DEFAULT_REPOS |
+
+---
+
+### UF-17.2 — User Flow: Resilience — failed clone не валит batch
+
+> *As an* admin
+> *I want* чтобы extraction завершилась даже если один репо недоступен (отозванный PAT, удалённый repo, network blip)
+> *so that* я не теряю данные по 11 репо из-за одного broken'а.
+
+#### UC-17.2.1 — Skip failed clone, continue with rest
 
 ```gherkin
 Given в списке 5 репо, и 1 из них приватный без доступа PAT
@@ -835,27 +893,41 @@ And exit code = 0 (это не fatal)
 ```
 
 **Требования:**
+- **FR-17.2.1.1** — `_ensure_repo()` возвращает `None` при failed clone/fetch (не raise). Caller skip-ает `None` и продолжает.
+- **FR-17.2.1.2** — В конце экстракции печатается SKIPPED список если он непуст; exit code = 0.
+- **NFR-17.2.1.1** — Partial clones удаляются при failure (`rm -rf` target dir), чтобы следующий run мог retry чисто.
 
-- **FR-17.1.5.1** — `_ensure_repo()` возвращает `None` при failed clone (вместо ranta'я выхода). Caller skip-ает None и продолжает с остальными репо.
-- **FR-17.1.5.2** — В конце экстракции печатается список SKIPPED репо если он непуст.
+**Tests by layer:**
 
-#### SC-17.1.6 — Repo identification
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Infra | `T-INFRA-17.2.1.1` | bad PAT → curl HTTP 404 reproducible (smoke; не запускается в CI) |
+| Service | `T-SVC-17.2.1.1` | `_ensure_repo` returns None on subprocess non-zero (mocked) |
+| Service | `T-SVC-17.2.1.2` | `main()` continues to next repo after skip; final report writes |
+
+#### UC-17.2.2 — Repo identification (org/repo → short name)
 
 ```gherkin
-Given в строке "org/repo" формат корректный
+Given строка "HumanoidTeam/firmware_hal_aurix_tc3"
 When _ensure_repo() обрабатывает её
-Then short_name = "repo" (всё после первого '/')
+Then short_name = "firmware_hal_aurix_tc3" (всё после первого '/')
 And `git_commits.repo` column в CSV содержит short_name, не full org/repo
 ```
 
 **Требования:**
+- **FR-17.2.2.1** — short name = `full_name.split("/", 1)[1]`. Для строк без '/' — skip с warning'ом (FR-17.2.1.1 path).
+- **FR-17.2.2.2** — Существующие CSV-данные (3 default repos) под short names `hmnd`, `hmnd-cloud`, `hmnd-sim` остаются совместимы — никакого ре-export'а не требуется.
 
-- **FR-17.1.6.1** — short name = `full_name.split("/", 1)[1]`. Для строк без '/' — skip с warning'ом.
-- **FR-17.1.6.2** — Существующие CSV-данные (3 default repos) под short names `hmnd`, `hmnd-cloud`, `hmnd-sim` остаются совместимы — никакого ре-export'а не требуется.
+**Tests by layer:**
+
+| Layer | Test ID | What it verifies |
+|---|---|---|
+| Data | `T-DATA-17.2.2.1` | short_name extraction: `"a/b"`→`"b"`, `"a/b/c"`→`"b/c"` (.split maxsplit=1) |
+| Data | `T-DATA-17.2.2.2` | committed `git_repos.txt` имеет `hmnd, hmnd-cloud, hmnd-sim` в качестве short_name (backwards compat) |
 
 ---
 
-Каждый тест в `tests/` именуется `test_<req_id_lower>` и проверяет ровно одно требование.
+Каждый тест в `tests/` именуется `test_<test_id_lower>` (e.g. `test_t_svc_17_1_1_1_default_fallback`) и проверяет ровно одно требование. Один FR может покрываться несколькими тестами разных уровней — это OK и желательно для critical features.
 
 | Тест файла | Требование |
 |------------|------------|
@@ -917,15 +989,25 @@ And `git_commits.repo` column в CSV содержит short_name, не full org/
 | `tests/test_ux_help.py::test_help_icon_escapes_html` | FR-16.1.1.3 |
 | `tests/test_ux_help.py::test_section_without_help_has_no_icon` | FR-16.1.1.4 |
 | `tests/test_ux_help.py::test_help_icon_carries_aria_label` | FR-16.1.2.1 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_1_1_priority_order` | FR-17.1.1.1 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_1_2_builtin_default` | FR-17.1.1.2 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_2_1_cli_parsing` | FR-17.1.2.1 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_2_2_cli_beats_env_and_file` | FR-17.1.2.2 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_3_1_env_parsing` | FR-17.1.3.1 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_3_2_empty_env_falls_through` | FR-17.1.3.2 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_4_1_file_strips_comments_and_blanks` | FR-17.1.4.1 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_4_2_missing_or_empty_file_falls_back_to_default` | FR-17.1.4.2 |
-| `tests/test_extract_git_stats.py::test_fr_17_1_6_1_short_name_after_slash` | FR-17.1.6.1 |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_1_1_default_fallback` | FR-17.1.1.1 (UC-17.1.1, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_1_2_default_repos_unchanged` | FR-17.1.1.2 (UC-17.1.1, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_1_3_priority_order` | FR-17.1.1.1 (UC-17.1.1, Service) |
+| `tests/test_extract_git_stats.py::test_t_data_17_1_1_1_default_repos_format` | FR-17.1.1.2 (UC-17.1.1, Data) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_2_1_cli_parsing` | FR-17.1.2.1 (UC-17.1.2, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_2_2_cli_beats_env_and_file` | FR-17.1.2.2 (UC-17.1.2, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_2_3_empty_cli_falls_through` | FR-17.1.2.2 (UC-17.1.2, Service) |
+| `tests/test_extract_git_stats.py::test_t_infra_17_1_3_1_env_var_visible` | FR-17.1.3.1 (UC-17.1.3, Infra) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_3_1_env_parsing` | FR-17.1.3.1 (UC-17.1.3, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_3_2_empty_env_falls_through` | FR-17.1.3.2 (UC-17.1.3, Service) |
+| `tests/test_extract_git_stats.py::test_t_infra_17_1_4_1_config_file_exists` | FR-17.1.4.2 (UC-17.1.4, Infra) |
+| `tests/test_extract_git_stats.py::test_t_infra_17_1_4_2_config_file_has_default_plus_engineering` | FR-17.1.4.2 (UC-17.1.4, Infra) |
+| `tests/test_extract_git_stats.py::test_t_data_17_1_4_1_file_strips_comments_and_blanks` | FR-17.1.4.1 (UC-17.1.4, Data) |
+| `tests/test_extract_git_stats.py::test_t_data_17_1_4_2_every_line_is_org_repo_format` | FR-17.1.4.1 (UC-17.1.4, Data) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_1_4_1_missing_or_empty_file_falls_back` | FR-17.1.4.2 (UC-17.1.4, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_2_1_1_ensure_repo_returns_none_on_failure` | FR-17.2.1.1 (UC-17.2.1, Service) |
+| `tests/test_extract_git_stats.py::test_t_svc_17_2_1_2_main_continues_after_skip` | FR-17.2.1.2 (UC-17.2.1, Service) |
+| `tests/test_extract_git_stats.py::test_t_data_17_2_2_1_short_name_after_slash` | FR-17.2.2.1 (UC-17.2.2, Data) |
+| `tests/test_extract_git_stats.py::test_t_data_17_2_2_2_default_short_names_preserved` | FR-17.2.2.2 (UC-17.2.2, Data) |
 
 ## Архитектура слоёв
 
