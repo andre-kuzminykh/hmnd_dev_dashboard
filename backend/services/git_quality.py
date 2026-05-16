@@ -228,6 +228,9 @@ def get_high_churn_files(period_days: int = 90,
     per-file rows in `git_commits` (collapsed to per-commit aggregate
     by the loader), so this is computed at runtime from the raw CSV.
     Returns [] when the per-commit CSV is missing.
+
+    Convention: period_days <= 0 OR > 9999 disables the date filter
+    (matches `_date_filter_sql` so 0 means 'all-time' consistently).
     """
     from data.sources.git_csv import latest_git_commits_file
     f = latest_git_commits_file()
@@ -235,7 +238,12 @@ def get_high_churn_files(period_days: int = 90,
         return []
     import csv
     from collections import Counter
-    cutoff = (datetime.utcnow() - timedelta(days=period_days)).date().isoformat()
+    # period_days=0 → no date filter (all-time). Anything > 0 → window.
+    use_date_filter = 0 < period_days <= 9999
+    cutoff = (
+        (datetime.utcnow() - timedelta(days=period_days)).date().isoformat()
+        if use_date_filter else ""
+    )
     repos_set = set(repos) if repos else None
     file_commits: Counter = Counter()
     file_add: dict[str, int] = {}
@@ -245,9 +253,10 @@ def get_high_churn_files(period_days: int = 90,
     with f.path.open(encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
         for r in reader:
-            date = (r.get("author_date") or "")[:10]
-            if date < cutoff:
-                continue
+            if use_date_filter:
+                date = (r.get("author_date") or "")[:10]
+                if date < cutoff:
+                    continue
             repo = r.get("repo") or ""
             if repos_set and repo not in repos_set:
                 continue

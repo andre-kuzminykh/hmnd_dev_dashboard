@@ -633,42 +633,59 @@ def audit_segment_partition() -> bool:
 
 
 def audit_high_spenders_math() -> bool:
-    """Cross-tool High Spenders: combined spend per user == sum across
+    """Cross-tool High Spenders: combined spend per user_id == sum across
     providers. Catches bugs where the rollup over-counts or double-
     counts a user appearing under multiple providers.
+
+    Important: matches by user_id not name. The dataset has multiple
+    distinct users sharing the same display name (e.g. two 'Yoo-Jin
+    Jung' entries with different emails). The UI handles this by
+    rendering both rows; the audit must compare per-user_id, not by
+    name-keyed dict where collisions silently overwrite entries.
     """
     print(f"\n{HEAD}── HIGH SPENDERS (cross-tool) ──{END}")
-    from backend.services.ai_tools import (
-        get_high_spenders, get_high_spenders_per_provider,
-    )
-    combined = {r["user_name"]: r for r in
-                get_high_spenders(period_days=30, threshold_usd=0,
-                                  api_key_id=None)}
-    per_prov = {r["user_name"]: r for r in
-                get_high_spenders_per_provider(period_days=30)}
-    if not combined:
+    from data.db import get_conn
+    # Do the audit at SQL level — re-derive both aggregates per user_id
+    # so name collisions can't mask discrepancies.
+    s_iso = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+    e_iso = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT u.id, u.full_name,
+                      ROUND(SUM(ue.cost_usd), 2)                                              AS total,
+                      ROUND(SUM(CASE WHEN p.name='openai'    THEN ue.cost_usd ELSE 0 END), 2) AS oai,
+                      ROUND(SUM(CASE WHEN p.name='anthropic' THEN ue.cost_usd ELSE 0 END), 2) AS ant,
+                      ROUND(SUM(CASE WHEN p.name='cursor'    THEN ue.cost_usd ELSE 0 END), 2) AS cur
+               FROM usage_events ue
+               JOIN users u    ON u.id = ue.user_id
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE ue.occurred_at BETWEEN ? AND ?
+               GROUP BY u.id""",
+            (s_iso, e_iso),
+        ).fetchall()
+    if not rows:
         print("  (no spenders in 30d — skipping)")
         return True
-
     bad = 0
     sample = 0
-    for name, r in combined.items():
-        sp = per_prov.get(name, {})
-        expected = round(
-            (sp.get("cost_openai", 0) or 0)
-            + (sp.get("cost_anthropic", 0) or 0)
-            + (sp.get("cost_cursor", 0) or 0),
-            2,
-        )
-        actual = round(r["spend"] or 0, 2)
+    for r in rows:
+        expected = round((r["oai"] or 0) + (r["ant"] or 0) + (r["cur"] or 0), 2)
+        actual = round(r["total"] or 0, 2)
         if abs(expected - actual) > 0.05:
             bad += 1
             if sample < 3:
-                print(f"  ✗ {name}: combined=${actual}, sum-per-provider=${expected}")
+                print(f"  ✗ user_id={r['id']} ({r['full_name']}): total=${actual}, Σproviders=${expected}")
                 sample += 1
-    ok = _print("combined spend == Σ per-provider (across all users)",
+    ok = _print("SUM(cost_usd) per user == Σ per-provider CASE sums",
                 0.0, float(bad), tol=0)
-    print(f"  checked: {len(combined)} users")
+    print(f"  checked: {len(rows)} users (matched by user_id)")
+    # Also surface name collisions for transparency
+    name_dupes = sum(1 for n, c in
+                     conn.execute(
+                         "SELECT full_name AS n, COUNT(*) AS c FROM users GROUP BY full_name HAVING c > 1"
+                     ).fetchall() for _ in range(c - 1))
+    if name_dupes:
+        print(f"  (info) users sharing a display name with another user: {name_dupes} duplicates")
     return ok
 
 

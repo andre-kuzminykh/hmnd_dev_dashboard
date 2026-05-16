@@ -329,6 +329,35 @@ def test_get_high_churn_files(tmp_db, tmp_path, monkeypatch):
     assert files[0]["file"] == "auth.py"
 
 
+def test_get_high_churn_files_period_zero_means_all_time(tmp_db, tmp_path, monkeypatch):
+    """FR-15.1.5.3 — period_days=0 disables the date filter (matches
+    _date_filter_sql convention). Before the fix, period_days=0 set
+    cutoff=today which discarded everything older than today.
+    """
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
+    csv_path = tmp_path / "git_commit_file_stats_20260515.csv"
+    old = _today_offset(400)  # over a year ago — would be excluded by any
+                              # reasonable window
+    recent = _today_offset(2)
+    _write_commits_csv(csv_path, [
+        ("hmnd", "ancient", "A", "a@x", old,    "A", "a@x", old,    "fix", "old.py",    "1", "0", "False"),
+        ("hmnd", "recent",  "A", "a@x", recent, "A", "a@x", recent, "fix", "recent.py", "1", "0", "False"),
+    ])
+    import importlib
+
+    import data.sources.git_csv as gc
+    importlib.reload(gc)
+    from backend.services.git_quality import get_high_churn_files
+
+    # period=30 → only 'recent.py'
+    files_30 = get_high_churn_files(period_days=30, limit=10)
+    assert {f["file"] for f in files_30} == {"recent.py"}
+
+    # period=0 → BOTH files (all-time, no filter)
+    files_all = get_high_churn_files(period_days=0, limit=10)
+    assert {f["file"] for f in files_all} == {"old.py", "recent.py"}
+
+
 def test_get_high_churn_files_repo_filter(tmp_db, tmp_path, monkeypatch):
     monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     csv_path = tmp_path / "git_commit_file_stats_20260515.csv"

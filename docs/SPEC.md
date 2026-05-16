@@ -678,6 +678,7 @@ And при repos=["hmnd"] — учитываются только коммиты
 
 - **FR-15.1.5.1** — `get_high_churn_files(period_days, repos, limit)` НЕ читает БД (`git_commits` collapses per-commit), а runtime-читает per-commit-file CSV через `latest_git_commits_file()`. Если CSV отсутствует — `[]`.
 - **FR-15.1.5.2** — Repo filter работает над raw CSV: строки с `repo not in repos_set` пропускаются.
+- **FR-15.1.5.3** — `period_days=0` или > 9999 ⇒ дата-фильтр выключен (all-time), как в `_date_filter_sql`. До фикса значение 0 устанавливало `cutoff=today` и отсекало всё кроме сегодняшних коммитов.
 
 ### US-15.2 — UI: Code Quality block in Devs tab
 
@@ -805,6 +806,7 @@ And значок имеет aria-label с тем же текстом для scre
 | `tests/test_git_quality.py::test_get_ai_spend_per_fix_repo_filter` | FR-15.1.4.3 |
 | `tests/test_git_quality.py::test_get_high_churn_files` | FR-15.1.5.1 |
 | `tests/test_git_quality.py::test_get_high_churn_files_repo_filter` | FR-15.1.5.2 |
+| `tests/test_git_quality.py::test_get_high_churn_files_period_zero_means_all_time` | FR-15.1.5.3 |
 | `tests/test_ux_help.py::test_section_renders_help_icon` | FR-16.1.1.1 |
 | `tests/test_ux_help.py::test_kpi_row_renders_help_icon_per_card` | FR-16.1.1.2 |
 | `tests/test_ux_help.py::test_help_icon_escapes_html` | FR-16.1.1.3 |
