@@ -4,6 +4,50 @@
 **Audience:** HMND engineering leadership + CEO
 **Scope:** HumanoidTeam GitHub org (~100+ repos), with deep dives on `hmnd`, `hmnd-cloud`, `hmnd-sim`.
 
+---
+
+## Executive Summary
+
+> The single question this report answers: **"Are HMND's repositories ready to safely absorb AI-generated changes?"**
+
+### Bottom line (one table for the board)
+
+| Repository | Score | Verdict | Pause AI? |
+|---|:--:|---|:--:|
+| **`hmnd`** (monorepo, 14 modules, 969k Python LoC, 864 tests) | **4.0 / 5** | **MOSTLY_READY** | No — continue, but gate 2 modules |
+| **`hmnd-cloud`** (Terraform IaC, 124 .tf files, production blast radius) | **2.0 / 5** | **PARTIALLY_READY** | **YES — pause AI-assisted PRs** until 1 week of fixes |
+| **`hmnd-sim`** (deprecated 2025-08) | **N/A** | **DEPRECATED** | N/A — archive on GitHub |
+
+### Five numbers leadership should remember
+
+1. **864 test files** across 13 of 14 hmnd modules — strong foundation. `hmnd_robot` alone: 401 tests on 335k LoC of robot code.
+2. **2 modules with anemic test coverage**: `hmnd_wholebody` (4 tests / 60k LoC, safety-critical control code) and `hmnd_firmware` (0 tests / 495 C++ files). These are the only hmnd modules where AI codegen is currently unsafe.
+3. **`hmnd_fleet` bug-fix rate = 35.3%**, ~2× the repo average. Its top-2 contributors (Sam Pfeiffer, Matt Klingensmith) are also the top-2 reasoning-model OpenAI spenders ($17–23/msg per Report I). **Strongest correlation in the audit**; needs a focused 10-PR sample to determine cause.
+4. **4 single-person bus-factor modules**: `hmnd_services` (100% Cody), `hmnd_agents` (100% Atindra), `hmnd_update` (83% Tobias), `hmnd_infra` (80% Cody). One of them — `hmnd_agents` — owns the AGENTS.md memory pattern; if Atindra leaves, AI infrastructure goes with her.
+5. **`hmnd-cloud` has 0 tests, 0 AGENTS.md, 0 CODEOWNERS** — and Terraform changes here can wipe production. This is the **highest-risk surface** in the audit.
+
+### Five priority actions (full list of 17 in §10)
+
+1. **Archive `hmnd-sim` on GitHub** — 1-click; eliminates confusion.
+2. **Add `CODEOWNERS` + `AGENTS.md` to `hmnd-cloud`** — ~1 day of focused work; closes the biggest production risk.
+3. **PR-validation workflow for `hmnd-cloud`** — `terraform validate` + `tflint` + `tfsec` + `checkov`, blocking on PR. ~3 days.
+4. **Test-floor enforcement for `hmnd_wholebody` + `hmnd_firmware`** — mandate ≥ 1 test per 5k LoC before accepting AI-generated PRs in those modules.
+5. **Cross-train 4 single-person modules** — at minimum one backup contributor each within 30 days.
+
+### The single biggest cross-cutting gap
+
+**No prompt-regression eval framework anywhere.** All 3 repos have AGENTS.md / CLAUDE.md / .cursor/rules that drive AI agent behaviour, but zero way to detect when changes to those files silently break AI workflows. As HMND scales AI-assisted development this gap will hurt every quarter.
+
+### How to read this report
+
+- **§3–§5** — detailed per-repo findings with per-module breakdown (hmnd is most actionable)
+- **§6** — scoring matrix; defendable byte-by-byte against an external audit
+- **§8** — people / contribution patterns + AI-spender × module overlap (cross-reference to Report I)
+- **§10** — 17 priority actions split into Immediate (this week) / 30-day / 60-90-day
+- **Leadership Takeaway** at the end — what to say verbatim to the board
+
+---
+
 > **Methodology.** Repository structure, file inventory, AGENTS/CLAUDE/CODEOWNERS presence, CI workflows, per-module tests, contributors, and excerpts of agent-instruction files were collected from local clones via `scripts/audit_repos_local.sh` on 2026-05-16, **Phase 2** with full directory checkout (LFS skipped, all 14 hmnd modules + 24 subdirs visible). Findings tagged **[Fact]** (verifiable from inventory bytes / git log), **[Estimate]** (derived inference), **[Hypothesis]** (requires deeper source-code read). Source code itself was **not read** — only structural signals + first-60-line excerpts of documentation files.
 >
 > **Known caveats:**
