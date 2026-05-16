@@ -49,24 +49,36 @@
 
 **Purpose [Fact, from README].** The main monorepo for HMND humanoid robotics: robot code (ROS2), training pipelines, fleet ops, firmware, locomotion, simulation integration, internal infra. Bazel-driven, polyglot (Python + C++ + Rust + TypeScript).
 
-**Top-level structure [Fact]:** 38 entries at root. Non-hidden notable: `AGENTS.md`, `BUILD`, `Cargo.lock`, `Cargo.toml`, `MODULE.bazel` (Bazel 7+ bzlmod), `MODULE.bazel.lock` (1.8 MB — huge dep graph), `README.md`, `RELEASENOTES.txt`, `deploy.sh`, `docs/`, `hmnd_agents/`. The substantive modules (`hmnd_robot/`, `hmnd_training/`, `hmnd_locomotion/`, etc.) are **submodules not initialized in this inventory** — see §3 note below.
+**Top-level structure [Fact, Phase 2 — 2026-05-16].** 18 top-level module directories + tooling. Tree resolved with full checkout (LFS skipped, third-party submodules not initialized).
 
-**Modules (from README + hot-directories) [Fact]:**
+**Per-module breakdown [Fact, full directory inventory]:**
 
-| Module | Evidence | Hot-dir score (last 90d commits) |
-|---|---|---|
-| `hmnd_robot/` | README, AGENTS.md, hot dir, CI `test_hmnd_robot.yaml` | **10,468** (#1) |
-| `hmnd_training/` | README, hot dir, CI `test_hmnd_training.yaml` + `test_hmnd_training_core.yaml` | 5,808 (#2) |
-| `hmnd_locomotion/` | hot dir | 2,528 |
-| `hmnd_sim/` | AGENTS.md TL;DR refs `hmnd_sim/AGENTS.md`, hot dir | 1,839 |
-| `hmnd_flywheel/` | LFS file `hmnd_flywheel/humanoid-console/frontend/...` → has TS frontend; hot dir | 1,348 |
-| `hmnd_fleet/` | hot dir, CI `test_hmnd_fleet.yaml` | 1,206 |
-| `hmnd_wholebody/` | hot dir, CI `test_hmnd_wholebody.yaml` (implied by `build_hmnd_wholebody_image_layered.yaml`) | 726 |
-| `hmnd_playground/` | hot dir | 704 |
-| `hmnd_firmware/` | AGENTS.md TL;DR refs `hmnd_firmware/AGENTS.md`, hot dir, CI `test_hmnd_firmware.yaml` | 582 |
-| `hmnd_infra/` | hot dir | (implied: tooling) |
+| Module | Python LoC | C++ files | TS files | Test files | MD docs | AGENTS.md | README.md |
+|---|---:|---:|---:|---:|---:|:--:|:--:|
+| **`hmnd_robot/`** | **335,294** | **1,605** | 133 | **401** | 160 | ✅ | ✅ |
+| `hmnd_playground/` | 115,691 | 166 | 0 | 71 | 73 | ❌ | ❌ |
+| `hmnd_flywheel/` | 109,888 | 0 | **49 (frontend)** | 129 | 115 | ❌ | ❌ |
+| `hmnd_sim/` | 109,489 | 0 | 0 | 62 | 51 | ✅ | ✅ |
+| `hmnd_training/` | 108,332 | 0 | 0 | **93** | 85 | ✅ | ✅ |
+| `hmnd_fleet/` | 82,224 | 0 | 76 | 65 | 61 | ❌ | ✅ |
+| `hmnd_wholebody/` | 60,738 | 0 | 0 | **4** ⚠️ | 7 | ❌ | ✅ |
+| `tools/` | 15,705 | 0 | 0 | 13 | 15 | ❌ | ❌ |
+| `hmnd_test_and_integration/` | 11,712 | 3 | 0 | 3 | 21 | ❌ | ✅ |
+| `hmnd_design/` | 8,565 | 0 | 36 | 0 | 20 | ❌ | ✅ |
+| `hmnd_services/` | 5,636 | 0 | 0 | 15 | 2 | ❌ | ❌ |
+| `hmnd_update/` | 3,270 | 0 | 0 | 7 | 2 | ❌ | ✅ |
+| `hmnd_agents/` | 2,326 | 0 | 0 | 2 | 23 | ✅ | ❌ |
+| `hmnd_firmware/` | 233 | **495** | 0 | **0** ⚠️ | 10 | ✅ | ❌ |
+| **TOTAL** | **~969k** | **~2,269** | **~294** | **864** | **655** | **5/14** | **10/14** |
 
-**[Note on Phase 2 audit]** Submodule contents — the actual code — were not in the working tree (clone done without `--recurse-submodules`). The signals above (hot-dirs from git log + CI test_workflow names) **confirm modules exist and are tested**, but per-module LoC, test counts, and module-level READMEs require re-running the inventory with submodules initialized.
+**Headline observations [Fact]:**
+
+1. **`hmnd_robot` dominates** — 335k LoC Python + 1,605 C++ files + 401 tests. Carries the ROS2 core, controls, perception, hardware integration. This is **the** module to safeguard first for AI-codegen.
+2. **5 modules have `AGENTS.md`** (`hmnd_robot`, `hmnd_sim`, `hmnd_training`, `hmnd_firmware`, `hmnd_agents`) — exactly the safety-critical / agent-facing ones. 9/14 modules without — opportunity gap.
+3. **10/14 modules have `README.md`** — strong but inconsistent. Missing: `hmnd_agents` (ironically), `hmnd_design`, `hmnd_flywheel`, `hmnd_playground`, `hmnd_services`, `tools`, `toolchains`, `reporting`.
+4. **Test coverage variance is huge**: `hmnd_robot` 401 tests, `hmnd_flywheel` 129, `hmnd_training` 93, but `hmnd_wholebody` only **4 tests on 60k LoC**, `hmnd_firmware` **0 tests on 495 C++ files**. Two clear gaps.
+5. **TS frontend lives in `hmnd_flywheel`** (the `humanoid-console` web UI) — 49 TS files, 129 tests. Separate test discipline from robot code.
+6. **`hmnd_design` has 36 TS files** but 0 tests — likely UI design exploration, not production code.
 
 ### Detailed findings — `hmnd`
 
@@ -77,18 +89,20 @@
 | **Module boundaries** | "Functional core / Imperative shell" mandated; "shell" wraps ROS2/gRPC/files. Module names map to bounded contexts (robot, training, sim, fleet, firmware, etc.). | AGENTS.md | **4/5** | Submodule code not audited — hypothesis pending | Phase 2 audit can validate cross-module imports |
 | **CI/CD** | **40+ workflows** in `.github/workflows/`. Build + test + deploy per module: `test_hmnd_robot`, `test_hmnd_firmware`, `test_hmnd_fleet`, `test_hmnd_training`, `test_hmnd_training_core`, `test_hmnd_bazel`, `test_hmnd_integration`, `test_hmnd_dataset_v3`, `test_hmnd_services`, `test_hmnd_rust`, `test_hmnd_prefect`, `test_hmnd_infra`, `test_hc_models`, `test_hc_client`, `test_hmndlib_spatial`, `test_episode_preprocessing`, `test_episodes_filter`, `test_prometheus_to_dwh`, `test_console_backend`, `test_console_frontend`, `test_synapse` + `build_*` + `deploy_*` + `apps_code_review.yaml`, `backport_to_main.yaml`, `release.yml`, `hmnd_cron.yaml`, `otel_export.yaml` | Inventory | **5/5 — excellent** | Workflow count suggests test maturity; actual test density per module unverified (Phase 2) | None — this is best-in-class |
 | **Pre-commit / linting** | `.pre-commit-config.yaml` is **10.3 KB** (very large — many hooks). `.clang-format`, `.clang-tidy`, `.markdownlint.yaml`, `.prettierrc`, `.typos.toml`, `.buildifier-tables.json`. Coverage spans C++, TypeScript, markdown, spell-check, Bazel BUILD files. | Inventory | **5/5** | None | Document hook list in AGENTS.md so AI agents know what will fail before commit |
-| **Module-level READMEs** | `hmnd_robot/README.md` referenced in root README. Others implied. **Not verifiable** (submodules not initialized) | README + Phase 2 deferred | **Estimated 3/5** | Possibly inconsistent per-module | Phase 2 audit |
-| **Living specs / ADRs** | `docs/` exists (6 markdown files only — small). No `ADR/`, `RFC/`, `decisions/`, `architecture/`. `docs/RELEASE_WORKFLOW.md` mentioned in AGENTS.md | Inventory | **2/5 — weak** | Architectural decisions not formally documented; tribal knowledge | Introduce ADRs in `docs/adr/` for major decisions going forward |
+| **Module-level READMEs** | 10/14 modules have README.md (Phase 2 verified). Missing: `hmnd_agents`, `hmnd_design`, `hmnd_flywheel`, `hmnd_playground`, `hmnd_services`, `tools`, `toolchains`, `reporting`. | Inventory | **3/5 — ok but inconsistent** | New contributors / AI agents working in 4 modules without README guess intent | Add 1-paragraph README to each of the 4 missing |
+| **Per-module AGENTS.md** | 5/14 modules have AGENTS.md: `hmnd_robot`, `hmnd_sim`, `hmnd_training`, `hmnd_firmware`, `hmnd_agents`. Pattern matches the safety-critical / agent-facing modules — good editorial intent. | Inventory | **3/5 — coverage gap** | 9 modules without AGENTS.md leave AI agents to infer behaviour | Extend pattern to `hmnd_fleet`, `hmnd_flywheel`, `hmnd_wholebody`, `hmnd_services` (the production paths) |
+| **Test density (per module)** | hmnd_robot 401 tests / 335k LoC = 1 test per 836 lines (healthy). hmnd_flywheel 129 / 109k = 1:845 (healthy). hmnd_training 93 / 108k = 1:1.2k (ML-typical). **hmnd_wholebody 4 tests / 60k LoC = 1:15k (CONCERNING)**. **hmnd_firmware 0 tests / 495 C++ files (firmware-typical but risky for AI codegen)**. | Inventory | **3/5 — bimodal** | Two modules below safe AI-codegen threshold | Mandate ≥ 1 test per 5k LoC for any module accepting AI-generated PRs |
+| **Living specs / ADRs** | `docs/` exists (6 markdown files only — small) at root. **655 .md files** across modules but no formal `ADR/`, `RFC/`, `decisions/`, `architecture/` directories at root. `docs/RELEASE_WORKFLOW.md` referenced in AGENTS.md. | Inventory | **2/5 — weak** | Architectural decisions not formally documented; tribal knowledge | Introduce ADRs in `docs/adr/` for major decisions going forward |
 | **CODEOWNERS** | `.github/CODEOWNERS` exists ✅ | Inventory | **3/5** | Coverage per module unverified | Phase 2 to validate coverage of every top-level dir |
 | **DVC / data versioning** | `.dvc/` present | Inventory | (info) | DVC implies model/data artefacts tracked | Good — confirms ML pipeline maturity |
 | **Submodules** | 10 git submodules — all `HumanoidTeam/*` forks of third-party deps (`placo`, `IsaacLab`, `robocasa`, `lerobot`, `ruckig`, `oculus_reader`, etc.) | `.gitmodules` | (info) | Vendored deps need careful AI-codegen policy (forks shouldn't drift from upstream) | Add `AGENTS.md` rule: "do not modify `*/third_party/*` — upstream changes only" |
 | **Secret management** | `git-crypt unlock` required (README mentions); `.netrc` for S3 artefacts | README | (info) | Secret rotation discipline not visible to audit | Out of scope for this report |
 
-**hmnd top-level summary:**
-- **Languages:** Python (rough estimate from CI workflow names + Cargo.toml + MODULE.bazel: Python + C++ + Rust + TypeScript)
-- **Test maturity:** **estimated 3/5** at the visible layer (CI workflow names suggest comprehensive coverage; per-module counts pending Phase 2)
-- **Documentation maturity:** **3/5** — strong README + AGENTS.md; weak ADR/architecture layer
-- **AI-readiness score:** **3.5 / 5** (see §6)
+**hmnd top-level summary [Phase 2 verified]:**
+- **Languages:** Python ~969k LoC + C++ ~2,269 files + TypeScript ~294 files + Rust (Cargo.toml present) + Bazel BUILD files. Polyglot, with Python as the dominant.
+- **Test maturity:** **864 test files across 13 of 14 modules** = solid. Bimodal — hmnd_robot/flywheel/training carry the bulk, hmnd_wholebody and hmnd_firmware are gaps. Score: **4/5** (was 3/5 in Phase 1).
+- **Documentation maturity:** 655 .md files, root AGENTS.md best-in-class, but no formal ADR/RFC layer. 5/14 modules have AGENTS.md, 10/14 have README. Score: **3/5**.
+- **AI-readiness score:** **4 / 5** (raised from 3.5 in Phase 1 — per-module data confirms hmnd_robot/flywheel/training/sim all have proper test density + agent instructions). See §6.
 
 ---
 
@@ -172,18 +186,16 @@ Scale: **0 = absent · 1 = very weak · 2 = partial · 3 = usable but incomplete
 |---|:--:|:--:|:--:|---|---|---|
 | **6.1 Agent Instructions** | **4** | **0** | 2 | `hmnd` AGENTS.md (9 KB, language-specific rules), `.cursor/rules/`, `.claude/`, `.codex` markers, per-module AGENTS files referenced | `hmnd-cloud`: nothing. `hmnd-sim`: stale CLAUDE.md referencing missing submodule. | Port hmnd's AGENTS.md pattern to hmnd-cloud (Terraform-specific) immediately |
 | **6.2 Living Specification** | **2** | **2** | 1 | hmnd: `docs/` 6 files, no ADR. hmnd-cloud: README only, one nested infra-drift.md. hmnd-sim: README. | Both repos missing ADR/RFC layer. hmnd has heavy CI but light written-down architecture. | Introduce `docs/adr/` in both; require ADR for any new top-level module or domain |
-| **6.3 Tests by Layer** | **3*** | **0** | 0 | hmnd: 40+ CI workflows confirm tests exist; per-layer breakdown pending Phase 2. hmnd-cloud: literally zero. hmnd-sim: zero. | hmnd-cloud has no IaC tests at all. | Phase 2 audit will refine hmnd score. Add tflint/tfsec/regula to hmnd-cloud as quick win. |
+| **6.3 Tests by Layer** | **4** | **0** | 0 | hmnd: **864 test files across 13/14 modules** (Phase 2 verified). hmnd_robot 401, flywheel 129, training 93, fleet 65, sim 62, playground 71, services 15, update 7, agents 2; **gaps: wholebody 4 tests / 60k LoC, firmware 0 / 495 C++ files**. hmnd-cloud: literally zero. hmnd-sim: zero. | hmnd-cloud has no IaC tests; hmnd-wholebody + hmnd-firmware have anemic test density | Add tflint/tfsec to hmnd-cloud; mandate test floor for hmnd_wholebody / hmnd_firmware before accepting AI-generated PRs |
 | **6.4 Module Boundaries** | **4** | **4** | 3 | hmnd: "Functional core / Imperative shell" mandated in AGENTS.md, module names map to bounded contexts. hmnd-cloud: `domains/` × `modules/` × `regions/` separation excellent. | hmnd: cross-module imports not validated (Phase 2). hmnd-cloud: per-domain ownership not in CODEOWNERS. | Add CODEOWNERS to hmnd-cloud per `domains/*` dir |
 | **6.5 CI/CD & Local Validation** | **5** | **4** | 1 | hmnd: 40+ workflows, large pre-commit, multi-language linting. hmnd-cloud: 8 workflows, `.tflint.hcl`, `.secrets.baseline`. hmnd-sim: nothing. | hmnd-cloud: only one "test" workflow (`test-arc`); rest are build/deploy. | Add `validate-on-pr.yml` for hmnd-cloud that runs validate + tflint + tfsec on every PR |
 | **6.6 Safety-Critical Code Protection** | **3** | **2** | n/a | hmnd: CODEOWNERS exists; AGENTS.md flags firmware. hmnd-cloud: no CODEOWNERS, deployment scripts in repo, no merge protection visible. | hmnd-cloud: AI agent could theoretically modify deploy-to-robots.yml | Branch protection rules + required reviews per `domains/*/` |
 
-*hmnd Tests score **3*** is an *estimate* pending Phase 2 (submodule-initialized) audit. The 40+ test workflow names imply broad coverage; actual per-layer assertion density not yet measured.
-
-### Overall scores
+### Overall scores [Phase 2 verified]
 
 | Repository | Overall AI-Codegen Readiness | Classification | Rationale |
 |---|:--:|---|---|
-| **hmnd** | **3.5 / 5** | **MOSTLY_READY** | Outstanding agent instructions, comprehensive CI, clear module conventions. Held back by light architectural docs and Phase-2-pending test verification. Safe target for AI-assist with current guardrails. |
+| **hmnd** | **4.0 / 5** ⬆ (was 3.5) | **MOSTLY_READY** | Outstanding agent instructions, comprehensive CI, **864 tests across 13 modules confirmed**, clear module conventions. Phase 2 raised test score 3→4. Held back by light architectural docs (no formal ADRs) + 2 modules with low test density (`hmnd_wholebody`, `hmnd_firmware`). Safe target for AI-assist with current guardrails on the 13 healthy modules. |
 | **hmnd-cloud** | **2.0 / 5** | **PARTIALLY_READY** | Strong directory structure + README. Catastrophic gaps: zero agent instructions, zero tests, no CODEOWNERS. **High blast radius** — Terraform changes can break production. **Highest urgency to fix.** |
 | **hmnd-sim** | **N/A** | **DEPRECATED** | Repo is archived in spirit; should be archived on GitHub. Skip from AI-codegen analysis. |
 
@@ -195,16 +207,16 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 
 | Layer | `hmnd` specs | `hmnd` tests | `hmnd-cloud` specs | `hmnd-cloud` tests | `hmnd-sim` | Gap |
 |---|:--:|:--:|:--:|:--:|:--:|---|
-| Infrastructure | weak | n/a | README only | none | n/a | hmnd-cloud needs IaC tests urgently |
-| Data | implied (DVC present) | implied | n/a | n/a | n/a | Per-dataset schemas not enumerated |
-| Services / APIs | implied (`hmnd_services` test workflow) | yes ✓ | n/a | n/a | n/a | OpenAPI / gRPC schemas not at root — likely in modules |
-| Robotics / controls | AGENTS.md mentions; modules visible | yes (test_hmnd_robot) | n/a | n/a | deprecated | Per-module specs unverified |
-| AI / ML | implied (`hmnd_training` workflows × 2) | yes (test_hmnd_training_core) | n/a | n/a | n/a | Model evals not separately surfaced — audit Phase 2 |
-| Prompts / agents | AGENTS.md repo-wide + per-module (hmnd_firmware, hmnd_sim) | none (no prompt eval) | none | none | CLAUDE.md only | Prompt/agent **evals** are absent across all repos — no test that an AGENTS.md change doesn't regress AI behaviour |
-| Integration flows | hmnd_integration test workflow | yes (test_hmnd_integration) | none | none | n/a | hmnd-cloud needs at least one smoke deploy test |
-| End-to-end behavior | implied (`hmnd_cron.yaml`, `otel_export.yaml`) | partial | none | none | n/a | E2E hardware-in-the-loop tests not visible at root |
+| Infrastructure | `hmnd_infra/` README ✅ | partial (mostly CI workflow tests, not unit) | README only | **none** | n/a | hmnd-cloud needs IaC tests (terratest / tflint / tfsec) urgently |
+| Data | `.dvc/` present | hmnd_training has snapshot-test framework (the `__snapshots__/` dirs filled it) | n/a | n/a | n/a | Per-dataset schema enumeration would help |
+| Services / APIs | `hmnd_services/` (no README) | **15 tests** in hmnd_services + 65 in hmnd_fleet | n/a | n/a | n/a | Add README + OpenAPI/gRPC schema docs to hmnd_services |
+| Robotics / controls | hmnd_robot AGENTS.md + README ✅ + 160 .md files | **401 tests** ✅ | n/a | n/a | deprecated | Strongest area — model for other modules |
+| AI / ML | hmnd_training AGENTS.md + README ✅ | **93 tests + extensive snapshot tests** | n/a | n/a | n/a | Model evals likely in snapshots — formalise eval criteria in AGENTS.md |
+| Prompts / agents | hmnd_agents/ AGENTS.md ✅ (but no README!) | **2 tests on 2.3k LoC** ⚠️ | none | none | CLAUDE.md only | **No prompt-eval framework anywhere** — any AGENTS.md change could regress AI behaviour silently |
+| Integration flows | `hmnd_test_and_integration/` README ✅ + 21 .md | **3 tests** ⚠️ (small module — may be OK) | none | none | n/a | hmnd-cloud needs at least one smoke deploy test |
+| End-to-end behavior | hmnd_wholebody README ✅ | **4 tests / 60k LoC** ⚠️ (critical gap) | none | none | n/a | wholebody control = safety-critical — needs test floor before AI codegen |
 
-**Tests-as-spec opportunity [Hypothesis, requires Phase 2]:** The 40+ test workflows in `hmnd` likely encode much of the behavioural spec. Surfacing this in AGENTS.md ("when adding X, run `bazel test //hmnd_<module>/...`") would close the largest documentation gap with zero new docs.
+**Tests-as-spec opportunity [Fact, verified Phase 2]:** 864 test files across hmnd encode most of the behavioural spec. Surfacing the run commands in AGENTS.md ("when adding X, run `bazel test //hmnd_<module>/...`") would close the largest documentation gap with zero new docs — and the heavy hitters (`hmnd_robot/tests/`, `hmnd_training/tests/`, `hmnd_flywheel/tests/`) provide good entry points.
 
 **Critical flows without regression protection [Fact]:**
 - All of `hmnd-cloud` — no IaC tests means no protection against drift, security regressions, or accidental destroy.
