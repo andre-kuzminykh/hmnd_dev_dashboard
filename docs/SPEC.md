@@ -1,6 +1,12 @@
 # HMND AIOps Dashboard — Specification
 
-> Источник правды для разработки. Иерархия: **Feature → User Story → BDD Scenario → Requirements (FR/NFR) → Tests → Implementation by layers (Data / Backend / Frontend)**.
+> Источник правды для разработки. Иерархия: **Feature → User Flow → Use Case → Requirements (FR/NFR) → Tests by layer**.
+>
+> **Documentation migration policy (введено 2026-05-16, lazy):**
+> - Features F-01 … F-16 — старый формат `Feature → US → BDD → FR/NFR → Tests`. Не переписываются массово.
+> - Features F-17 + — новый формат `Feature → UF → UC → FR/NFR → Tests-by-layer` (см. F-17 как образец).
+> - Любая фича, которую трогаем после 2026-05-16, **переписывается** в новый формат в том же PR. Это даёт постепенную миграцию без big-bang rewrite.
+> - Тесты раскладываются на 4 уровня: **T-INFRA** (env/files/auth) · **T-DATA** (format/parsing/schema) · **T-SVC** (business logic) · **T-AI** (prompts/agents).
 
 ## Условные обозначения ID
 
