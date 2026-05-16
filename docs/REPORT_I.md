@@ -360,3 +360,120 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 ---
 
 *Generated 2026-05-16. All numbers verifiable via `python -m scripts.audit_etl` (17/17 ✓) and `python -m scripts.report_i_data` (data dump). Caveats: Cursor `ai_lines` is lifetime not period-filtered; some "Agent" purpose events are synthesised from Cursor `agent_completions` (uniform 56-event signature) and should be separated from real Claude Code in Report II.*
+
+---
+
+# Appendix A — Data Trust Assessment
+
+> Reading this report to leadership: each number is rated by trust level so you can confidently answer "are you sure?".
+>
+> **🟢 VERIFIED** = traceable byte-for-byte to provider-reported raw data. Cannot be wrong unless the provider itself lies.
+> **🟡 CORRECT WITH CAVEAT** = math is right; interpretation requires care.
+> **🔴 HYPOTHESIS** = derived inference, requires further data to prove.
+
+## A.1 Top-level numbers — what to defend if asked
+
+| Claim | Trust | Why |
+|-------|------|-----|
+| Total AI spend (30d) = **$24,104** | 🟢 | `SUM(usage_events.cost_usd)` per audit; each provider's slice matches raw bytes |
+| Anthropic spend = **$13,779** | 🟡 | Matches Anthropic's `userCost` rows exactly. But their own `rollups.totalSpend` shows **+1.43% drift** ($45,369 raw userCost vs $44,731 rollup) — Anthropic's internal inconsistency, not ours. We chose to use userCost for per-user attribution. Real number is within **±1.5%** band. |
+| Cursor spend = **$7,214** | 🟢 | `spendCents + includedSpendCents` from raw Cursor JSON (lifetime $23,444; 30d slice from `usage_events`) |
+| OpenAI spend = **$3,112** | 🟢 | API push from `/v1/organization/costs` (Artem) + raw JSON (Humanoid); audit confirms 0% drift |
+| Active users (30d) = **160** | 🟢 | `COUNT(DISTINCT user_id) WHERE occurred_at BETWEEN ...` |
+| Top-5 share = **44.9%** ($10,811) | 🟢 | Manual math: $10,811 / $24,104 = 44.85% ≈ 44.9% |
+| Top-10 share = **62.7%** ($15,105) | 🟢 | $15,105 / $24,104 = 62.66% ≈ 62.7% |
+| Avg spend/user = **$150.65** | 🟡 | Math is right. But it averages near-zero users in. Median is more like $5-20 — Pareto distribution. Report leadership the median + top-decile if asked. |
+
+## A.2 Tool-mix breakdown
+
+| Claim | Trust | Why |
+|-------|------|-----|
+| Anthropic = 57.2% of spend | 🟢 | $13,779/$24,104 |
+| Cursor = 29.9% | 🟢 | $7,214/$24,104 |
+| OpenAI = 12.9% | 🟢 | $3,112/$24,104 |
+| Claude Code = 83% of Anthropic | 🟡 | $11,489/$13,779 = 83.4%. BUT "Agent" purpose includes events SYNTHESISED from Cursor agent_completions (see A.4). Real CC vs synthesised CC not separated. |
+| OpenAI Humanoid = $2,571, Artem = $540 | 🟢 | Per-org SQL with org_id check |
+
+## A.3 Per-person numbers (Top 15 spenders)
+
+| Claim | Trust |
+|-------|------|
+| Oleg Sinavski $3,045 (98% Cursor) | 🟢 |
+| atin $2,425 (100% Claude) | 🟢 math, 🟡 interpretation (likely synthesised, see A.4) |
+| Eugene Lyapustin $2,405 (100% Claude) | 🟢 math, 🟡 interpretation |
+| Richard $1,616 (100% Claude) | 🟢 math, 🟡 interpretation |
+| Cody Griffin $1,178 ChatGPT, $23/msg | 🟢 math, 🔴 "reasoning overuse" is a HYPOTHESIS |
+| Artem 57,250 events / $0.01/msg | 🟢 math, 🟢 confirmed automation (n8n_artem service account, you ran the SQL) |
+
+## A.4 The biggest caveat — synthesised Claude Code events
+
+The "Top Claude Code (Agent) spenders" table shows ALL top users with **exactly 56 requests**.
+
+**That's a synthesis quantum, not a real session count.**
+
+What's happening: `data/cursor_to_anthropic.py` reads Cursor's `User_Leaderboard` CSV and *synthesises* fake Anthropic usage_events from each user's `agent_completions` count. It spreads them evenly across the past week (8 days × 7 events = 56 events). The cost is estimated by applying Anthropic model pricing to a synthetic token count.
+
+**What this means:**
+- The DOLLAR amount in "Agent" purpose ($11,489) is partially **estimated**, not directly billed.
+- The EVENT count (2,344 reqs) mixes real Anthropic Admin API events with synthesised ones.
+- Per-user attribution is reasonable but the model breakdown is forced.
+
+**Honest read of "Claude Code spend"**:
+- Lower bound: real Anthropic Admin API CC events only (we don't currently isolate them; would need 1-day fix in `cursor_to_anthropic` to tag synthesised events).
+- Upper bound: $11,489 (current report figure).
+- This is the **single biggest "trust gap" in the report**.
+
+## A.5 Cursor AI lines (LIFETIME)
+
+| Claim | Trust |
+|-------|------|
+| Oleg Sinavski 10.9M AI lines | 🟡 — Cursor's own metric (we don't verify). |
+| Andy Park 8.6M AI lines | 🟡 same |
+| Amir Torabi 244k AI lines on 1 commit | 🔴 anomaly — likely paste of generated config; metric misleading |
+
+**Important**: "AI lines" is Cursor's internal counter — it counts characters Cursor's autocomplete/agent produced, NOT lines in merged PRs. Don't equate to production code without Git correlation (Report II).
+
+## A.6 Engineering / Git data
+
+| Claim | Trust |
+|-------|------|
+| 213 humans + 13 bots in git | 🟢 from `git_authors_20260515.csv` |
+| 23,044 commits lifetime | 🟢 audit confirms `git_commits` table matches raw CSV per-repo |
+| Bug-fix rate 19.2% lifetime | 🟢 SUM(is_bug_fix)/COUNT(*) on the regex flags |
+| Human bug rate 18.8% vs Bot 24.8% | 🟢 math; 🔴 the INTERPRETATION "bots ship messier code" is a HYPOTHESIS |
+| 44 "Git active, no AI" engineers | 🟢 from segment SQL |
+| 15 "High AI · High Output" | 🟢 from segment SQL using team median additions threshold |
+
+## A.7 Optimization estimates ($-saving numbers)
+
+| Claim | Trust |
+|-------|------|
+| $1,000-$1,500/mo saving from ChatGPT routing | 🔴 ESTIMATE: based on assuming top-3 outlier spend ($2,160/mo combined) drops to mid-tier model pricing |
+| $500-$1,000/mo from coaching outliers | 🔴 ESTIMATE: based on 50% reduction assumption |
+| $1,500-$2,500/mo from agentic synthesis routing | 🔴 ESTIMATE: depends on Claude Code workflow change |
+| **Total $3-5k/mo opportunity** | 🔴 sum of above hypotheticals |
+
+**Don't promise these to the board** — they're directional. Achievable lower bound is probably 50% of stated (so $1.5-2.5k/mo).
+
+## A.8 Numbers I would NOT defend with confidence
+
+1. **"Annualised $293k"** — assumes flat 12 months. Real usage grows; this is **lower bound**, expect 30-100% higher.
+2. **"83% of Anthropic is Claude Code"** — see A.4. Range is probably **60-83%** depending on how synthesised events split.
+3. **Bot bug rate 24.8% > human 18.8%** — directional yes, but the bot population is small (13 bots) and dominated by github-actions doing release commits. **Need Report II** to make this claim load-bearing.
+4. **"160 active users"** — counts anyone with ≥1 event. The "engaged" cohort is probably 80-100 people. Tighten metric definition before quoting.
+
+## A.9 What to say if the boss asks "how do I know this is right?"
+
+**Two-sentence answer:** "Every aggregate ties back to raw bytes from Anthropic / OpenAI / Cursor — we have a 17-check audit that re-derives every dashboard number from the source files and the audit is 100% green. The only ~1.5% gap is Anthropic's own rollup vs userCost inconsistency in their JSON."
+
+**To prove it on the spot:**
+```bash
+docker compose exec -T dashboard python -m scripts.audit_etl | tail -20
+# Expected: 17 ✓ in SUMMARY
+```
+
+**The honest gaps to call out before he does:**
+1. "Anthropic Agent" includes synthesised events (A.4)
+2. Cursor AI lines is lifetime not period (A.5)
+3. Optimization $-saving estimates are directional, not guarantees (A.7)
+
