@@ -5,31 +5,32 @@
 # default list. Override priority: --repos CLI flag > HMND_GIT_REPOS env >
 # this file > built-in default (HumanoidTeam/hmnd + hmnd-cloud + hmnd-sim).
 #
-# To add more repos to dashboard tracking:
-#   1. Uncomment / add lines below
-#   2. Re-run on the VM:
-#        docker compose exec dashboard python -m scripts.extract_git_stats
-#   3. New repos appear in dashboard's git_commits + git_authors after next sync.
+# Synced with local-clone set for 1-to-1 audit consistency.
+# To re-sync local clones to match this list, run on MacBook/dev machine:
+#   bash scripts/clone_local_repos.sh
 #
-# Active first-party engineering repos that are reasonable extensions:
+# Re-run on the VM after editing:
+#   docker compose exec dashboard python -m scripts.extract_git_stats
+#   docker compose exec dashboard python -m scripts.sync --days 90
+#   docker compose kill dashboard && docker compose up -d dashboard
 
+# ── Core monorepos ──
 HumanoidTeam/hmnd
 HumanoidTeam/hmnd-cloud
 HumanoidTeam/hmnd-sim
 
-# Uncomment as needed:
-#HumanoidTeam/hm-ops
-#HumanoidTeam/Gripper_Firmware
-#HumanoidTeam/firmware_hal_aurix_tc3
-#HumanoidTeam/firmware_hal_arm_stm32h7
-#HumanoidTeam/firmware_hal_c2000ware
-#HumanoidTeam/etherlab-ethercat
-#HumanoidTeam/manus_ros_drivers
-#HumanoidTeam/ros2_xhand
-#HumanoidTeam/beta-morphology-analysis-tools
+# ── Active first-party engineering (Report II identified) ──
+HumanoidTeam/hm-ops
+HumanoidTeam/Gripper_Firmware
+HumanoidTeam/firmware_hal_aurix_tc3
+HumanoidTeam/firmware_hal_arm_stm32h7
+HumanoidTeam/firmware_hal_c2000ware
+HumanoidTeam/etherlab-ethercat
+HumanoidTeam/manus_ros_drivers
+HumanoidTeam/ros2_xhand
+HumanoidTeam/beta-morphology-analysis-tools
 
 # Do NOT add: vendored forks (placo, IsaacLab, lerobot_lib, robocasa,
 # BehaviorTree.ROS2, ruckig, ros-noetic, etc.) — changes there belong
 # upstream, not in HMND productivity metrics.
-# Do NOT add: archived repos (hmnd-sim is borderline — deprecated but
-# kept for legacy; will phase out per Report II §5).
+
