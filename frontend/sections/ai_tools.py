@@ -251,10 +251,9 @@ with tab_overview:
     with col_top:
         section(
             "Top Spenders — All Tools",
-            help="Топ-10 сотрудников по тратам за период, суммированно "
-                 "по всем 3 инструментам (Claude + ChatGPT + Cursor). "
-                 "Цвет бара = уровень риска: красный ≥ $1k, оранжевый "
-                 "$500-1k, жёлтый < $500.",
+            help="Top 10 people by spend this period, summed across all "
+                 "3 tools (Claude + ChatGPT + Cursor). Bar colour = risk "
+                 "level: red ≥ $1k, orange $500-1k, yellow < $500.",
         )
         if _scope != "all":
             st.caption(
@@ -277,10 +276,9 @@ with tab_overview:
     with col_summary:
         section(
             "Usage Summary",
-            help="Сравнение 3 AI-инструментов: сколько пользователей, "
-                 "сколько активности (запросы/сообщения/completions) и "
-                 "общая сумма трат. Полезно для оценки ROI каждого "
-                 "инструмента.",
+            help="Side-by-side comparison of the 3 AI tools: users, "
+                 "activity (requests / messages / completions) and total "
+                 "spend. Useful for judging ROI of each tool.",
         )
         usage_rows = [
             {"tool": "Claude (all products)",
@@ -337,16 +335,16 @@ with tab_claude:
         )
         kpi_row([
             {"label": "Claude users",       "value": str(len(claude_rows)),
-             "help": "Сколько разработчиков выбрали Claude как favorite-model "
-                     "в Cursor. Сравни с ChatGPT-юзерами в табе Cursor — "
-                     "обычно отражает предпочтения команды."},
+             "help": "Devs who picked Claude as their favorite model in "
+                     "Cursor. Compare with ChatGPT-preferring devs in the "
+                     "Cursor tab to read team preferences."},
             {"label": "Total AI lines",     "value": fmt_int(total_ai_lines),
-             "help": "Сколько строк кода Claude сгенерировал для этих "
-                     "разработчиков через Cursor (Agent + Tab completions). "
-                     "Грубо = объём AI-помощи в коде."},
+             "help": "Lines of code Claude generated for these devs via "
+                     "Cursor (Agent + Tab completions). A proxy for the "
+                     "volume of AI help in the codebase."},
             {"label": "Total completions",  "value": fmt_int(total_completions),
-             "help": "Кол-во раз Claude принят как completion (Agent + Tab). "
-                     "Каждое completion — это отдельный 'AI-помог' момент."},
+             "help": "How many Claude completions were accepted (Agent + "
+                     "Tab). Each one is a single 'AI helped me' moment."},
         ])
 
         c1, c2 = st.columns(2)
@@ -482,20 +480,20 @@ with tab_cc:
 
     kpi_row([
         {"label": "CC Requests", "value": _fmt_int(total_reqs),
-         "help": "Кол-во запросов в Claude Code (agentic tool от Anthropic). "
-                 "Запрос = 1 действие агента (написать функцию, прочитать "
-                 "файл, запустить bash). 1 сессия = десятки-сотни requests."},
+         "help": "Requests to Claude Code (Anthropic's agentic CLI). "
+                 "1 request = 1 agent action (write a function, read a "
+                 "file, run bash). One session is tens-to-hundreds of these."},
         {"label": "CC Spend", "value": fmt_money(total_spend),
-         "help": "Сколько потратили на Claude Code за период. Это подмножество "
-                 "общего Anthropic spend — только purpose='Agent'."},
+         "help": "Claude Code spend this period. A subset of total "
+                 "Anthropic spend — only events with purpose='Agent'."},
         {"label": "Top Spender",
          "value": fmt_money(top_spender['spend']) if top_spender else "—",
-         "help": "Самый активный пользователь Claude Code. Обычно это "
-                 "разработчик, который ушёл в полный agentic-flow."},
+         "help": "Heaviest Claude Code user. Usually a developer who "
+                 "moved to a fully agentic workflow."},
         {"label": "Avg / user",
          "value": fmt_money(total_spend / max(len(cc_rows), 1)) if cc_rows else "—",
-         "help": "Средняя трата на одного активного юзера Claude Code за "
-                 "период. Полезно для прогноза при росте команды."},
+         "help": "Mean Claude Code spend per active user this period. "
+                 "Useful for forecasting as the team grows."},
     ])
 
     if cc_rows:
@@ -624,18 +622,18 @@ with tab_gpt:
     high = [r for r in rows if r["cost"] >= 200]
     kpi_row([
         {"label": "Active Users",   "value": str(len(rows)),
-         "help": "Сколько уникальных юзеров делали запросы в OpenAI API "
-                 "(ChatGPT / GPT-4 / o-series) за период."},
+         "help": "Unique users who hit the OpenAI API (ChatGPT / GPT-4 / "
+                 "o-series) at least once this period."},
         {"label": "Total Messages", "value": _fmt_int(total_msgs),
-         "help": "Сколько всего сообщений / API-запросов отправили в OpenAI. "
-                 "Включает all API calls (chat, embeddings, fine-tune etc)."},
+         "help": "All messages / API requests sent to OpenAI. Includes "
+                 "every API call type (chat, embeddings, fine-tune, etc.)."},
         {"label": "Total Spend",    "value": fmt_money(total_spend),
-         "help": "Сколько потратили на OpenAI API за период. Может слегка "
-                 "отличаться от Platform UI из-за batch / cached pricing — "
-                 "разница обычно < 5%."},
+         "help": "OpenAI API spend this period. May drift slightly from "
+                 "the Platform UI due to batch / cached pricing — usually "
+                 "within 5%."},
         {"label": "High Spenders",  "value": str(len(high)),
-         "help": "Кол-во юзеров с тратой ≥ $200 за период. Хороший trigger "
-                 "для проверки: что они делают, нужны ли им лимиты."},
+         "help": "Users with spend ≥ $200 this period. A good trigger to "
+                 "check what they're doing and whether they need a cap."},
     ])
 
     if rows:
@@ -749,32 +747,31 @@ with tab_cursor:
         prefer_gpt = sum(1 for r in leaders if r["favorite_model"].lower().startswith("gpt"))
         kpi_row([
             {"label": "Active developers", "value": str(active_devs),
-             "help": "Кол-во разработчиков с активностью в Cursor за период "
-                     "(хотя бы 1 completion). Хороший proxy на «AI-готовность» "
-                     "команды."},
+             "help": "Devs active in Cursor this period (≥ 1 completion). "
+                     "A solid proxy for 'AI-readiness' across the team."},
             {"label": "Completions",       "value": fmt_int(total_completions),
-             "help": "Сколько раз кто-то нажал Tab или принял Agent-completion "
-                     "от Cursor. Высокое число = команда реально пользуется AI."},
+             "help": "Times someone pressed Tab or accepted an Agent "
+                     "completion from Cursor. High = team actually uses AI."},
             {"label": "AI Lines Written",  "value": fmt_int(total_ai_lines),
-             "help": "Сколько строк кода Cursor написал за разработчика "
-                     "(через Tab + Agent). Cursor сам отмечает эти строки."},
+             "help": "Lines of code Cursor wrote on behalf of devs (Tab + "
+                     "Agent). Cursor flags these lines itself."},
             {"label": "Prefer Claude",     "value": str(prefer_claude),
-             "help": "Сколько разработчиков выбрали Claude как favorite-model "
-                     "в Cursor. Сравни с GPT."},
+             "help": "Devs who picked Claude as their favorite model in "
+                     "Cursor. Compare with Prefer GPT below."},
         ])
         # Second row: completion split + GPT-preferring devs
         kpi_row([
             {"label": "Prefer GPT",        "value": str(prefer_gpt),
-             "help": "Сколько разработчиков выбрали GPT-серию как "
-                     "favorite-model в Cursor. Сравни с Prefer Claude."},
+             "help": "Devs who picked the GPT family as their favorite "
+                     "model in Cursor. Compare with Prefer Claude above."},
             {"label": "Agent completions", "value": fmt_int(total_agent),
-             "help": "Cursor Agent (Composer / Cmd+I) — это «AI-пиши за меня "
-                     "целые функции». Большое число Agent completions "
-                     "обычно у самых продуктивных разработчиков."},
+             "help": "Cursor Agent (Composer / Cmd+I) — 'AI, write whole "
+                     "functions for me'. A high count usually means the "
+                     "most productive devs."},
             {"label": "Tab completions",   "value": fmt_int(total_tab),
-             "help": "Cursor Tab — inline auto-completion (нажми Tab чтобы "
-                     "принять). Каждый раз когда AI угадал то что ты "
-                     "печатаешь — +1 Tab completion."},
+             "help": "Cursor Tab — inline auto-completion (press Tab to "
+                     "accept). Every time the AI guessed what you were "
+                     "typing = +1 Tab completion."},
         ])
 
         c1, c2 = st.columns(2)
@@ -923,11 +920,11 @@ with tab_models:
 
     section(
         f"Model landscape — {f.date_range()[0].date()} → {f.date_range()[1].date()}",
-        help="Список всех моделей, которые команда реально используют, "
-             "с долей трат / запросов. Статусы: DOMINANT (≥ 40% scope) — "
-             "это «рабочая лошадка»; GROWING (20-40%) — заметная альтернатива; "
-             "ACTIVE — все остальные. Полезно увидеть, что мы платим за 8 "
-             "разных моделей, хотя 2 покрывают 80% реальной работы.",
+        help="Every model the team actually uses, with its share of spend / "
+             "requests. Statuses: DOMINANT (≥ 40% of scope) — the workhorse; "
+             "GROWING (20-40%) — a real alternative; ACTIVE — everything "
+             "else. Surfaces cases where we pay for 8 models but 2 of them "
+             "cover 80% of real work.",
     )
 
     items: list[dict[str, Any]] = []
@@ -1130,22 +1127,21 @@ with tab_devs:
         n_bots = sum(1 for r in devs if r.get("is_bot"))
         kpi_row([
             {"label": "Tracked devs",   "value": f"{n_humans} +{n_bots} bots",
-             "help": "Сколько уникальных авторов коммитов нашли в git за "
-                     "период (люди + боты/CI-агенты отдельно). Боты — "
-                     "github-actions, Cursor Agent, Dependabot и т.п."},
+             "help": "Unique commit authors found in git this period "
+                     "(humans + bots / CI-agents counted separately). Bots = "
+                     "github-actions, Cursor Agent, Dependabot, etc."},
             {"label": "Team AI share",  "value": f"{share['ai_share_pct']}%",
-             "help": "Какая доля всех новых строк кода — сгенерирована AI. "
-                     "Включает все коммиты от ботов (= 100% AI) и ai_lines "
-                     "от людей через Cursor. Норма для AI-first команды: "
-                     "30-60%."},
+             "help": "Share of all new code lines generated by AI. Counts "
+                     "every bot commit as 100% AI plus ai_lines from humans "
+                     "via Cursor. Healthy AI-first team: 30-60%."},
             {"label": "Bot share",      "value": f"{share['bot_share_pct']}%",
-             "help": "Сколько % всего git-output написали боты/агенты — "
-                     "github-actions, Renovate, Cursor Agent и пр. "
-                     "Высокий % = много автоматизации."},
+             "help": "Share of total git output written by bots / agents — "
+                     "github-actions, Renovate, Cursor Agent etc. High % = "
+                     "lots of automation."},
             {"label": "Human AI share", "value": f"{share['human_ai_share_pct']}%",
-             "help": "Среди ТОЛЬКО человеческих коммитов — какая доля строк "
-                     "пришла через Cursor AI-completions. Чистый сигнал "
-                     "'насколько люди используют AI'."},
+             "help": "Among HUMAN-only commits, what share of lines came "
+                     "via Cursor AI completions. The cleanest 'how much do "
+                     "humans actually use AI' signal."},
         ])
         st.markdown(
             f'<div style="margin:14px 0 4px 0;color:#475569;font-size:13px;">'
@@ -1173,11 +1169,11 @@ with tab_devs:
         # 1. Stacked-bar segment distribution (mirrors Spend Breakdown style)
         section(
             "Segment distribution",
-            help="Команда разбита на 8 сегментов по соотношению AI-трат и "
-                 "git-активности. Идеально: большинство в зелёном "
-                 "(High AI · High Output) или синем (Low AI · High Output). "
-                 "Красный (High AI · Low Output) = тратим много на AI, "
-                 "но коммитов мало — повод поговорить.",
+            help="The team split into 8 buckets by AI spend × git output. "
+                 "Ideal: most people in green (High AI · High Output) or "
+                 "blue (Low AI · High Output). Red (High AI · Low Output) "
+                 "= we pay a lot for AI but few commits ship — worth a "
+                 "1-on-1 conversation.",
         )
         total_devs = len(devs)
         present = [(s, lbl, c) for s, lbl, c in SEGMENT_META if counts.get(s, 0) > 0]
@@ -1235,12 +1231,11 @@ with tab_devs:
         if tq["commits"] > 0:
             section(
                 "Code Quality (Git × AI)",
-                help="Качество кода через призму AI: какой % коммитов — "
-                     "это баг-фиксы, как часто откатываемся (revert), "
-                     "разница в bug-rate между людьми и ботами, и "
-                     "сколько AI-долларов уходит на каждый bug-fix. "
-                     "Метод: regex по subject коммитов. Сигнал "
-                     "направленный, не идеально точный.",
+                help="Code health through an AI lens: what % of commits "
+                     "are bug-fixes, the gap between human and bot bug-"
+                     "rate, and how many AI dollars we spend per bug-fix. "
+                     "Method: regex over commit subjects — a directional "
+                     "signal, not ground truth.",
             )
             st.caption(
                 "Subject-line regex classification on commit messages "
@@ -1249,32 +1244,27 @@ with tab_devs:
             )
             kpi_row([
                 {"label": "Commits", "value": fmt_int(tq["commits"]),
-                 "help": "Всего коммитов в выбранных репозиториях за период "
-                         "(после dedup по repo + sha)."},
+                 "help": "Total commits across selected repos this period "
+                         "(deduped by repo + sha)."},
                 {"label": "Bug-fix rate",
                  "value": f"{tq['bug_rate_pct']:.1f}%" if tq["bug_rate_pct"] is not None else "—",
-                 "help": "Какой % всех коммитов — это баг-фиксы (по subject: "
-                         "fix:, bug, hotfix, patch). Норма для здорового "
-                         "проекта: 15-25%. > 35% = нестабильность, < 10% = "
-                         "либо мало багов, либо плохое именование коммитов."},
+                 "help": "Share of commits that are bug-fixes (subject "
+                         "matches fix:, bug, hotfix, patch). Healthy range: "
+                         "15-25%. > 35% = instability, < 10% = either few "
+                         "bugs or sloppy commit messages."},
                 {"label": "Human bug rate",
                  "value": f"{tq['human_bug_rate_pct']:.1f}%"
                           if tq["human_bug_rate_pct"] is not None else "—",
-                 "help": "Bug-fix rate среди коммитов, написанных людьми "
-                         "(не ботами). Сравни с Bot bug rate ниже — большая "
-                         "разница говорит о происхождении багов."},
+                 "help": "Bug-fix rate among human-authored commits "
+                         "(excluding bots). Compare with Bot bug rate — "
+                         "a big gap hints at where bugs originate."},
                 {"label": "Bot bug rate",
                  "value": f"{tq['bot_bug_rate_pct']:.1f}%"
                           if tq["bot_bug_rate_pct"] is not None else "—",
-                 "help": "Bug-fix rate среди ботов/CI-агентов. Если bot "
-                         "bug rate сильно ВЫШЕ человеческого — AI-агенты "
-                         "генерят код, который потом приходится чинить."},
-                {"label": "Revert rate",
-                 "value": f"{tq['revert_rate_pct']:.2f}%"
-                          if tq["revert_rate_pct"] is not None else "—",
-                 "help": "Какой % коммитов — это revert (откат предыдущего "
-                         "коммита). Каждый revert = что-то поломалось в "
-                         "проде. Норма: < 0.5%."},
+                 "help": "Bug-fix rate among bot / CI-agent commits. If "
+                         "this is much HIGHER than the human rate, AI "
+                         "agents are shipping code that later needs "
+                         "fixing."},
             ])
 
             # Composition strip: features vs fixes vs refactors vs tests vs docs.
@@ -1336,12 +1326,11 @@ with tab_devs:
             with col_cost:
                 section(
                     "AI spend per bug-fix",
-                    help="Сколько $ AI-аренды потратили команда на каждый "
-                         "коммит-баг-фикс (всего AI spend ÷ кол-во "
-                         "bug-fix коммитов). Зелёный < $100, оранжевый "
-                         "$100-500, красный ≥ $500. Высокий = или "
-                         "команда дебажит с AI, или AI-код плохой и нуждается "
-                         "в правках.",
+                    help="$ of AI rent per bug-fix commit (total AI spend "
+                         "÷ bug-fix commit count). Green < $100, orange "
+                         "$100-500, red ≥ $500. High = either we debug "
+                         "heavily with AI, or AI-generated code keeps "
+                         "needing fixes.",
                 )
                 spf = get_ai_spend_per_fix(period_days=min(filters.period_days, 90))
                 spend_val = spf["ai_spend_per_fix"]
@@ -1373,11 +1362,11 @@ with tab_devs:
             with col_breakdown:
                 section(
                     "AI vs human bug rate",
-                    help="Сравнение баг-rate ботов/агентов и людей. Если "
-                         "Bots bar заметно длиннее — AI-агенты в команде "
-                         "генерят больше «грязного» кода, который потом "
-                         "сами же чинят. Если Humans длиннее — люди чаще "
-                         "коммитят явно помеченные фиксы.",
+                    help="Side-by-side bug-rate for bots/agents vs humans. "
+                         "If the Bots bar is clearly longer, AI agents on "
+                         "the team are shipping messy code they later fix "
+                         "themselves. If Humans is longer, people just "
+                         "commit fixes with clearer wording.",
                 )
                 hrate = tq["human_bug_rate_pct"]
                 brate = tq["bot_bug_rate_pct"]
@@ -1420,11 +1409,11 @@ with tab_devs:
             # Per-author bug-fix breakdown
             section(
                 "Per-author bug-fix breakdown",
-                help="Топ-50 авторов с разбивкой по типам коммитов и "
-                     "bug rate. Если кто-то в команде имеет bug rate "
-                     "> 40% — стоит обсудить процесс review / тестов. "
-                     "Алиасы (несколько git-имён одного человека) "
-                     "объединены в одну строку.",
+                help="Top 50 authors by commit count, broken out by "
+                     "commit type and bug rate. Anyone with bug rate "
+                     "> 40% deserves a review / testing conversation. "
+                     "Multiple git aliases for the same person are "
+                     "collapsed into one row.",
             )
             quality_rows = get_quality_per_author(
                 period_days=filters.period_days, repos=repo_arg, limit=50,
@@ -1463,11 +1452,10 @@ with tab_devs:
             if churn:
                 section(
                     "High-churn files (problem areas)",
-                    help="Файлы, к которым возвращаются чаще всего за "
-                         "период. Это «горячие точки» — кандидаты на "
-                         "рефакторинг, lockdown в review, или просто "
-                         "файлы с плохим дизайном (если в одном файле "
-                         "сходится много фич, он постоянно правится).",
+                    help="Files that get touched the most this period. "
+                         "Hot spots — candidates for refactoring, review "
+                         "lockdown, or simply badly-designed files where "
+                         "too many features land in the same place.",
                 )
                 st.caption(
                     "Files most often touched in the window — proxy for hot "
@@ -1489,10 +1477,10 @@ with tab_devs:
         # 2. Multi-select: which segment(s) to show as tables below
         section(
             "Drill into segments",
-            help="Детальная разбивка по сегментам. Каждый dev получил "
-                 "сегмент по правилам: высокая AI-трата = ≥ $200, "
-                 "высокий git-output = ≥ медианы команды по additions. "
-                 "Выбери ниже какие сегменты показывать таблицами.",
+            help="Per-segment detail. Each dev gets a bucket by these "
+                 "rules: high AI spend = ≥ $200, high git output = ≥ team "
+                 "median additions. Pick below which segments to render "
+                 "as tables.",
         )
         seg_options = [s for s, _, _ in SEGMENT_META if counts.get(s, 0) > 0]
         seg_labels_map = {s: lbl for s, lbl, _ in SEGMENT_META}
@@ -1593,19 +1581,20 @@ with tab_high:
 
     kpi_row([
         {"label": "High Spenders", "value": f"{len(high)} / {total_users}",
-         "help": "Сколько юзеров перешли порог (слайдер выше) из общего "
-                 "числа активных. Если 10+ человек тратят > $1k за период "
-                 "— стоит ввести лимиты или review."},
+         "help": "Users above the threshold (slider above) out of total "
+                 "active users. If 10+ people spend > $1k per period, "
+                 "consider caps or a review."},
         {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—",
-         "help": "Самый большой spend одного юзера. Если этот человек "
-                 "не в курсе своих трат — это аномалия (например, забытый "
-                 "cron / API automation)."},
+         "help": "Biggest single-user spend. If this person isn't aware "
+                 "of their own spend, it's an anomaly (forgotten cron / "
+                 "API automation)."},
         {"label": "Combined spend", "value": fmt_money(combined),
-         "help": "Суммарные траты всех high-spenders. Эта же сумма обычно "
-                 "= 60-80% от всего AI-бюджета компании (закон Парето)."},
+         "help": "Total spend of all high-spenders. This figure is "
+                 "usually 60-80% of the entire company AI budget "
+                 "(Pareto)."},
         {"label": "Share of users", "value": f"{share_high:.0f}%",
-         "help": "Какая доля юзеров — это high-spenders. Обычно 5-15%. "
-                 "Высокая концентрация — норма для AI-инструментов."},
+         "help": "Share of users who are high-spenders. Usually 5-15%. "
+                 "High concentration is normal for AI tools."},
     ])
 
     if high:
@@ -1617,12 +1606,12 @@ with tab_high:
 
         section(
             "Notable high spend",
-            help="Топ-15 high-spenders с разбивкой по инструментам "
-                 "(GPT + CC + Cursor). Цвет border = risk-level. "
-                 "Подпись под именем — эвристика типа использования: "
-                 "«anomalous» = подозрительно высокая цена за сообщение "
-                 "(вероятно API/automation), «high cost/message» = дорогая "
-                 "reasoning модель (o1, o3, claude-opus).",
+            help="Top 15 high-spenders split across tools (GPT + CC + "
+                 "Cursor). Border colour = risk level. The line under "
+                 "the name is a heuristic: 'anomalous' = suspiciously "
+                 "high $/message (likely API automation), 'high cost/"
+                 "message' = expensive reasoning model (o1, o3, "
+                 "claude-opus).",
         )
         cards_html = []
         for s in high[:15]:
@@ -1671,9 +1660,10 @@ with tab_high:
         with col_anal:
             section(
                 "High spend analysis",
-                help="Автоматический анализ паттернов в трате: топ-spender, "
-                     "явные аномалии ($100+ за сообщение), volume vs $/msg "
-                     "размер top-3. Полезно для еженедельного review с CFO.",
+                help="Auto-generated narrative on spend patterns: the top "
+                     "spender, clear anomalies ($100+ per message), volume "
+                     "vs $/msg, top-3 concentration. Useful for a weekly "
+                     "CFO review.",
             )
             findings = _hs_findings(high)
             if findings:
@@ -1688,9 +1678,9 @@ with tab_high:
         with col_rank:
             section(
                 "Cross-tool spend ranking",
-                help="Топ-10 по суммарной трате через все 3 инструмента. "
-                     "Хорошо отвечает на вопрос «кому надо повысить лимит "
-                     "или, наоборот, дать seat подешевле».",
+                help="Top 10 by combined spend across all 3 tools. Good "
+                     "answer to the question 'who needs a higher cap or, "
+                     "conversely, a cheaper seat'.",
             )
             ranked = sorted(all_spenders, key=lambda r: r["spend"] or 0, reverse=True)[:10]
             max_spend = max((r["spend"] or 0) for r in ranked) or 1
