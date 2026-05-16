@@ -69,6 +69,8 @@ def _ensure_organization(provider_id: int, label: str) -> int:
 
 
 def _ensure_user(email: str, name: str, org_id: int | None = None) -> int:
+    # Lowercase email to dodge case-sensitive UNIQUE constraint dupes.
+    email = (email or "").strip().lower()
     with get_conn() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)

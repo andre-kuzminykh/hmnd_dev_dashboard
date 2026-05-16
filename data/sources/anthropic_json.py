@@ -71,6 +71,12 @@ def _ensure_provider() -> int:
 
 
 def _ensure_user(email: str, name: str) -> int:
+    # Normalise email to lowercase BEFORE insert. The UNIQUE constraint on
+    # users.email is case-sensitive in SQLite, so without this two events
+    # arriving with 'Blake.Lieber@hmnd.ai' and 'blake.lieber@hmnd.ai' would
+    # create two distinct user rows and silently split that person's spend
+    # across both. Surfaced by audit_user_dedup().
+    email = (email or "").strip().lower()
     with get_conn() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)

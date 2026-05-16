@@ -451,7 +451,10 @@ class OpenAIConnector(BaseConnector):
                 break
             items = data.get("data", []) if isinstance(data, dict) else []
             for u in items:
-                email = u.get("email") or f"{u.get('id','unknown')}@openai"
+                # Lowercase email so a 'Blake.Lieber@hmnd.ai' from one source
+                # and 'blake.lieber@hmnd.ai' from another don't create two
+                # separate users (case-sensitive UNIQUE in SQLite).
+                email = (u.get("email") or f"{u.get('id','unknown')}@openai").strip().lower()
                 full_name = u.get("name") or email
                 role = u.get("role")
                 with get_conn() as conn:

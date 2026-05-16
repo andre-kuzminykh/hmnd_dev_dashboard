@@ -106,14 +106,15 @@ def derive_anthropic_from_cursor() -> dict[str, Any]:
         p_in, p_out, p_cache = _price_for_model(favorite_model)
 
         with get_conn() as conn:
-            # Upsert user
+            # Upsert user (lowercase email — see audit_user_dedup rationale)
+            email_lc = (leader["email"] or "").strip().lower()
             conn.execute(
                 """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)
                    VALUES(?, ?, 200, 1)""",
-                (leader["email"], leader["name"]),
+                (email_lc, leader["name"]),
             )
             uid = conn.execute(
-                "SELECT id FROM users WHERE email = ?", (leader["email"],)
+                "SELECT id FROM users WHERE email = ?", (email_lc,)
             ).fetchone()["id"]
 
             # Upsert model
