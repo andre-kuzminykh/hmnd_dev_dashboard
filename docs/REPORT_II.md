@@ -226,7 +226,49 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 
 ## 8. People & Contribution Patterns
 
-### hmnd — broad team, healthy ownership
+### hmnd — per-module ownership + bug-fix rate (Phase 2, last 90 days)
+
+[Fact, full git log unshallowed]: **1,450 commits across 14 modules**. The aggregate looks healthy (87 lifetime contributors, top-10 = ~24% of commits), but **per-module ownership is highly heterogeneous** and surfaces 3 concentrations that need attention.
+
+**Per-module table (last 90 days):**
+
+| Module | Commits | Bug-fix rate | Top-1 share | Top 3 contributors | AI-spender overlap |
+|---|--:|--:|--:|---|---|
+| **hmnd_robot** | 712 | 22.6% | 9% (Anubhav) | Anubhav Dogra (62), Bao Tran (55), Karim Shaban (44) | broad — no single high-AI-spender dominates |
+| hmnd_training | 361 | 16.3% | 13% (Artem I.) | Artem Ismagilov (47), **Oleg Sinavski (42)**, matakan (36) | **Oleg = top-1 Cursor spender** ($2.9k) — coupled with ML pipeline |
+| hmnd_flywheel | 181 | 17.7% | 22% (Sergei) | Sergei Fedotov (39), **Atindra Nair (30)**, Artem Shutak (24) | **atin = top-2 AI spender** — building/extending humanoid-console |
+| hmnd_sim | 138 | 20.3% | 30% (Luke) | Luke Bierbaum (41), Dmitriy Shingarey (27), Sepehr Ramezani (24) | low — sim work less AI-assisted |
+| **hmnd_fleet** | 102 | **35.3%** ⚠️ | 33% (Sam) | **Sam Pfeiffer (33)**, **Matt Klingensmith (26)**, github-actions[bot] (22) | **Both Sam + Matt are top-OpenAI-spenders at $17-23/msg**. See cross-ref below. |
+| tools | 60 | 25.0% | 27% (Brian) | Brian Ginebaugh (16), Ricardo Delfin (14), Tobias Jacob (11) | low |
+| hmnd_playground | 34 | 11.8% | 24% (Vaibhav) | Vaibhav Mehta (8), Diogo Almeida (7), Denis Grachev (7) | experimental — bugs OK here |
+| hmnd_wholebody | 20 | 10.0% | **47% (Thomas)** | Thomas Corberes (9), gourav-wadhwa (7), Daksh Dhingra (2) | bus factor risk + minimal tests |
+| hmnd_firmware | 15 | 26.7% | 36% (ntan) | ntan-humanoid (5), Brad Parker (4), elpe-humanoid (2) | small team, safety-critical |
+| **hmnd_infra** | 11 | 18.2% | **80% (Cody)** ⚠️ | Cody Griffin (8), Rodrigo Zenha (1), Oleg Afanasyev (1) | **Cody = top-OpenAI $23/msg** |
+| **hmnd_update** | 7 | 28.6% | **83% (Tobias)** ⚠️ | Tobias Jacob (5), Brian Ginebaugh (2) | single-person ownership |
+| **hmnd_services** | 6 | 16.7% | **100% (Cody)** ⚠️ | Cody Griffin only | single-person ownership |
+| **hmnd_agents** | 6 | 16.7% | **100% (atin)** ⚠️ | Atindra Nair only | single-person — and her AGENTS.md drives agent behaviour |
+| hmnd_test_and_integration | 5 | 0% | 75% (Andrey B.) | Andrey Basov (3) | small, OK |
+
+### Three findings that change Report II's recommendations
+
+**1. `hmnd_fleet` bug-rate × AI-OpenAI-spender cross-reference** ⚠️
+
+`hmnd_fleet` has the **highest bug-fix rate (35.3%)** of any hmnd module — ~2× the repo average (17%). The two top contributors there (Sam Pfeiffer 33 commits, Matt Klingensmith 26) are **both Report I top-OpenAI spenders at $17-23/msg** (reasoning-model overuse). This is the strongest causal signal in the entire audit: **expensive AI reasoning calls correlate with high bug-fix activity in fleet code.** Two interpretations are equally plausible:
+- (a) Fleet is intrinsically buggy (production rollout edge → bugs discovered at deployment)
+- (b) AI-generated fleet code requires more fixes than other modules
+Distinguishing (a) from (b) needs a 5-commit qualitative audit; Priority Action #16 (new).
+
+**2. Three modules at one-person bus factor**:
+- `hmnd_services` — 100% Cody Griffin
+- `hmnd_agents` — 100% Atindra Nair (← she also owns the AGENTS.md memory pattern; if she leaves, the AI agent infrastructure goes with her)
+- `hmnd_update` — 83% Tobias Jacob
+- `hmnd_infra` — 80% Cody Griffin
+
+Add to Priority Actions: cross-train at least 1 backup contributor per these 4 modules within 30 days.
+
+**3. `hmnd_robot` is the healthiest module** — broad distribution (top-1 = 9%), 22.6% bug rate (in line with average), 401 tests, AGENTS.md + README ✅. **Use it as the template for module conventions.**
+
+### hmnd — lifetime + last-90-days top contributors (repo-wide, for context)
 
 [Fact, lifetime] 87 contributors, 3,404 commits. [Fact, last 90 days] 87 active people based on top-15 alone (= broad).
 
@@ -402,6 +444,8 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 13. **`terratest` (or equivalent) for `hmnd-cloud` modules** — at least the high-blast-radius ones (`shared-between-teams/training/`, `domains/vla/`).
 14. **Audit policy for large AI-assisted commits** — the 15% of commits in `hmnd` that touch 21+ files. Define what review depth they need.
 15. **`hmnd_firmware` test infrastructure** — 0 tests on 495 C++ files is fine for low-risk firmware but should at least have unit-tested HAL boundary + hardware-in-the-loop smoke tests for any AI-assisted change.
+16. **Qualitative audit of `hmnd_fleet` bug-rate anomaly** — sample the last ~10 bug-fix commits in hmnd_fleet (35.3% bug rate, ~2× repo avg). Identify how many were fixing AI-generated code from Sam Pfeiffer / Matt Klingensmith (both high-OpenAI-reasoning spenders per Report I). Determines whether to (a) accept that fleet is intrinsically buggy or (b) tighten AI guardrails on reasoning-heavy fleet PRs.
+17. **Cross-train 4 single-person modules** — `hmnd_services` (Cody alone), `hmnd_agents` (Atindra alone), `hmnd_update` (Tobias 83%), `hmnd_infra` (Cody 80%). Assign one backup contributor each, even if low-volume. Special concern for `hmnd_agents`: Atindra owns the AGENTS.md memory pattern — if she leaves, AI infrastructure has no documented heir.
 
 ---
 
@@ -418,6 +462,8 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 **Recommendation:** make `hmnd` and `hmnd-cloud` the first two **controlled AI-codegen readiness targets** with clear gates (AGENTS.md, CODEOWNERS, PR validation, prompt evals). After both score 4+ on §6, expand the model to the next tier of repos. Don't try to roll out one-size-fits-all AI policy across all 100+ org repos — segment-based rollout matches the heterogeneous risk profile.
 
 **The single highest-value missing artefact** in the whole audit is a **prompt-regression eval framework**. Currently zero of the three repos have a way to detect when an AGENTS.md change silently regresses AI agent behaviour. As HMND scales AI-assisted development, this gap will hurt more each month.
+
+**One cross-reference between Report I and Report II worth surfacing to the board:** `hmnd_fleet` has the highest bug-fix rate of any hmnd module (35.3%, ~2× repo average), and its top-2 contributors (Sam Pfeiffer, Matt Klingensmith) are also the top-2 reasoning-model overusers on OpenAI ($17–23 per message per Report I). The two signals could be unrelated (fleet code touches the messy edges of production) or causal (expensive AI calls producing fragile code that needs fixing). Worth a focused 10-PR audit to distinguish (Priority Action #16). Two more bus-factor risks in `hmnd_agents` (100% Atindra) and `hmnd_services` / `hmnd_infra` (Cody alone / 80%) are addressable in 30 days (Priority Action #17).
 
 ---
 
