@@ -33,8 +33,24 @@ What it checks (each as a `✓` / `✗` line in the output):
 |-------|------------------|
 | **Dashboard math** | `bug_rate_pct == fixes / commits * 100` (rounding-exact); same for revert_rate and human_bug_rate. `human_commits + bot_commits == total_commits` (no orphan `is_bot=NULL`). Per-author rows count = unique `COALESCE(user_id, author_name)` keys (alias dedup). |
 | **Segment partition** | Every dev gets ≥ 1 segment label AND the label is one of the spec'd 8 (`HIGH_AI_SPEND_HIGH_GIT_OUTPUT`, etc). Σ devs across segments == total devs. |
-| **High Spenders math** | For every cross-tool spender row, `spend == cost_openai + cost_anthropic + cost_cursor` within $0.05. Catches double-count bugs in the cross-provider rollup. |
+| **High Spenders math** | For every user_id, `SUM(cost_usd) == oai_sum + ant_sum + cur_sum` within $0.05. Reconciliation done at SQL level to avoid name-collision masking. |
 | **High-churn files** | Top-15 files from `get_high_churn_files(period_days=0)` is byte-identical to a fresh top-15 computed directly from raw CSV. |
+
+### C. Temporal & freshness
+
+| Check | What it verifies |
+|-------|------------------|
+| **Freshness & gaps** | `MAX(occurred_at)` per provider ≤ 7 days old. No date gaps in OpenAI `provider_totals` (no skipped sync days). |
+
+### D. Referential & value integrity
+
+| Check | What it verifies |
+|-------|------------------|
+| **Orphan FKs** | `usage_events.{user_id, provider_id, model_id, api_key_id, organization_id}` and `git_*.user_id` all point at valid parent rows — zero dangling references. |
+| **Money conservation** | `daily_costs.cost_usd == SUM(usage_events.cost_usd)` per `(user, provider, day)`. `provider_totals.cost_usd == SUM(daily_costs.cost_usd)` per `(provider, day)` within $0.50 (provider-calibrated tolerance). |
+| **Value sanity** | No negative `cost_usd / tokens_in / tokens_out / additions / deletions`. No `occurred_at` in the future. Outlier events > $100 flagged for review (informational). |
+| **NaN safety** | Every service formula returns either a real number or explicit `None` — never NaN (would render as `nan%` in the UI). Checked across `get_team_quality`, `get_quality_per_author`, `get_ai_spend_per_fix`. |
+| **User dedup** | No duplicate emails in `users` table (would break per-user rollups). Display-name collisions surfaced for transparency. |
 
 **Pass criteria:** all rows show `✓`, exit code 0.
 **On failure:** the failing row shows `expected=$X actual=$Y Δ=±Z` —
@@ -120,15 +136,15 @@ docker compose exec dashboard python -m scripts.extract_git_stats
 # 2. Re-sync the DB from current sources/
 docker compose exec dashboard python -m scripts.sync
 
-# 3. Run the audit — must end with all 11 ✓
+# 3. Run the audit — must end with all 17 ✓
 docker compose exec dashboard python -m scripts.audit_etl
 #    Expected SUMMARY:
-#      ✓ Anthropic
-#      ✓ Cursor
-#      ✓ OpenAI / Humanoid
-#      ✓ OpenAI / API push
-#      ✓ Tokens (uncached)
-#      ✓ Git CSV
+#      ✓ Anthropic            ✓ Money conservation
+#      ✓ Cursor               ✓ Value sanity
+#      ✓ OpenAI / Humanoid    ✓ NaN safety
+#      ✓ OpenAI / API push    ✓ User dedup
+#      ✓ Tokens (uncached)    ✓ Freshness & gaps
+#      ✓ Git CSV              ✓ Orphan FKs
 #      ✓ Code Quality
 #      ✓ Dashboard math
 #      ✓ Segment partition

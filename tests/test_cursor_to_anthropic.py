@@ -18,6 +18,9 @@ def _write_leaderboard(dir_path: Path, period: str = "2026-04-30_2026-05-06") ->
 def test_generator_produces_anthropic_events(tmp_path, monkeypatch):
     monkeypatch.setenv("HMND_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    # Also isolate from any real sources/Cursor_*.json in the repo (or test
+    # CWD) that cursor_analytics would otherwise pick up via find_all()
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     _write_leaderboard(tmp_path)
 
     from data.db import init_schema
@@ -59,6 +62,9 @@ def test_generator_idempotent(tmp_path, monkeypatch):
     """Re-running should DELETE the period and re-INSERT — total stays the same."""
     monkeypatch.setenv("HMND_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    # Also isolate from any real sources/Cursor_*.json in the repo (or test
+    # CWD) that cursor_analytics would otherwise pick up via find_all()
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
     _write_leaderboard(tmp_path)
 
     from data.db import init_schema, get_conn
@@ -85,7 +91,10 @@ def test_generator_idempotent(tmp_path, monkeypatch):
 
 def test_generator_empty_when_no_csv(tmp_path, monkeypatch):
     monkeypatch.setenv("HMND_DB_PATH", str(tmp_path / "test.db"))
-    monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))  # empty dir
+    monkeypatch.setenv("HMND_CURSOR_EXPORT_DIR", str(tmp_path))
+    # Also isolate from any real sources/Cursor_*.json in the repo (or test
+    # CWD) that cursor_analytics would otherwise pick up via find_all()
+    monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))  # empty dir
     from data.db import init_schema
     init_schema()
     import importlib

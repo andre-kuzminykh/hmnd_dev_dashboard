@@ -733,22 +733,291 @@ def audit_high_churn() -> bool:
     return ok
 
 
+def audit_freshness_and_coverage() -> bool:
+    """D1+D2 — freshness of the latest event per provider + date gaps in
+    provider_totals (sync skipped a day = warning).
+    """
+    print(f"\n{HEAD}── FRESHNESS & DATE COVERAGE ──{END}")
+    from data.db import get_conn
+    from datetime import datetime
+    now = datetime.utcnow()
+    ok_all = True
+    with get_conn() as conn:
+        # Per-provider latest event date
+        rows = conn.execute(
+            """SELECT p.name AS provider,
+                      MAX(ue.occurred_at) AS last_event,
+                      COUNT(*)            AS n
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               GROUP BY p.name
+               ORDER BY p.name"""
+        ).fetchall()
+        for r in rows:
+            try:
+                last = datetime.strptime(r["last_event"][:19], "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                try:
+                    last = datetime.strptime(r["last_event"][:10], "%Y-%m-%d")
+                except Exception:
+                    print(f"  ✗ provider={r['provider']:10s}  unparseable last_event={r['last_event']}")
+                    ok_all = False
+                    continue
+            age_days = (now - last).total_seconds() / 86400
+            # >7 days stale = sync probably broken (most providers update daily)
+            fresh = age_days <= 7
+            mark = OK if fresh else BAD
+            print(f"  {mark} provider={r['provider']:10s}  events={r['n']:>7,}  "
+                  f"last={r['last_event'][:10]}  age={age_days:.1f}d")
+            ok_all &= fresh
+
+        # Date gaps in provider_totals (only OpenAI has daily granularity)
+        oai_days = conn.execute(
+            """SELECT pt.day
+               FROM provider_totals pt
+               JOIN providers p ON p.id = pt.provider_id
+               WHERE p.name = 'openai'
+               ORDER BY pt.day"""
+        ).fetchall()
+        if len(oai_days) >= 2:
+            from datetime import date
+            days_set = sorted([date.fromisoformat(r["day"]) for r in oai_days])
+            gaps = []
+            for prev, curr in zip(days_set, days_set[1:]):
+                gap = (curr - prev).days
+                if gap > 1:
+                    gaps.append((prev, curr, gap))
+            mark = OK if not gaps else BAD
+            print(f"  {mark} OpenAI provider_totals date gaps: {len(gaps)}")
+            for prev, curr, gap in gaps[:3]:
+                print(f"     gap of {gap}d between {prev} and {curr}")
+            ok_all &= (len(gaps) == 0)
+    return ok_all
+
+
+def audit_orphan_fks() -> bool:
+    """F10 — referential integrity. Every FK in usage_events must point
+    to a valid row in the parent table.
+    """
+    print(f"\n{HEAD}── ORPHAN FOREIGN KEYS ──{END}")
+    from data.db import get_conn
+    checks = [
+        ("usage_events.user_id     → users.id",
+         "SELECT COUNT(*) FROM usage_events WHERE user_id     NOT IN (SELECT id FROM users)"),
+        ("usage_events.provider_id → providers.id",
+         "SELECT COUNT(*) FROM usage_events WHERE provider_id NOT IN (SELECT id FROM providers)"),
+        ("usage_events.model_id    → models.id",
+         "SELECT COUNT(*) FROM usage_events WHERE model_id    NOT IN (SELECT id FROM models)"),
+        ("usage_events.api_key_id  → api_keys.id (nullable)",
+         "SELECT COUNT(*) FROM usage_events WHERE api_key_id IS NOT NULL "
+         "AND api_key_id NOT IN (SELECT id FROM api_keys)"),
+        ("usage_events.organization_id → organizations.id (nullable)",
+         "SELECT COUNT(*) FROM usage_events WHERE organization_id IS NOT NULL "
+         "AND organization_id NOT IN (SELECT id FROM organizations)"),
+        ("git_authors.user_id      → users.id (nullable)",
+         "SELECT COUNT(*) FROM git_authors WHERE user_id IS NOT NULL "
+         "AND user_id NOT IN (SELECT id FROM users)"),
+        ("git_commits.user_id      → users.id (nullable)",
+         "SELECT COUNT(*) FROM git_commits WHERE user_id IS NOT NULL "
+         "AND user_id NOT IN (SELECT id FROM users)"),
+    ]
+    ok_all = True
+    with get_conn() as conn:
+        for label, sql in checks:
+            n = conn.execute(sql).fetchone()[0]
+            ok_all &= _print(label, 0.0, float(n), tol=0)
+    return ok_all
+
+
+def audit_conservation() -> bool:
+    """G13+G14 — money conservation across rollup tables.
+
+    SUM(usage_events) per (user, provider, day) should equal
+    daily_costs.cost_usd. SUM(daily_costs) per (provider, day) should
+    equal provider_totals.cost_usd (where provider_totals exists).
+    """
+    print(f"\n{HEAD}── MONEY CONSERVATION (events → daily_costs → provider_totals) ──{END}")
+    from data.db import get_conn
+    ok_all = True
+    with get_conn() as conn:
+        # 1. daily_costs.cost_usd == SUM(usage_events) per (user, provider, day)
+        bad = conn.execute(
+            """SELECT COUNT(*) AS n FROM (
+                 SELECT dc.user_id, dc.provider_id, dc.day,
+                        ROUND(dc.cost_usd, 2)  AS dc_cost,
+                        ROUND(COALESCE(SUM(ue.cost_usd), 0), 2) AS ue_cost
+                 FROM daily_costs dc
+                 LEFT JOIN usage_events ue
+                   ON ue.user_id = dc.user_id
+                  AND ue.provider_id = dc.provider_id
+                  AND substr(ue.occurred_at, 1, 10) = dc.day
+                 GROUP BY dc.user_id, dc.provider_id, dc.day
+                 HAVING ABS(dc_cost - ue_cost) > 0.01
+               )"""
+        ).fetchone()["n"]
+        ok_all &= _print("daily_costs vs SUM(usage_events) per (user, provider, day)",
+                         0.0, float(bad), tol=0)
+
+        # 2. provider_totals == SUM(daily_costs) per (provider, day)
+        bad2 = conn.execute(
+            """SELECT COUNT(*) AS n FROM (
+                 SELECT pt.provider_id, pt.day,
+                        ROUND(pt.cost_usd, 2)                   AS pt_cost,
+                        ROUND(COALESCE(SUM(dc.cost_usd), 0), 2) AS dc_sum
+                 FROM provider_totals pt
+                 LEFT JOIN daily_costs dc
+                   ON dc.provider_id = pt.provider_id AND dc.day = pt.day
+                 GROUP BY pt.provider_id, pt.day
+                 HAVING ABS(pt_cost - dc_sum) > 0.50
+               )"""
+        ).fetchone()["n"]
+        # provider_totals is authoritative from /v1/organization/costs; small
+        # drift expected because the loader calibrates daily_costs to match
+        # but events themselves can be slightly off due to cached/batch pricing.
+        # Tolerance 50¢ per day is reasonable.
+        ok_all &= _print("provider_totals vs SUM(daily_costs) per (provider, day) ±$0.50",
+                         0.0, float(bad2), tol=0)
+    return ok_all
+
+
+def audit_value_sanity() -> bool:
+    """E5+D4 — no negative values, no future-dated events."""
+    print(f"\n{HEAD}── VALUE SANITY (negatives, future dates) ──{END}")
+    from data.db import get_conn
+    from datetime import datetime
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    ok_all = True
+    with get_conn() as conn:
+        checks = [
+            ("usage_events.cost_usd < 0",
+             "SELECT COUNT(*) FROM usage_events WHERE cost_usd < 0"),
+            ("usage_events.tokens_in < 0",
+             "SELECT COUNT(*) FROM usage_events WHERE tokens_in < 0"),
+            ("usage_events.tokens_out < 0",
+             "SELECT COUNT(*) FROM usage_events WHERE tokens_out < 0"),
+            ("git_commits.additions < 0",
+             "SELECT COUNT(*) FROM git_commits WHERE additions < 0"),
+            ("git_commits.deletions < 0",
+             "SELECT COUNT(*) FROM git_commits WHERE deletions < 0"),
+            ("provider_totals.cost_usd < 0",
+             "SELECT COUNT(*) FROM provider_totals WHERE cost_usd < 0"),
+        ]
+        for label, sql in checks:
+            n = conn.execute(sql).fetchone()[0]
+            ok_all &= _print(label, 0.0, float(n), tol=0)
+
+        # Future-dated events (loader bug or clock drift)
+        n_future = conn.execute(
+            "SELECT COUNT(*) FROM usage_events WHERE occurred_at > ?",
+            (now,),
+        ).fetchone()[0]
+        ok_all &= _print("usage_events.occurred_at in the future",
+                         0.0, float(n_future), tol=0)
+
+        # Outsized single events (likely pricing bug if any > $100 single call)
+        bigs = conn.execute(
+            """SELECT u.full_name, ue.cost_usd, ue.occurred_at
+               FROM usage_events ue JOIN users u ON u.id = ue.user_id
+               WHERE ue.cost_usd > 100 ORDER BY ue.cost_usd DESC LIMIT 3"""
+        ).fetchall()
+        if bigs:
+            print(f"  (info) {len(bigs)} events with cost > $100 (top 3):")
+            for r in bigs:
+                print(f"     ${r['cost_usd']:.2f}  {r['full_name']}  {r['occurred_at'][:16]}")
+        else:
+            print(f"  (info) no single events > $100")
+    return ok_all
+
+
+def audit_nan_safety() -> bool:
+    """H16 — service formulas must never return NaN (would render as 'nan%'
+    in UI and break trust). Either real number or explicit None.
+    """
+    print(f"\n{HEAD}── NaN SAFETY (service formulas) ──{END}")
+    import math
+    from backend.services.git_quality import (
+        get_team_quality, get_quality_per_author, get_ai_spend_per_fix,
+    )
+    ok_all = True
+
+    def is_nan_or_safe(v):
+        return v is None or (isinstance(v, (int, float)) and not math.isnan(v))
+
+    tq = get_team_quality(period_days=0)
+    for k in ("bug_rate_pct", "human_bug_rate_pct", "bot_bug_rate_pct", "revert_rate_pct"):
+        v = tq.get(k)
+        ok = is_nan_or_safe(v)
+        mark = OK if ok else BAD
+        print(f"  {mark} get_team_quality()['{k}'] = {v!r}")
+        ok_all &= ok
+
+    for row in get_quality_per_author(period_days=0, limit=20):
+        for k in ("bug_rate_pct", "revert_rate_pct"):
+            if not is_nan_or_safe(row.get(k)):
+                print(f"  ✗ per_author '{row['canonical_name']}'.{k} = {row[k]!r} (NaN!)")
+                ok_all = False
+
+    spf = get_ai_spend_per_fix(period_days=0)
+    v = spf.get("ai_spend_per_fix")
+    ok = is_nan_or_safe(v)
+    mark = OK if ok else BAD
+    print(f"  {mark} get_ai_spend_per_fix()['ai_spend_per_fix'] = {v!r}")
+    ok_all &= ok
+    return ok_all
+
+
+def audit_user_dedup() -> bool:
+    """F11 — no duplicate users by email (would break per-user rollups)."""
+    print(f"\n{HEAD}── USER DEDUP (email uniqueness) ──{END}")
+    from data.db import get_conn
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT LOWER(email) AS e, COUNT(*) AS n
+               FROM users
+               WHERE email IS NOT NULL AND email != ''
+               GROUP BY LOWER(email)
+               HAVING n > 1"""
+        ).fetchall()
+        # Info: name collisions are allowed (genuine duplicates) but email
+        # collisions break per-user logic.
+        for r in rows[:5]:
+            print(f"  duplicate email: {r['e']} ({r['n']} rows)")
+        ok = _print("Σ duplicate emails", 0.0, float(len(rows)), tol=0)
+
+        # Also count name collisions for transparency
+        name_rows = conn.execute(
+            """SELECT full_name, COUNT(*) AS n FROM users
+               GROUP BY full_name HAVING n > 1 ORDER BY n DESC LIMIT 5"""
+        ).fetchall()
+        if name_rows:
+            print(f"  (info) display-name collisions (allowed, just FYI):")
+            for r in name_rows:
+                print(f"     '{r['full_name']}' × {r['n']}")
+    return ok
+
+
 # ---------------------------------------------------------------------------
 
 def main() -> int:
     _setup_db()
     results = {
-        "Anthropic":          audit_anthropic(),
-        "Cursor":             audit_cursor(),
-        "OpenAI / Humanoid":  audit_openai_json(),
-        "OpenAI / API push":  audit_openai_api(),
-        "Tokens (uncached)":  audit_tokens_uncached(),
-        "Git CSV":            audit_git_csv(),
-        "Code Quality":       audit_code_quality(),
-        "Dashboard math":     audit_dashboard_math(),
-        "Segment partition":  audit_segment_partition(),
-        "High Spenders math": audit_high_spenders_math(),
-        "High-churn files":   audit_high_churn(),
+        "Anthropic":           audit_anthropic(),
+        "Cursor":              audit_cursor(),
+        "OpenAI / Humanoid":   audit_openai_json(),
+        "OpenAI / API push":   audit_openai_api(),
+        "Tokens (uncached)":   audit_tokens_uncached(),
+        "Git CSV":             audit_git_csv(),
+        "Code Quality":        audit_code_quality(),
+        "Dashboard math":      audit_dashboard_math(),
+        "Segment partition":   audit_segment_partition(),
+        "High Spenders math":  audit_high_spenders_math(),
+        "High-churn files":    audit_high_churn(),
+        "Freshness & gaps":    audit_freshness_and_coverage(),
+        "Orphan FKs":          audit_orphan_fks(),
+        "Money conservation":  audit_conservation(),
+        "Value sanity":        audit_value_sanity(),
+        "NaN safety":          audit_nan_safety(),
+        "User dedup":          audit_user_dedup(),
     }
     print(f"\n{HEAD}══════════════════ SUMMARY ══════════════════{END}")
     all_ok = True
