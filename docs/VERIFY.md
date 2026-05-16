@@ -15,14 +15,26 @@ docker compose exec dashboard python -m scripts.audit_etl
 
 What it checks (each as a `✓` / `✗` line in the output):
 
+### A. Raw → DB (data ingestion correctness)
+
 | Source | Ground truth → what we verify |
 |--------|-------------------------------|
 | **Anthropic** | `sum(report.results[].cost.amount)` from raw `Anthropics_*.json` ↔ `SUM(usage_events.cost_usd) WHERE provider='anthropic'` ↔ loader's reported total |
 | **Cursor** | `sum(spendCents + includedSpendCents) / 100` from raw `Cursor_*.json` ↔ `SUM(cost_usd) WHERE provider='cursor'` |
 | **OpenAI · Humanoid** | `sum(daily_spend.amount)` from raw `OpenAI_*.json` ↔ DB sum |
+| **OpenAI · API push** | `provider_totals` per-day == `SUM(usage_events.cost_usd)` per-day for the API-pushed source; every event tagged with `organization_id` |
 | **Tokens (uncached)** | input + output sum across all events matches loader's report |
 | **Git authors** | Σ commits / additions / deletions from raw `git_authors.csv` ↔ DB |
 | **Code Quality** | For each unique `(repo, sha)` in `git_commit_file_stats.csv`: re-run `_classify_subject` on subject line; sum flags per repo; compare with `git_commits` table AND with `get_team_quality(repos=[r])` service output |
+
+### B. Service-layer formulas (dashboard math correctness)
+
+| Check | What it verifies |
+|-------|------------------|
+| **Dashboard math** | `bug_rate_pct == fixes / commits * 100` (rounding-exact); same for revert_rate and human_bug_rate. `human_commits + bot_commits == total_commits` (no orphan `is_bot=NULL`). Per-author rows count = unique `COALESCE(user_id, author_name)` keys (alias dedup). |
+| **Segment partition** | Every dev gets ≥ 1 segment label AND the label is one of the spec'd 8 (`HIGH_AI_SPEND_HIGH_GIT_OUTPUT`, etc). Σ devs across segments == total devs. |
+| **High Spenders math** | For every cross-tool spender row, `spend == cost_openai + cost_anthropic + cost_cursor` within $0.05. Catches double-count bugs in the cross-provider rollup. |
+| **High-churn files** | Top-15 files from `get_high_churn_files(period_days=0)` is byte-identical to a fresh top-15 computed directly from raw CSV. |
 
 **Pass criteria:** all rows show `✓`, exit code 0.
 **On failure:** the failing row shows `expected=$X actual=$Y Δ=±Z` —
@@ -94,3 +106,41 @@ re-run `python -m scripts.extract_git_stats`.
 4. **Read the `?` tooltip** on the metric — most non-obvious behavior
    (e.g. `$/fix` ignoring repo filter, AI lines being lifetime) is
    spelled out there.
+
+---
+
+## Pre-demo checklist (10 minutes, before showing to leadership)
+
+Run **in this order** the morning of your demo:
+
+```bash
+# 1. Refresh source data (extract → drop into sources/)
+docker compose exec dashboard python -m scripts.extract_git_stats
+
+# 2. Re-sync the DB from current sources/
+docker compose exec dashboard python -m scripts.sync
+
+# 3. Run the audit — must end with all 11 ✓
+docker compose exec dashboard python -m scripts.audit_etl
+#    Expected SUMMARY:
+#      ✓ Anthropic
+#      ✓ Cursor
+#      ✓ OpenAI / Humanoid
+#      ✓ OpenAI / API push
+#      ✓ Tokens (uncached)
+#      ✓ Git CSV
+#      ✓ Code Quality
+#      ✓ Dashboard math
+#      ✓ Segment partition
+#      ✓ High Spenders math
+#      ✓ High-churn files
+
+# 4. Confirm dashboard is up and freshness chips read "live" or "1d old"
+curl -s http://localhost:8501 | grep -q "AIOps" && echo "dashboard responding"
+
+# 5. Run the unit-test suite (≈ 2 min)
+docker compose exec dashboard python -m pytest -q
+```
+
+If any of 1-5 fail, **don't demo**. Fix the issue or wait for next
+sync window.

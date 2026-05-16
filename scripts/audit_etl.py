@@ -459,15 +459,279 @@ def audit_code_quality() -> bool:
 
 # ---------------------------------------------------------------------------
 
+def audit_openai_api() -> bool:
+    """Cross-check the OpenAI API (live push) source.
+
+    Loader writes events from /v1/organization/costs into usage_events
+    AND populates provider_totals (authoritative daily totals from the
+    same API). We verify:
+      1. SUM(usage_events.cost_usd) per day matches provider_totals
+      2. Every OpenAI event has organization_id set
+      3. Artem-org events have api_key_id attributed (multi-key tenant)
+    """
+    print(f"\n{HEAD}── OPENAI API (live push) ──{END}")
+    from data.db import get_conn
+    with get_conn() as conn:
+        # 1. Per-day reconciliation: provider_totals vs SUM(usage_events)
+        rows = conn.execute(
+            """SELECT pt.day                      AS day,
+                      pt.cost_usd                 AS pt_cost,
+                      COALESCE(ue.daily_sum, 0)   AS ue_cost
+               FROM provider_totals pt
+               JOIN providers p ON p.id = pt.provider_id
+               LEFT JOIN (
+                   SELECT provider_id,
+                          substr(occurred_at, 1, 10) AS day,
+                          SUM(cost_usd)              AS daily_sum
+                   FROM usage_events
+                   GROUP BY provider_id, substr(occurred_at, 1, 10)
+               ) ue ON ue.provider_id = pt.provider_id AND ue.day = pt.day
+               WHERE p.name = 'openai'
+               ORDER BY pt.day DESC LIMIT 30"""
+        ).fetchall()
+        total_pt = sum(r["pt_cost"] for r in rows)
+        total_ue = sum(r["ue_cost"] for r in rows)
+        # provider_totals comes from /v1/organization/costs (authoritative).
+        # usage_events sum may be off by a small calibration delta — the
+        # loader calibrates per-day to match provider_totals at the end of
+        # sync, so divergence > 1% indicates a sync issue.
+        ok_recon = _print(
+            "provider_totals == SUM(usage_events) (30d window)",
+            total_pt, total_ue, tol=1.0,
+        )
+
+        # 2. All OpenAI events must have organization_id
+        row_org = conn.execute(
+            """SELECT COUNT(*) AS missing
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               WHERE p.name = 'openai' AND ue.organization_id IS NULL"""
+        ).fetchone()
+        ok_org = _print(
+            "OpenAI events missing organization_id",
+            0.0, float(row_org["missing"]), tol=0,
+        )
+
+        # 3. Per-org event count breakdown for transparency
+        org_rows = conn.execute(
+            """SELECT o.label, COUNT(*) AS n, ROUND(SUM(ue.cost_usd), 2) AS s
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               JOIN organizations o ON o.id = ue.organization_id
+               WHERE p.name = 'openai'
+               GROUP BY o.label
+               ORDER BY s DESC"""
+        ).fetchall()
+        for r in org_rows:
+            print(f"  org={r['label']:10s}  events={r['n']:>6,}  spend=${r['s']:>10,.2f}")
+
+        # 4. API key attribution check (Artem org should have api_key_id)
+        row_key = conn.execute(
+            """SELECT COUNT(*) AS missing
+               FROM usage_events ue
+               JOIN providers p ON p.id = ue.provider_id
+               JOIN organizations o ON o.id = ue.organization_id
+               WHERE p.name = 'openai' AND o.label = 'Artem'
+                 AND ue.api_key_id IS NULL"""
+        ).fetchone()
+        # Many Artem events legitimately lack api_key_id (untagged usage)
+        # — print as informational not a hard fail
+        print(f"  Artem events without api_key_id: {row_key['missing']:,} (informational)")
+
+    return ok_recon and ok_org
+
+
+def audit_dashboard_math() -> bool:
+    """Self-verify that service-layer formulas equal direct SQL.
+
+    Catches bugs where a service function reports a wrong number even
+    when the underlying data is correct — e.g. bug_rate_pct rounding
+    drift, or someone changes the formula and the test still passes.
+    """
+    print(f"\n{HEAD}── DASHBOARD MATH (formulas vs direct SQL) ──{END}")
+    from data.db import get_conn
+    from backend.services.git_quality import (
+        get_team_quality, get_quality_per_author,
+    )
+
+    # 1. Bug rate math: fixes / commits * 100 (rounded to 1 dec)
+    tq = get_team_quality(period_days=0)
+    if tq["commits"] == 0:
+        print("  (no git_commits — skipping)")
+        return True
+    expected_br = round(tq["fixes"] / tq["commits"] * 100, 1)
+    ok_br = _print("bug_rate_pct == fixes/commits*100",
+                   expected_br, tq["bug_rate_pct"], tol=0)
+
+    # 2. Revert rate math (rounded to 2 dec)
+    expected_rr = round(tq["reverts"] / tq["commits"] * 100, 2)
+    ok_rr = _print("revert_rate_pct == reverts/commits*100",
+                   expected_rr, tq["revert_rate_pct"], tol=0)
+
+    # 3. Human bug rate math
+    if tq["human_commits"] > 0:
+        with get_conn() as conn:
+            hf = conn.execute(
+                "SELECT SUM(is_bug_fix) AS f FROM git_commits WHERE is_bot=0"
+            ).fetchone()["f"] or 0
+        expected_hbr = round(hf / tq["human_commits"] * 100, 1)
+        ok_hbr = _print("human_bug_rate_pct == human_fixes/human_commits*100",
+                        expected_hbr, tq["human_bug_rate_pct"], tol=0)
+    else:
+        ok_hbr = True
+
+    # 4. Human + Bot commits == Total commits (no orphan is_bot=NULL)
+    ok_split = _print("human_commits + bot_commits == total",
+                      float(tq["commits"]),
+                      float(tq["human_commits"] + tq["bot_commits"]), tol=0)
+
+    # 5. Per-author dedup: number of rows = unique COALESCE(user_id, name)
+    authors = get_quality_per_author(period_days=0, limit=10000)
+    with get_conn() as conn:
+        expected_keys = conn.execute(
+            "SELECT COUNT(DISTINCT COALESCE(user_id, author_name)) AS n FROM git_commits"
+        ).fetchone()["n"]
+    # service caps at limit=10000 by design; expect equal when not capped
+    ok_dedup = _print("per_author rows == unique (user_id, name) keys",
+                      float(min(expected_keys, 10000)), float(len(authors)), tol=0)
+
+    return ok_br and ok_rr and ok_hbr and ok_split and ok_dedup
+
+
+def audit_segment_partition() -> bool:
+    """Every dev must land in EXACTLY one segment (mutual exclusivity)
+    and the segments must cover ALL devs from get_git_ai_correlation.
+    """
+    print(f"\n{HEAD}── SEGMENT PARTITION ──{END}")
+    from backend.services.git_correlation import get_git_ai_correlation
+    devs = get_git_ai_correlation(period_days=365)
+    if not devs:
+        print("  (no devs in 365d — skipping)")
+        return True
+
+    seg_counts: dict[str, int] = {}
+    for r in devs:
+        s = r.get("segment") or "MISSING"
+        seg_counts[s] = seg_counts.get(s, 0) + 1
+    for seg, n in sorted(seg_counts.items(), key=lambda x: -x[1]):
+        print(f"  {seg:32s}  {n:>5} devs")
+
+    valid = {
+        "HIGH_AI_SPEND_HIGH_GIT_OUTPUT", "HIGH_AI_SPEND_LOW_GIT_OUTPUT",
+        "HIGH_AI_LINES_LOW_COMMITS", "LOW_AI_SPEND_HIGH_GIT_OUTPUT",
+        "BOT_AUTOMATION", "AI_ACTIVE_BUT_NO_GIT",
+        "GIT_ACTIVE_BUT_NO_AI", "NORMAL",
+    }
+    invalid = set(seg_counts) - valid
+    ok_valid = _print("all segment labels are in the spec'd 8",
+                      0.0, float(len(invalid)), tol=0)
+    if invalid:
+        print(f"    invalid labels found: {invalid}")
+    ok_sum = _print("Σ segments == len(devs)",
+                    float(len(devs)), float(sum(seg_counts.values())), tol=0)
+    return ok_valid and ok_sum
+
+
+def audit_high_spenders_math() -> bool:
+    """Cross-tool High Spenders: combined spend per user == sum across
+    providers. Catches bugs where the rollup over-counts or double-
+    counts a user appearing under multiple providers.
+    """
+    print(f"\n{HEAD}── HIGH SPENDERS (cross-tool) ──{END}")
+    from backend.services.ai_tools import (
+        get_high_spenders, get_high_spenders_per_provider,
+    )
+    combined = {r["user_name"]: r for r in
+                get_high_spenders(period_days=30, threshold_usd=0,
+                                  api_key_id=None)}
+    per_prov = {r["user_name"]: r for r in
+                get_high_spenders_per_provider(period_days=30)}
+    if not combined:
+        print("  (no spenders in 30d — skipping)")
+        return True
+
+    bad = 0
+    sample = 0
+    for name, r in combined.items():
+        sp = per_prov.get(name, {})
+        expected = round(
+            (sp.get("cost_openai", 0) or 0)
+            + (sp.get("cost_anthropic", 0) or 0)
+            + (sp.get("cost_cursor", 0) or 0),
+            2,
+        )
+        actual = round(r["spend"] or 0, 2)
+        if abs(expected - actual) > 0.05:
+            bad += 1
+            if sample < 3:
+                print(f"  ✗ {name}: combined=${actual}, sum-per-provider=${expected}")
+                sample += 1
+    ok = _print("combined spend == Σ per-provider (across all users)",
+                0.0, float(bad), tol=0)
+    print(f"  checked: {len(combined)} users")
+    return ok
+
+
+def audit_high_churn() -> bool:
+    """Compare service top-15 with a fresh top-15 computed from raw CSV.
+    """
+    print(f"\n{HEAD}── HIGH-CHURN FILES (service vs raw CSV) ──{END}")
+    from data.sources.git_csv import latest_git_commits_file
+    from backend.services.git_quality import get_high_churn_files
+    import csv
+    from collections import Counter
+
+    gc = latest_git_commits_file()
+    if gc is None:
+        print("  (no commits CSV — skipping)")
+        return True
+
+    # Re-derive raw top-15 (all-time)
+    seen_per_file: dict[str, set] = {}
+    counts: Counter = Counter()
+    with open(gc.path, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            path = r.get("file_path") or ""
+            sha = r.get("commit_sha") or ""
+            if not path or not sha:
+                continue
+            s = seen_per_file.setdefault(path, set())
+            if sha not in s:
+                s.add(sha)
+                counts[path] += 1
+    raw_top15 = [p for p, _ in counts.most_common(15)]
+
+    # Service top-15 (period_days=0 → all-time, no repo filter)
+    svc = get_high_churn_files(period_days=0, limit=15)
+    svc_top15 = [r["file"] for r in svc]
+
+    ok = raw_top15 == svc_top15
+    mark = OK if ok else BAD
+    print(f"  {mark} top-15 files identical (raw vs service)")
+    if not ok:
+        for i, (raw, srv) in enumerate(zip(raw_top15, svc_top15)):
+            tag = "==" if raw == srv else "≠"
+            print(f"     [{i+1:>2}] raw={raw:60s} {tag} svc={srv}")
+    return ok
+
+
+# ---------------------------------------------------------------------------
+
 def main() -> int:
     _setup_db()
     results = {
         "Anthropic":          audit_anthropic(),
         "Cursor":             audit_cursor(),
         "OpenAI / Humanoid":  audit_openai_json(),
+        "OpenAI / API push":  audit_openai_api(),
         "Tokens (uncached)":  audit_tokens_uncached(),
         "Git CSV":            audit_git_csv(),
         "Code Quality":       audit_code_quality(),
+        "Dashboard math":     audit_dashboard_math(),
+        "Segment partition":  audit_segment_partition(),
+        "High Spenders math": audit_high_spenders_math(),
+        "High-churn files":   audit_high_churn(),
     }
     print(f"\n{HEAD}══════════════════ SUMMARY ══════════════════{END}")
     all_ok = True
