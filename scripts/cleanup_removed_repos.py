@@ -124,11 +124,21 @@ def main() -> int:
 
     print(f"✅ Removed {total_commits:,} git_commits rows + {total_stats} git_author_repo_stats rows.")
     print()
-    print("Recommended next steps:")
-    print("  1. Re-run audit:")
-    print("       docker compose exec -T dashboard python -m scripts.audit_etl")
-    print("  2. Restart dashboard to flush Streamlit cache:")
-    print("       docker compose kill dashboard && docker compose up -d dashboard")
+    print("⚠️  IMPORTANT — DB cleanup is only half the job:")
+    print()
+    print("    Existing CSVs in sources/ (git_commit_file_stats_*.csv,")
+    print("    git_authors_*.csv) STILL contain rows for the removed repos.")
+    print("    On the next sync (~15 min) the loader will re-insert them and")
+    print("    the dashboard dropdown will show the removed repos again.")
+    print()
+    print("    To complete the cleanup, re-extract with the new repo list:")
+    print()
+    print("      docker compose exec -T dashboard python -m scripts.extract_git_stats")
+    print("      docker compose exec -T dashboard python -m scripts.sync --days 90")
+    print("      docker compose kill dashboard && docker compose up -d dashboard")
+    print()
+    print("    Then verify:")
+    print("      docker compose exec -T dashboard python -m scripts.audit_etl")
     return 0
 
 
