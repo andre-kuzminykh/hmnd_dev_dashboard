@@ -13,7 +13,7 @@
 ### Key Findings
 
 - **[Fact]** HMND spent **$24,104** on AI tools in the last 30 days. Annualised run-rate: **~$293,000/yr**.
-- **[Fact]** **160 unique active users** across the company — broad adoption beyond engineering.
+- **[Fact]** **160 unique active user_id rows** in last 30d. ⚠️ **True people count is lower** — ~22 individuals work under both `@thehumanoid.ai` (engineering) and `@skl.vc` (Sycamore corporate) and appear as 2 user_ids each. True unique humans ≈ **138-145**.
 - **[Fact]** Tool mix:  **Anthropic 57.2% / Cursor 29.9% / OpenAI 12.9%** by 30d spend.
 - **[Fact]** Within Anthropic, **Claude Code (Agent) is 83% of Anthropic spend ($11,489)** — agentic coding is the dominant Claude workflow.
 - **[Fact]** **Top 5 spenders = 44.9% of total spend; Top 10 = 62.7%** — textbook Pareto.
@@ -45,6 +45,7 @@
 | **Bot bug rate > human (24.8% vs 18.8% lifetime, from `git_commits`)** | AI agents may ship code that they later have to fix | Add PR-review data on top of existing git telemetry — needed to confirm if those fixes are reverts of agents' own work |
 | **"Git active, no AI" cohort (44 engineers)** | Productivity left on table | Pair with power user 1 sprint each |
 | **Synthesised Claude Code events** | Top CC users all show exactly 56 events — these are Cursor→Anthropic synthesised (not real CC sessions); real CC users hidden behind Cursor's `agent_completions` aggregation | Tag Claude Code events by source in Report II |
+| **Dual-domain identity split** | ~22 individuals use both `@thehumanoid.ai` and `@skl.vc` and appear as 2 user_id rows. Per-person spend, Top-spender ranks, and "AI active, no git" segment are all affected. | Run `scripts/audit_identity_collisions` to confirm scope; then merge in DB. **Likely changes Top spenders ranks.** |
 
 ### Common Recommendations
 
@@ -180,6 +181,8 @@
 
 ### Top 15 Cross-Tool Spenders (30 days)
 
+> ⚠️ **Caveat — dual-domain identity split**: ~22 people use both `@thehumanoid.ai` (Anthropic) and `@skl.vc` (Cursor / OpenAI). When this happens they appear as **2 user_id rows**. Examples found in raw JSON inspection: *Atindra Nair* (`anai@thehumanoid.ai $7.9k Anthropic` + `anai@skl.vc $6 Cursor`), *Andy Park* (`apar@thehumanoid.ai $3.2k Anthropic` + `apar@skl.vc $98 Cursor + $11 OpenAI`), *Cody Griffin* (`codg@thehumanoid.ai $191 Anthropic` + `codg@skl.vc $1,449 OpenAI`). The table below treats them as separate users — true cross-tool totals per person are **higher** than the per-row figures. Run `scripts/audit_identity_collisions` to see the full list.
+
 | # | Name | Total | Claude | GPT | Cursor | Events | Pattern |
 |---|------|------:|-------:|----:|-------:|-------:|---------|
 | 1 | **Oleg Sinavski** | $3,045 | $60 | $0 | **$2,985** | 112 | Cursor-dominant power user, 10.9M AI lines lifetime |
@@ -210,7 +213,7 @@
 | **Low AI · High git output** | 10 | Productive engineers under-using AI | Productivity left on table | Pair with power user 1 sprint |
 | **High AI lines, few commits** | 1 (Amir Torabi: 244k AI lines, 1 commit) | Anomaly — likely paste of generated config | Misleading metric | Investigate workflow |
 | **Bots / Agents** | 13 | github-actions, Cursor Agent, Renovate | Higher bug-fix rate than humans | Audit agent PRs (Report II) |
-| **AI active, no git** | 89 | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy | Costs unmonitored by role | Confirm intended use; budget per role |
+| **AI active, no git** | 89 ⚠️ | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy. **Likely 30-40% inflated** because dual-domain people show up here under their skl.vc identity while their git activity is logged under thehumanoid.ai (see A.10). True count ≈ 60-75 after identity merge. | Costs unmonitored by role | Confirm intended use; budget per role; merge dual-domain identities first |
 | **Git active, no AI** | 44 | Engineers not on AI tools | Output bottlenecked | Pair with power user; provide seat |
 | **Normal** | 45 | Mainstream mid-AI mid-output | Healthy | None |
 
@@ -378,7 +381,8 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 | Total AI spend (30d) = **$24,104** | 🟢 | `SUM(usage_events.cost_usd)` per audit; each provider's slice matches raw bytes |
 | Anthropic spend = **$13,779** | 🟡 | Matches Anthropic's `userCost` rows exactly. But their own `rollups.totalSpend` shows **+1.43% drift** ($45,369 raw userCost vs $44,731 rollup) — Anthropic's internal inconsistency, not ours. We chose to use userCost for per-user attribution. Real number is within **±1.5%** band. |
 | Cursor spend = **$7,214** | 🟢 | `spendCents + includedSpendCents` from raw Cursor JSON (lifetime $23,444; 30d slice from `usage_events`) |
-| OpenAI spend = **$3,112** | 🟢 | API push from `/v1/organization/costs` (Artem) + raw JSON (Humanoid); audit confirms 0% drift |
+| OpenAI **total** spend = **$3,112** | 🟢 | API push from `/v1/organization/costs` (Artem) + raw JSON (Humanoid); audit confirms 0% drift |
+| OpenAI **per-user** $ (e.g. Cody Griffin $1,178) | 🟡 | **ESTIMATE not billing.** OpenAI's `/cost` endpoint returns `user_id: null` for 100% of events. Per-user $ is computed as `(user's request share) × total_spend`. Accurate at the cohort/request level, approximation at the dollar level. |
 | Active users (30d) = **160** | 🟢 | `COUNT(DISTINCT user_id) WHERE occurred_at BETWEEN ...` |
 | Top-5 share = **44.9%** ($10,811) | 🟢 | Manual math: $10,811 / $24,104 = 44.85% ≈ 44.9% |
 | Top-10 share = **62.7%** ($15,105) | 🟢 | $15,105 / $24,104 = 62.66% ≈ 62.7% |
@@ -460,7 +464,8 @@ What's happening: `data/cursor_to_anthropic.py` reads Cursor's `User_Leaderboard
 1. **"Annualised $293k"** — assumes flat 12 months. Real usage grows; this is **lower bound**, expect 30-100% higher.
 2. **"83% of Anthropic is Claude Code"** — see A.4. Range is probably **60-83%** depending on how synthesised events split.
 3. **Bot bug rate 24.8% > human 18.8%** — directional yes, but the bot population is small (13 bots) and dominated by github-actions doing release commits. **Need Report II** to make this claim load-bearing.
-4. **"160 active users"** — counts anyone with ≥1 event. The "engaged" cohort is probably 80-100 people. Tighten metric definition before quoting.
+4. **"160 active users"** — counts anyone with ≥1 event. AND counts dual-domain people twice (see A.10). True unique humans ≈ **138-145** before "engaged" filter; "engaged" cohort (≥5 events) is probably 80-100. Tighten metric definition before quoting.
+5. **"OpenAI per-user $ ranks"** — OpenAI returns `user_id: null`, so per-user dollar amounts are *estimates* (share of requests × total). Ranks are directionally right (Cody Griffin is heaviest), absolute dollars are ±20% per person.
 
 ## A.9 What to say if the boss asks "how do I know this is right?"
 
@@ -477,7 +482,47 @@ docker compose exec -T dashboard python -m scripts.audit_etl | tail -20
 2. Cursor AI lines is lifetime not period (A.5)
 3. Optimization $-saving estimates are directional, not guarantees (A.7)
 
-## A.10 What IS already integrated (don't mislabel as "next step")
+## A.10 Dual-domain identity split — the OTHER big trust gap
+
+A peer audit inspected raw JSON files directly and discovered: **~22 HMND people exist under two email domains**:
+- `@thehumanoid.ai` (engineering / work email — primary in Anthropic and Git)
+- `@skl.vc` (Sycamore corporate email — primary in Cursor and OpenAI subscriptions)
+
+Because the user-loader treats each email as a separate user (UNIQUE constraint on `users.email`), **one person becomes two user_id rows**. The dashboard then splits their spend, ai_lines, commits, and segment classification across both rows.
+
+**Examples found in raw bytes** (paste-quotes from peer Claude's analysis):
+
+| Person | Anthropic identity | Cursor / OpenAI identity | Effect on Report I |
+|--------|--------------------|----------------------------|---------------------|
+| Atindra Nair (atin) | `anai@thehumanoid.ai` → $7,897 Anthropic | `anai@skl.vc` → $6 Cursor | Top-2 spender appears under two rows |
+| Andy Park | `apar@thehumanoid.ai` → $3,232 Anthropic | `apar@skl.vc` → Cursor $98 + OpenAI $11 | Top-7 spender split |
+| Cody Griffin | `codg@thehumanoid.ai` → $191 Anthropic | `codg@skl.vc` → OpenAI $1,449 | Top-6 spender split |
+| Brian, Boris, Sergei, Diogo, Mahe, Luke, Yoo-Jin... | thehumanoid.ai in Anthropic | skl.vc in Cursor / OpenAI | ~15 more in similar pattern |
+
+**Verifiable count on the VM:**
+```bash
+docker compose exec -T dashboard python -m scripts.audit_identity_collisions
+```
+Expected: 22 local-parts with 2+ user_id rows; specific dollar totals per person.
+
+**What this changes in Report I (numbers to soften):**
+
+| Claim | Read as |
+|-------|---------|
+| "160 active users" | Lower bound. True people ≈ **138-145**. Tighten to "active user_id rows". |
+| "Top-5 share 44.9%" | Math unchanged ($/total) — share holds. But individual ranks are *wrong* because dual-domain people don't sum across their two rows. |
+| "Top-10 share 62.7%" | Same — share holds; composition wrong. |
+| "AI active, no git" segment = 89 | **Likely inflated**. Engineers using thehumanoid.ai for git but skl.vc for Cursor will be classified as "AI active, no git" *and* "Git active, no AI" simultaneously — once under each domain. After identity merge, this segment likely drops to 60-75. |
+| Top spender lists in §3 | Need re-rank after merge. Atindra and Andy probably climb the table when their Anthropic + Cursor totals combine. |
+
+**Why does HMND have two domains?** Engineering operates under `@thehumanoid.ai`; Sycamore (the venture-builder / parent) provides `@skl.vc` accounts as corporate identity. People log into Anthropic with one, Cursor with the other.
+
+**Fix path** (NOT done in current report):
+1. Extend `scripts/merge_dup_emails.py` to also merge by `LOWER(local_part(email))` when ≥ 2 domains seen.
+2. Rewrite ~10 FK tables (`usage_events.user_id`, `daily_costs.user_id`, etc.) to canonical id.
+3. After merge, all per-person numbers in this report would be authoritative. Pre-merge, treat them as "per user_id row".
+
+## A.11 What IS already integrated (don't mislabel as "next step")
 
 To avoid confusion when reading the "next step" recommendations:
 
