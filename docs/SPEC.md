@@ -647,6 +647,22 @@ And если fixes = 0 → ai_spend_per_fix = None (не падаем DivisionBy
 
 - **FR-15.1.4.1** — `get_ai_spend_per_fix(period_days)` делает single SQL с двумя subselects (`SUM(cost_usd)` из `usage_events`, `COUNT(*)` из `git_commits WHERE is_bug_fix=1`) и возвращает `{period_days, ai_spend, fixes, ai_spend_per_fix}`.
 - **FR-15.1.4.2** — Zero-fixes safety: `_safe_div(spend, 0) → None`.
+- **FR-15.1.4.3** — `get_ai_spend_per_fix(period_days, repos=[...])` сужает знаменатель (bug-fixes) к выбранным репо. Числитель (AI spend) остаётся team-wide потому что у `usage_events` нет колонки repo. UI это явно описывает в help-tooltip. Контракт: при `repos=['hmnd']` fixes считаются только из коммитов в hmnd.
+
+#### SC-15.2.2 — Empty-scope explicit message
+
+```gherkin
+Given пользователь выбрал репо hmnd-sim в Devs табе
+And за 90 дней в git_commits для hmnd-sim 0 строк (например, hmnd-sim архивный)
+When секция Code Quality рендерится
+Then заголовок 'Code Quality (Git × AI)' виден всегда
+And если commits=0 — рендерится st.info с текстом 'No commits in selected repos within last N days. Either widen the period or pick different repos.'
+And info упоминает что сегментные таблицы выше показывают LIFETIME коммиты, а Code Quality period-filtered — это объясняет несоответствие
+```
+
+**Требования:**
+
+- **FR-15.2.2.1** — `if tq["commits"] == 0:` не скрывать секцию, рендерить explicit info-блок с указанием выбранного скоупа (репо + период) и причины расхождения с per-author таблицами.
 
 #### SC-15.1.5 — High-churn files (problem areas)
 
@@ -786,6 +802,7 @@ And значок имеет aria-label с тем же текстом для scre
 | `tests/test_git_quality.py::test_get_quality_per_author_dedupes_by_user_id` | FR-15.1.3.1 |
 | `tests/test_git_quality.py::test_get_ai_spend_per_fix` | FR-15.1.4.1 |
 | `tests/test_git_quality.py::test_get_ai_spend_per_fix_zero_fixes_safe` | FR-15.1.4.2 |
+| `tests/test_git_quality.py::test_get_ai_spend_per_fix_repo_filter` | FR-15.1.4.3 |
 | `tests/test_git_quality.py::test_get_high_churn_files` | FR-15.1.5.1 |
 | `tests/test_git_quality.py::test_get_high_churn_files_repo_filter` | FR-15.1.5.2 |
 | `tests/test_ux_help.py::test_section_renders_help_icon` | FR-16.1.1.1 |

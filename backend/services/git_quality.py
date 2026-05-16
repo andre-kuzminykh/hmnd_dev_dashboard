@@ -172,29 +172,43 @@ def get_quality_per_author(period_days: int = 90,
     return out
 
 
-def get_ai_spend_per_fix(period_days: int = 30) -> dict[str, Any]:
+def get_ai_spend_per_fix(period_days: int = 30,
+                         repos: list[str] | None = None) -> dict[str, Any]:
     """How many $ of AI spend each bug-fix 'costs' on average across the
     team. Useful as a debt indicator — high $/fix can mean the team
     debugs a lot with AI's help (which is fine) OR generates AI code
     that then needs fixing (which is concerning).
+
+    The repo filter narrows the bug-fix denominator to the same scope
+    the rest of the Code Quality section uses, so the numbers stay
+    consistent (a hmnd-cloud-only view should NOT divide team-wide AI
+    spend by the cross-repo bug-fix count).
     """
     end = datetime.utcnow()
     start = end - timedelta(days=period_days)
     s_iso = start.strftime("%Y-%m-%d %H:%M:%S")
     e_iso = end.strftime("%Y-%m-%d %H:%M:%S")
     cutoff = start.date().isoformat()
+
+    repo_clause = ""
+    repo_params: list = []
+    if repos:
+        repo_clause = f" AND repo IN ({','.join('?'*len(repos))}) "
+        repo_params = list(repos)
+
     with get_conn() as conn:
         row = conn.execute(
-            """SELECT
+            f"""SELECT
                   (SELECT COALESCE(SUM(cost_usd), 0)
                      FROM usage_events
                      WHERE occurred_at BETWEEN ? AND ?)                  AS ai_spend,
                   (SELECT COUNT(*)
-                     FROM git_commits c
-                     WHERE c.is_bug_fix = 1
-                       AND substr(c.author_date, 1, 10) >= ?)            AS fixes
+                     FROM git_commits
+                     WHERE is_bug_fix = 1
+                       AND substr(author_date, 1, 10) >= ?
+                       {repo_clause})                                    AS fixes
             """,
-            (s_iso, e_iso, cutoff),
+            [s_iso, e_iso, cutoff] + repo_params,
         ).fetchone()
     spend = float(row["ai_spend"] or 0)
     fixes = int(row["fixes"] or 0)

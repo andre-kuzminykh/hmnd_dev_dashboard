@@ -270,6 +270,37 @@ def test_get_ai_spend_per_fix_zero_fixes_safe(tmp_db, tmp_path):
     assert r["ai_spend_per_fix"] is None
 
 
+def test_get_ai_spend_per_fix_repo_filter(tmp_db, tmp_path):
+    """repos=['hmnd'] narrows the bug-fix denominator to that repo only.
+    Fixes the user-spotted bug: '$/fix shows 259 fixes when hmnd-cloud
+    is selected and Code Quality says only 4 commits there'.
+    """
+    csv_path = tmp_path / "git_commit_file_stats.csv"
+    date = _today_offset(2)
+    rows = []
+    # 3 fixes in hmnd
+    for i in range(3):
+        rows.append(("hmnd", f"h{i}", "A", "a@x", date, "A", "a@x", date,
+                     f"fix: bug {i}", "a.py", "1", "0", "False"))
+    # 1 fix in hmnd-cloud
+    rows.append(("hmnd-cloud", "c1", "A", "a@x", date, "A", "a@x", date,
+                 "fix: cloud bug", "b.py", "1", "0", "False"))
+    _write_commits_csv(csv_path, rows)
+    from backend.services.git_quality import get_ai_spend_per_fix
+    from data.sources.git_csv import load_git_commits_csv
+
+    load_git_commits_csv(csv_path)
+    # No filter → 4 fixes
+    r_all = get_ai_spend_per_fix(period_days=30)
+    assert r_all["fixes"] == 4
+    # repos=['hmnd-cloud'] → 1 fix
+    r_cloud = get_ai_spend_per_fix(period_days=30, repos=["hmnd-cloud"])
+    assert r_cloud["fixes"] == 1
+    # repos=['hmnd'] → 3 fixes
+    r_hmnd = get_ai_spend_per_fix(period_days=30, repos=["hmnd"])
+    assert r_hmnd["fixes"] == 3
+
+
 def test_get_high_churn_files(tmp_db, tmp_path, monkeypatch):
     """File-level rollup from the per-commit CSV."""
     monkeypatch.setenv("HMND_SOURCES_DIR", str(tmp_path))
