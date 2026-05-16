@@ -42,7 +42,7 @@
 | **Cost concentration** | Top 10 = 62.7% of spend ($15,105/mo). Single individual changes can move the line. | Pareto = budget alerts on ~10 people catch most issues. |
 | **Reasoning-model overuse on OpenAI** | 4 of 5 top OpenAI spenders pay $7-$23/msg (o-series) | Routing policy → ~$1,500/mo saving on OpenAI alone |
 | **Claude Code dominance ($11.5k/30d)** | All eggs in one Anthropic basket; one provider outage = team blocked | Maintain GPT/Cursor as fallback workflows |
-| **Bot bug rate > human (24.8% vs 18.8% lifetime)** | AI agents may ship code that they later have to fix | Audit a sample of agent PRs in Report II |
+| **Bot bug rate > human (24.8% vs 18.8% lifetime, from `git_commits`)** | AI agents may ship code that they later have to fix | Add PR-review data on top of existing git telemetry — needed to confirm if those fixes are reverts of agents' own work |
 | **"Git active, no AI" cohort (44 engineers)** | Productivity left on table | Pair with power user 1 sprint each |
 | **Synthesised Claude Code events** | Top CC users all show exactly 56 events — these are Cursor→Anthropic synthesised (not real CC sessions); real CC users hidden behind Cursor's `agent_completions` aggregation | Tag Claude Code events by source in Report II |
 
@@ -52,7 +52,7 @@
 2. **Interview top 5 AI users** (Oleg Sinavski, atin, Eugene Lyapustin, Richard, Sam Pfeiffer) — document workflow playbook, publish team-wide.
 3. **Per-user budget alerts** at $500 and $1,000/mo (Slack). Not caps — early warning.
 4. **Reach the 44 "Git active, no AI" engineers** — pair each with a power user for 1 sprint.
-5. **Connect AI telemetry to Git/PR/Jira** (Report II) to convert "cost report" into "cost-per-engineering-outcome report".
+5. **Connect AI telemetry to PR/Jira** (Report II) to convert "cost report" into "cost-per-engineering-outcome report". Git is already wired in (commit-level bug-fix rates, per-author segmentation, Code Quality tab); the missing pieces are **PR review data** (time-to-merge, review comments, revert chains beyond commit-level) and **Jira/incident data** (which $/fix actually closed a P0/P1).
 
 ---
 
@@ -351,9 +351,9 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 
 > The question is no longer **whether** HMND uses AI — it does, materially and across the company. **$24,104/month** and **160 active users** prove that.
 >
-> The next question is **which AI workflows produce useful engineering output**, and which workflows only consume budget. The dashboard now shows WHO spends, WHEN, ON WHAT, and WHICH MODEL — but it cannot yet show WHETHER those dollars converted to merged code, reviewed code, deployed code, or closed Jira tickets.
+> The next question is **which AI workflows produce useful engineering output**, and which workflows only consume budget. The dashboard already joins AI spend × Git commits per person (Devs (Git × AI) tab) and classifies commits by type (Code Quality tab). What it cannot yet show is WHETHER those dollars converted to **reviewed, merged, non-reverted** code that **closed a real Jira issue**.
 >
-> **Next step: connect AI telemetry with Git, PR, and Jira** so we can move from "AI cost report" to "AI cost-per-engineering-outcome report". That is Report II.
+> **Next step: extend the existing AI × Git telemetry with PR review data and Jira/incident data**, so we can move from "AI cost × git activity" (today) to "AI cost-per-engineering-outcome" (Report II).
 >
 > Even before Report II lands, three actions have a clean ROI: (1) **model-routing policy** (~$1.5-3k/mo saving), (2) **interview top-5 playbook → publish** (multiplier on team productivity), (3) **budget alerts on 10 power users** (catch 80% of cost drift).
 
@@ -476,4 +476,24 @@ docker compose exec -T dashboard python -m scripts.audit_etl | tail -20
 1. "Anthropic Agent" includes synthesised events (A.4)
 2. Cursor AI lines is lifetime not period (A.5)
 3. Optimization $-saving estimates are directional, not guarantees (A.7)
+
+## A.10 What IS already integrated (don't mislabel as "next step")
+
+To avoid confusion when reading the "next step" recommendations:
+
+| Source | Status | Where in dashboard |
+|--------|------|--------------------|
+| **OpenAI Admin API** | ✅ live (15-min sync) | Overview, AI Tools, ChatGPT tab |
+| **Anthropic Admin Console export (JSON)** | ✅ ingested | Overview, Claude / Claude Code tabs |
+| **Cursor Teams export (JSON)** | ✅ ingested | Overview, Cursor tab, ai_lines |
+| **Git commits + authors + per-file churn** | ✅ ingested (`git_commits` table, 23,044 rows; `git_authors_repo_stats` per-author per-repo) | Devs (Git × AI) tab — segments people by AI spend × git output. Code Quality tab — bug-fix rate, revert rate, human-vs-bot. High-churn files tab. |
+| **Git CI agent / bot detection** | ✅ ingested (13 bots flagged: github-actions, Cursor Agent, Renovate, etc.) | is_bot column on every commit; segmented separately |
+
+**What is NOT yet integrated (the real Report II gap):**
+- ❌ **PR-level review data**: review comments per PR, time-to-merge, review approvals, merge-conflicts. Today Git tells us commit subjects/files; PR data would tell us if AI-generated commits made it through review easily or with friction.
+- ❌ **Jira / incident tickets**: which $/fix commit actually closed a P0/P1 ticket. Bug-fix rate today is "self-declared" from commit subjects (regex on `fix:`). With Jira we'd know if it was a real production fire.
+- ❌ **Per-event source tagging for synthesised Claude Code** (see A.4) — would convert one of the 🟡 ratings to 🟢.
+- ❌ **Deploy-event linkage** — which commits actually reached production.
+
+**Bottom line**: when Report I says "next step: connect AI × Git × PR × Jira", READ IT AS "extend the already-connected AI × Git with PR and Jira on top". Git telemetry is in the dashboard today.
 
