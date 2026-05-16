@@ -23,23 +23,46 @@
 set -euo pipefail
 
 TARGET="${1:-$HOME/Desktop/hmnd_repos}"
-LIST_FILE="$(dirname "$0")/../sources/git_repos.txt"
+# Resolve absolute path to the script's own directory, so the list file
+# is found regardless of which CWD the user invokes us from.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIST_FILE="${SCRIPT_DIR}/../sources/git_repos.txt"
 
-if [[ ! -f "$LIST_FILE" ]]; then
-  echo "ERROR: $LIST_FILE not found. Run from inside hmnd_dev_dashboard checkout." >&2
-  exit 1
-fi
+# Built-in fallback — matches sources/git_repos.txt contents at the time
+# of writing. Used only if the file is missing (e.g. partial / stale clone).
+FALLBACK_REPOS=(
+  HumanoidTeam/hmnd
+  HumanoidTeam/hmnd-cloud
+  HumanoidTeam/hmnd-sim
+  HumanoidTeam/hm-ops
+  HumanoidTeam/Gripper_Firmware
+  HumanoidTeam/firmware_hal_aurix_tc3
+  HumanoidTeam/firmware_hal_arm_stm32h7
+  HumanoidTeam/firmware_hal_c2000ware
+  HumanoidTeam/etherlab-ethercat
+  HumanoidTeam/manus_ros_drivers
+  HumanoidTeam/ros2_xhand
+  HumanoidTeam/beta-morphology-analysis-tools
+)
 
 mkdir -p "$TARGET"
 cd "$TARGET"
 
 # Parse repo list (skip comments + blanks).
 REPOS=()
-while IFS= read -r raw; do
-  line="${raw%%#*}"
-  line="${line//[[:space:]]/}"
-  [[ -n "$line" ]] && REPOS+=("$line")
-done < "$LIST_FILE"
+if [[ -f "$LIST_FILE" ]]; then
+  while IFS= read -r raw; do
+    line="${raw%%#*}"
+    line="${line//[[:space:]]/}"
+    [[ -n "$line" ]] && REPOS+=("$line")
+  done < "$LIST_FILE"
+  echo "[repos] source: $LIST_FILE"
+fi
+
+if [[ ${#REPOS[@]} -eq 0 ]]; then
+  echo "[repos] $LIST_FILE missing or empty → using built-in fallback (${#FALLBACK_REPOS[@]} repos)"
+  REPOS=("${FALLBACK_REPOS[@]}")
+fi
 
 echo "═══ Cloning ${#REPOS[@]} repos to $TARGET ═══"
 echo
