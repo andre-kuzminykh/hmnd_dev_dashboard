@@ -484,36 +484,73 @@ docker compose exec -T dashboard python -m scripts.audit_etl | tail -20
 
 ## A.10 Dual-domain identity split — the OTHER big trust gap
 
-A peer audit inspected raw JSON files directly and discovered: **~22 HMND people exist under two email domains**:
+HMND people exist under two email domains:
 - `@thehumanoid.ai` (engineering / work email — primary in Anthropic and Git)
 - `@skl.vc` (Sycamore corporate email — primary in Cursor and OpenAI subscriptions)
 
 Because the user-loader treats each email as a separate user (UNIQUE constraint on `users.email`), **one person becomes two user_id rows**. The dashboard then splits their spend, ai_lines, commits, and segment classification across both rows.
 
-**Examples found in raw bytes** (paste-quotes from peer Claude's analysis):
+**Confirmed scope (from `scripts/audit_identity_collisions` on the live DB, 2026-05-16):**
 
-| Person | Anthropic identity | Cursor / OpenAI identity | Effect on Report I |
-|--------|--------------------|----------------------------|---------------------|
-| Atindra Nair (atin) | `anai@thehumanoid.ai` → $7,897 Anthropic | `anai@skl.vc` → $6 Cursor | Top-2 spender appears under two rows |
-| Andy Park | `apar@thehumanoid.ai` → $3,232 Anthropic | `apar@skl.vc` → Cursor $98 + OpenAI $11 | Top-7 spender split |
-| Cody Griffin | `codg@thehumanoid.ai` → $191 Anthropic | `codg@skl.vc` → OpenAI $1,449 | Top-6 spender split |
-| Brian, Boris, Sergei, Diogo, Mahe, Luke, Yoo-Jin... | thehumanoid.ai in Anthropic | skl.vc in Cursor / OpenAI | ~15 more in similar pattern |
+| Metric | Value |
+|--------|------:|
+| People split across 2 user_id rows | **20** |
+| Total user_id rows affected | 40 |
+| Lifetime $ on fragmented identities | **$19,610** |
+| Share of all lifetime spend | ~28% |
+| Local-parts only @thehumanoid.ai | 109 |
+| Local-parts only @skl.vc | 19 |
+| Local-parts in BOTH domains | 20 |
+| **True unique humans (lifetime)** | **148** |
 
-**Verifiable count on the VM:**
+**Full list of fragmented identities (lifetime $, descending):**
+
+| Local-part | Likely person | $ split | thehumanoid.ai $ | skl.vc $ |
+|-----------|--------------|--------:|------------------:|----------:|
+| anai | Atindra Nair | $7,902 | $7,897 (Anthropic) | $6 (Cursor) |
+| apar | Andy Park | $3,341 | $3,232 (Anthropic) | $109 |
+| codg | Cody Griffin | $1,672 | $191 (Anthropic) | $1,481 (OpenAI) |
+| brig | Brian Ginebaugh | $1,102 | $884 | $218 |
+| sfed | Sergei Fedotov | $829 | $828 | $2 |
+| sram | (Saeid Ramezani?) | $759 | $6 | $753 |
+| ksha | Karim Shaban / Cheerag Sharma | $706 | $16 | $690 |
+| byan | Boris Yangel | $683 | $553 | $130 |
+| ius | (Ilya Z. / Igor S.?) | $551 | $80 | $471 |
+| gwad | Gourav Wadhwa | $451 | $2 | $448 |
+| dalm | Diogo Almeida | $353 | $331 | $23 |
+| mata | Mustafa Atakan | $328 | $1 | $327 |
+| mahs | Maheswar Sarala | $241 | $239 | $2 |
+| lbie | Luke Bierbaum | $139 | $8 | $132 |
+| mraf | Muhammad Rafique | $129 | $0 | $129 |
+| gcer | Giulio Cerruti | $127 | $70 | $57 |
+| pols | Polina Shorenko | $81 | $52 | $29 |
+| yjj | Yoo-Jin Jung | $76 | $76 | $0 |
+| fpro | Federico Proni | $72 | $70 | $2 |
+| ccop | Claudio Coppola | $67 | $50 | $16 |
+
+Re-run the audit any time with:
 ```bash
 docker compose exec -T dashboard python -m scripts.audit_identity_collisions
 ```
-Expected: 22 local-parts with 2+ user_id rows; specific dollar totals per person.
 
 **What this changes in Report I (numbers to soften):**
 
 | Claim | Read as |
 |-------|---------|
-| "160 active users" | Lower bound. True people ≈ **138-145**. Tighten to "active user_id rows". |
-| "Top-5 share 44.9%" | Math unchanged ($/total) — share holds. But individual ranks are *wrong* because dual-domain people don't sum across their two rows. |
-| "Top-10 share 62.7%" | Same — share holds; composition wrong. |
-| "AI active, no git" segment = 89 | **Likely inflated**. Engineers using thehumanoid.ai for git but skl.vc for Cursor will be classified as "AI active, no git" *and* "Git active, no AI" simultaneously — once under each domain. After identity merge, this segment likely drops to 60-75. |
-| Top spender lists in §3 | Need re-rank after merge. Atindra and Andy probably climb the table when their Anthropic + Cursor totals combine. |
+| "160 active users" (30d) | Upper bound. **True unique humans ≈ 148 lifetime, ~140 active 30d**. Tighten to "active user_id rows". |
+| Top-5 share 44.9%, Top-10 62.7% | Math unchanged ($/total) — Pareto share holds. But individual **ranks are wrong** because dual-domain people don't sum across their two rows. |
+| "atin = #2 spender ($2,425)" | After merge atin becomes #1: $7,902 lifetime ($2,425 Anthropic 30d + Cursor 30d). Likely re-ranks top-5. |
+| "Andy Park = #7 ($990)" | After merge climbs ~3 ranks; combined ~$3,341 lifetime. |
+| "Cody Griffin = #6 ($1,178)" | After merge holds rank but total bumps to ~$1,672 lifetime (was missing his Anthropic $191). |
+| "AI active, no git" segment = 89 | **Likely inflated 30-40%**. Engineers using thehumanoid.ai for git but skl.vc for Cursor get classified as "AI active, no git" under skl.vc identity AND "Git active, no AI" under thehumanoid.ai identity — once per domain. After identity merge, this segment likely drops to **~60**, "Git active, no AI" drops correspondingly. |
+
+**Fix path** — `scripts/merge_dual_domain_identities.py` (committed alongside this report):
+1. Picks lowest user_id per local-part as canonical
+2. Rewrites all 10 FK tables (`usage_events.user_id`, `daily_costs.user_id`, `git_commits.user_id`, etc.) to canonical id
+3. Deletes the duplicate user rows
+4. Run with `--dry-run` first to confirm; then live merge
+
+After running merge, the dashboard's per-person numbers become authoritative.
 
 **Why does HMND have two domains?** Engineering operates under `@thehumanoid.ai`; Sycamore (the venture-builder / parent) provides `@skl.vc` accounts as corporate identity. People log into Anthropic with one, Cursor with the other.
 
