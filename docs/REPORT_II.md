@@ -325,11 +325,15 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 
 ### 9.1 Per-repo
 
-**`hmnd`** — keep doing what you're doing; add the missing 30%.
-- Promote AGENTS.md per-module pattern (`hmnd_firmware/AGENTS.md`, `hmnd_sim/AGENTS.md` already exist per TL;DR) into a documented standard with template.
-- Introduce `docs/adr/` with at least 5 retroactive ADRs for major existing decisions (Bazel choice, ROS2 version, functional-core/imperative-shell rule, agent-instruction structure, secret management via git-crypt).
-- Phase 2 audit with submodules to validate test coverage per module + per-module READMEs.
-- Add a "prompt-regression" eval: when AGENTS.md changes, run a small AI task and compare output.
+**`hmnd`** — strong foundation; ~70% of value is preserving what's there, ~30% is filling per-module gaps.
+- **Promote per-module AGENTS.md pattern.** Already exists in `hmnd_robot`, `hmnd_sim`, `hmnd_training`, `hmnd_firmware`, `hmnd_agents` (5/14). Extend to `hmnd_fleet`, `hmnd_flywheel`, `hmnd_wholebody`, `hmnd_services` (the production paths missing instructions).
+- **Add module-level READMEs** for 4 modules lacking them (`hmnd_agents`, `hmnd_design`, `hmnd_flywheel`, `hmnd_playground`, `hmnd_services`, `tools`).
+- **Raise test floor for two anemic modules** before accepting AI-generated PRs:
+  - `hmnd_wholebody` — 4 tests on 60k LoC (1:15k ratio, safety-critical)
+  - `hmnd_firmware` — 0 tests on 495 C++ files (firmware-typical but risky for AI codegen)
+  Mandate ≥ 1 test per 5k LoC as the gating threshold.
+- **Introduce `docs/adr/`** with at least 5 retroactive ADRs for major existing decisions (Bazel choice, ROS2 version, functional-core/imperative-shell rule, agent-instruction structure, secret management via git-crypt).
+- **Add a prompt-regression eval**: when AGENTS.md changes, run a small canonical task and compare output. No such framework exists today.
 
 **`hmnd-cloud`** — multiple critical gaps. Sequence:
 1. **AGENTS.md** — Terraform-specific dos/don'ts (copy structure from `hmnd` AGENTS.md, adapt to IaC).
@@ -346,9 +350,9 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 - Define `safe AI tasks` (docs, tests, small refactors, formatting) vs `unsafe` (firmware, IaC apply, schema changes) — repo-by-repo.
 
 ### 9.3 Testing
-- `hmnd-cloud`: terraform validate + tflint + tfsec + checkov as PR gate. Add `terratest` for any non-trivial modules.
-- `hmnd`: Phase 2 audit; assuming tests exist, document the runner commands in AGENTS.md so AI agents know how to validate before commit.
-- Cross-repo: introduce **prompt/agent evals** — a small canonical task set (e.g. "implement X helper", "fix Y bug pattern") that runs against current agent-instructions every quarter to detect regressions.
+- **`hmnd-cloud`**: `terraform validate` + `tflint` + `tfsec` + `checkov` as PR gate (blocking). Add `terratest` for high-blast-radius modules (`shared-between-teams/training`, `domains/vla`, `domains/perception`).
+- **`hmnd` — known gaps** (Phase 2 verified): `hmnd_wholebody` (4 tests / 60k LoC) and `hmnd_firmware` (0 tests / 495 C++ files) need test floor before accepting AI codegen. For all other modules, document the runner command in module-level AGENTS.md so AI agents know how to validate.
+- **Cross-repo**: introduce **prompt/agent evals** — small canonical task set that runs against current AGENTS.md content quarterly. Detects regression when instructions change. Currently absent everywhere.
 
 ### 9.4 Specification
 - Introduce `docs/adr/` in `hmnd` and `hmnd-cloud`. Cap at 5-10 ADRs initially.
@@ -379,23 +383,25 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 
 1. **Archive `hmnd-sim` on GitHub.** One-click; eliminates confusion, removes from "active" listings, makes the deprecation undeniable.
 2. **Add CODEOWNERS to `hmnd-cloud`.** ~15 min of work; massive risk reduction. Pin each `domains/*/` to its owner team.
-3. **Run Phase 2 audit on `hmnd`** with submodules initialized: `git submodule update --init --recursive` then re-run `scripts/audit_repos_local.sh ~/Desktop/hmnd`. This unblocks the actual per-module readiness assessment.
-4. **Add `AGENTS.md` to `hmnd-cloud`** (~1 day). Even a 1-page version is infinitely better than zero. Template: copy `hmnd/AGENTS.md` structure, adapt to Terraform.
+3. **Add `AGENTS.md` to `hmnd-cloud`** (~1 day). Even a 1-page version is infinitely better than zero. Template: copy `hmnd/AGENTS.md` structure, adapt to Terraform-specific dos/don'ts.
+4. **Add module-level READMEs to 4 `hmnd` modules** lacking them (`hmnd_agents`, `hmnd_flywheel`, `hmnd_playground`, `hmnd_services`). One paragraph each: purpose, owner, build/test command.
 
 ### 30-day improvements
 
 5. **PR-validation workflow for `hmnd-cloud`** — terraform validate + fmt + tflint + tfsec + checkov, blocking. Quick win, high-leverage.
 6. **Module-level READMEs in `hmnd-cloud/domains/*/`** — 1 paragraph per domain: owner team, blast radius, deployment cadence. ~3 days for IaC team.
-7. **First 5 ADRs in each of `hmnd` and `hmnd-cloud`.** Retroactive — document decisions that already exist (Bazel, ROS2 version, functional-core rule, deployment model, secret management).
-8. **Identity merge for `hmnd-cloud` contributors** — Antoni Bertel + matakan + Mustafa Atakan + Mustafa Atakan2 look like 2-3 humans across 4 git identities. Same fix as Report I §A.10. Apply to bus-factor analysis.
-9. **AI-assisted PR declaration checkbox** added to PR templates of `hmnd` and `hmnd-cloud`.
+7. **Per-module AGENTS.md across `hmnd`** — extend the existing pattern (already in hmnd_robot, hmnd_sim, hmnd_training, hmnd_firmware, hmnd_agents) to `hmnd_fleet`, `hmnd_flywheel`, `hmnd_wholebody`, `hmnd_services` — the production paths.
+8. **Test-floor enforcement for `hmnd_wholebody` and `hmnd_firmware`** before accepting AI-generated PRs in those modules. Mandate ≥ 1 test per 5k LoC. Currently 1:15k (wholebody) and 0 (firmware).
+9. **First 5 ADRs in each of `hmnd` and `hmnd-cloud`.** Retroactive — document decisions that already exist (Bazel, ROS2 version, functional-core rule, deployment model, secret management).
+10. **Identity merge for `hmnd-cloud` contributors** — Antoni Bertel + matakan + Mustafa Atakan + Mustafa Atakan2 look like 2-3 humans across 4 git identities. Same fix as Report I §A.10. Apply to bus-factor analysis.
+11. **AI-assisted PR declaration checkbox** added to PR templates of `hmnd` and `hmnd-cloud`.
 
 ### 60-90 day improvements
 
-10. **Prompt/agent eval framework** — small canonical task set (5-10 tasks) that runs against current AGENTS.md content quarterly. Detects regression in AI agent behaviour when instructions change.
-11. **`terratest` (or equivalent) for `hmnd-cloud` modules** — at least the high-blast-radius ones (`shared-between-teams/training/`, `domains/vla/`).
-12. **Per-module AGENTS.md across `hmnd`** — formalise the pattern (already exists for `hmnd_firmware`, `hmnd_sim`). Cover `hmnd_robot`, `hmnd_training`, `hmnd_locomotion`, `hmnd_flywheel`, `hmnd_fleet` — the top-5 hot-directories.
-13. **Audit policy for large AI-assisted commits** — the 15% of commits in `hmnd` that touch 21+ files. Define what review depth they need.
+12. **Prompt/agent eval framework** — small canonical task set (5-10 tasks) that runs against current AGENTS.md content quarterly. Detects regression in AI agent behaviour when instructions change. Currently absent across all 3 repos.
+13. **`terratest` (or equivalent) for `hmnd-cloud` modules** — at least the high-blast-radius ones (`shared-between-teams/training/`, `domains/vla/`).
+14. **Audit policy for large AI-assisted commits** — the 15% of commits in `hmnd` that touch 21+ files. Define what review depth they need.
+15. **`hmnd_firmware` test infrastructure** — 0 tests on 495 C++ files is fine for low-risk firmware but should at least have unit-tested HAL boundary + hardware-in-the-loop smoke tests for any AI-assisted change.
 
 ---
 
@@ -403,13 +409,15 @@ Layer-by-layer assessment of where each repo has **specs** (docs / contracts / i
 
 **AI code generation can scale safely only if the repositories have specs, tests, module boundaries, agent instructions, CI feedback, and review rules. The three target repos sit at very different points on that maturity curve, and the action priority follows directly:**
 
-- **`hmnd` is the strongest AI-codegen target HMND has** — best-in-class agent instructions (AGENTS.md with architecture rules + language-specific code-quality standards), 40+ CI workflows, broad contributor base (87 lifetime), explicit module boundaries. Phase 2 audit (submodules initialized) will confirm test-density and per-module documentation. **Verdict: MOSTLY_READY. Continue AI assist; document playbook from current power users.**
+- **`hmnd` is the strongest AI-codegen target HMND has — Phase 2 confirms.** Best-in-class agent instructions (AGENTS.md with architecture rules + language-specific code-quality standards), 40+ CI workflows, **864 tests across 13 of 14 modules** (969k Python LoC + 2.3k C++ files + 294 TS files), broad contributor base (87 lifetime), explicit module boundaries. Two modules have anemic test coverage — `hmnd_wholebody` (4 tests / 60k LoC, safety-critical) and `hmnd_firmware` (0 tests / 495 C++ files). **Verdict: MOSTLY_READY (4.0 / 5, was 3.5). Continue AI assist on the 13 healthy modules; gate AI-PRs to wholebody/firmware behind explicit test-floor.**
 
-- **`hmnd-cloud` is the highest-risk repo in scope** — Terraform IaC, ~$10k+/month resources, production blast radius — and it has **zero agent instructions, zero tests, no CODEOWNERS**. AI-generated changes here are dangerous today. **Verdict: PARTIALLY_READY. Pause AI-assisted PRs to this repo until AGENTS.md + CODEOWNERS + PR-validation workflow are in place** (Priority Action #2-5 above — total ~1 week of focused work).
+- **`hmnd-cloud` is the highest-risk repo in scope** — Terraform IaC, multi-region production blast radius — and it has **zero agent instructions, zero tests, no CODEOWNERS**. AI-generated changes here are dangerous today. **Verdict: PARTIALLY_READY (2.0 / 5). Pause AI-assisted PRs to this repo until AGENTS.md + CODEOWNERS + PR-validation workflow are in place** (Priority Actions #2, #3, #5 above — total ~1 week of focused work). Two-person bus factor (Mustafa + Daniel ≈ 80% of 90d commits) compounds the risk.
 
-- **`hmnd-sim` is deprecated** — exclude from scope. Real sim work happens in `hmnd/hmnd_sim` submodule, covered by `hmnd` once Phase 2 audit completes.
+- **`hmnd-sim` is deprecated** — exclude from scope. Real sim work happens in `hmnd/hmnd_sim` directory inside the monorepo (Phase 2 confirmed: 109k LoC + 62 tests + AGENTS.md + README — fully active and covered by hmnd §3 above).
 
-**Recommendation:** make `hmnd` and `hmnd-cloud` the first two **controlled AI-codegen readiness targets** with clear gates (AGENTS.md, CODEOWNERS, PR validation, prompt evals). After both score 4+ on §6, expand the model to the next tier of repos (the active first-party robotics drivers + firmware). Don't try to roll out one-size-fits-all AI policy across all 100+ org repos — segment-based rollout matches the heterogeneous risk profile.
+**Recommendation:** make `hmnd` and `hmnd-cloud` the first two **controlled AI-codegen readiness targets** with clear gates (AGENTS.md, CODEOWNERS, PR validation, prompt evals). After both score 4+ on §6, expand the model to the next tier of repos. Don't try to roll out one-size-fits-all AI policy across all 100+ org repos — segment-based rollout matches the heterogeneous risk profile.
+
+**The single highest-value missing artefact** in the whole audit is a **prompt-regression eval framework**. Currently zero of the three repos have a way to detect when an AGENTS.md change silently regresses AI agent behaviour. As HMND scales AI-assisted development, this gap will hurt more each month.
 
 ---
 
