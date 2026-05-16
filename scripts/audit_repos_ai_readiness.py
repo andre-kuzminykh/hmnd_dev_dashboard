@@ -376,24 +376,41 @@ def _resolve_repo_path(name: str) -> Path:
 
 
 def _clone_repos(target_dir: Path) -> None:
-    """Clone the 3 repos using HMND_GITHUB_PAT into target_dir."""
-    pat = os.environ.get("HMND_GITHUB_PAT") or os.environ.get("GITHUB_PAT")
+    """Clone the 3 repos using any of the supported PAT env-var names.
+
+    Matches the same names as scripts/extract_git_stats.py so existing
+    .env setups Just Work.
+    """
+    pat = (
+        os.environ.get("HMND_GITHUB_PAT")
+        or os.environ.get("GITHUB_PAT")
+        or os.environ.get("GITHUB_TOKEN")
+        or os.environ.get("HMND_GITHUB_TOKEN")
+        or ""
+    ).strip()
     if not pat:
-        print("ERROR: HMND_GITHUB_PAT or GITHUB_PAT env var required for --clone")
+        print("ERROR: set one of HMND_GITHUB_PAT / GITHUB_PAT / GITHUB_TOKEN / "
+              "HMND_GITHUB_TOKEN env var (PAT with repo:read scope) for --clone")
         sys.exit(1)
     target_dir.mkdir(parents=True, exist_ok=True)
-    org = os.environ.get("HMND_GITHUB_ORG", "thehumanoid-com")
+    # Default org matches scripts/extract_git_stats.py REPOS prefix.
+    org = os.environ.get("HMND_GITHUB_ORG", "HumanoidTeam")
     for repo in REPOS:
         dst = target_dir / repo
         if dst.exists():
             print(f"  {repo}: already cloned at {dst}, skipping")
             continue
         url = f"https://{pat}@github.com/{org}/{repo}.git"
-        print(f"  cloning {repo}...")
-        subprocess.run(
+        print(f"  cloning {org}/{repo}...")
+        r = subprocess.run(
             ["git", "clone", "--depth", "1", url, str(dst)],
-            check=True,
+            capture_output=True, text=True,
         )
+        if r.returncode != 0:
+            # Hide PAT from any error output before printing
+            err = r.stderr.replace(pat, "***") if pat else r.stderr
+            print(f"  ✗ {repo} clone failed: {err.strip()[:300]}")
+            continue
         print(f"  ✓ {repo} cloned to {dst}")
 
 
