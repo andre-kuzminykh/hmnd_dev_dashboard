@@ -71,24 +71,11 @@ def _ensure_provider() -> int:
 
 
 def _ensure_user(email: str, name: str) -> int:
-    # Normalise email to lowercase BEFORE insert. The UNIQUE constraint on
-    # users.email is case-sensitive in SQLite, so without this two events
-    # arriving with 'Blake.Lieber@hmnd.ai' and 'blake.lieber@hmnd.ai' would
-    # create two distinct user rows and silently split that person's spend
-    # across both. Surfaced by audit_user_dedup().
-    email = (email or "").strip().lower()
-    with get_conn() as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)
-               VALUES(?, ?, 200, 1)""",
-            (email, name or email.split("@")[0]),
-        )
-        uid = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()["id"]
-        # Refresh name if better.
-        if name:
-            conn.execute("UPDATE users SET full_name=? WHERE id=?", (name, uid))
-        conn.commit()
-        return uid
+    # Resolve to canonical user_id across HMND email domains (thehumanoid.ai
+    # vs skl.vc) — see data/sources/_identity.py for the policy. Without this
+    # the same human ends up with two user_id rows and split spend/segments.
+    from ._identity import resolve_canonical_user_id
+    return resolve_canonical_user_id(email, name)
 
 
 def _ensure_model(name: str, provider_id: int) -> int:

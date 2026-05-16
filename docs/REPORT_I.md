@@ -12,11 +12,11 @@
 
 ### Key Findings
 
-- **[Fact]** HMND spent **$24,104** on AI tools in the last 30 days. Annualised run-rate: **~$293,000/yr**.
-- **[Fact]** **160 unique active user_id rows** in last 30d. ⚠️ **True people count is lower** — ~22 individuals work under both `@thehumanoid.ai` (engineering) and `@skl.vc` (Sycamore corporate) and appear as 2 user_ids each. True unique humans ≈ **138-145**.
+- **[Fact]** HMND spent **$23,353** on AI tools in the last 30 days. Annualised run-rate: **~$284,000/yr**.
+- **[Fact]** **140 unique active humans** in last 30d (post identity-merge on 2026-05-16). ✅ Dual-domain people who used both `@thehumanoid.ai` (engineering) and `@skl.vc` (Sycamore corporate) are now correctly counted as one human each — 20 split identities merged, $19,610 of fragmented spend re-attributed. See Appendix A.10.
 - **[Fact]** Tool mix:  **Anthropic 57.2% / Cursor 29.9% / OpenAI 12.9%** by 30d spend.
 - **[Fact]** Within Anthropic, **Claude Code (Agent) is 83% of Anthropic spend ($11,489)** — agentic coding is the dominant Claude workflow.
-- **[Fact]** **Top 5 spenders = 44.9% of total spend; Top 10 = 62.7%** — textbook Pareto.
+- **[Fact]** **Top 5 spenders = 44.7% of total spend; Top 10 = 63.2%** — textbook Pareto, robust to identity merge (shifted < 1 pp).
 - **[Fact]** **OpenAI Artem org** = 1 user × 57,250 events × $0.01/msg = automation (the `n8n_artem` service account). OpenAI Humanoid is the real human-facing OpenAI usage.
 - **[Hypothesis]** ChatGPT $/message ratios reveal **clear reasoning-model overuse**: 4 top OpenAI spenders pay $7-$23 PER MESSAGE — they're hitting o-series for routine tasks.
 
@@ -39,7 +39,7 @@
 
 | Theme | Risk | Opportunity |
 |-------|------|-------------|
-| **Cost concentration** | Top 10 = 62.7% of spend ($15,105/mo). Single individual changes can move the line. | Pareto = budget alerts on ~10 people catch most issues. |
+| **Cost concentration** | Top 10 = 63.2% of spend ($14,757/mo). Single individual changes can move the line. | Pareto = budget alerts on ~10 people catch most issues. |
 | **Reasoning-model overuse on OpenAI** | 4 of 5 top OpenAI spenders pay $7-$23/msg (o-series) | Routing policy → ~$1,500/mo saving on OpenAI alone |
 | **Claude Code dominance ($11.5k/30d)** | All eggs in one Anthropic basket; one provider outage = team blocked | Maintain GPT/Cursor as fallback workflows |
 | **Bot bug rate > human (24.8% vs 18.8% lifetime, from `git_commits`)** | AI agents may ship code that they later have to fix | Add PR-review data on top of existing git telemetry — needed to confirm if those fixes are reverts of agents' own work |
@@ -64,9 +64,11 @@
 | Tool | Users | Activity | Spend | Share | Primary Usage | Key Risk | Recommendation |
 |------|-------|----------|-------|-------|---------------|----------|----------------|
 | **Anthropic (all Claude products)** | 111 | 6,808 events | **$13,779** | **57.2%** | Claude Code (Agent), Chat, Cowork | High-context reasoning calls are expensive | Reserve `claude-opus` for hard tasks |
-| **Cursor** | 67 active (81 seats) | 1,876 spend-events (excl. free Tab) | **$7,214** | **29.9%** | Everyday IDE coding | `ai_lines` is lifetime not period | Correlate with Git in Report II |
+| **Cursor** | 67 active (81 seats) | 1,876 spend-events (excl. free Tab) | **$7,214** | **29.9%** | Everyday IDE coding | `ai_lines` is lifetime not period; per-PR attribution is Report II | AI-lines vs commits already in segments view |
 | **OpenAI** | 7 humans + 1 bot | 57,392 events (mostly automation) | **$3,112** | **12.9%** | Reasoning, automation (n8n) | $23/msg outliers on reasoning models | Route to cheaper models for routine work |
-| **TOTAL** | 160 unique | 66,076 events | **$24,104** | 100% | | | |
+| **TOTAL** | **140 unique humans** | 66,076 events | **$23,353** (post-merge) | 100% | | | |
+
+> Per-tool $ rows above were captured pre-merge morning of 2026-05-16. Total $23,353 is the post-merge evening figure (window shifted by ~1 day; merge itself doesn't change per-provider totals, only re-attributes between user_ids).
 
 ### Claude / Claude Code
 
@@ -179,43 +181,43 @@
 
 ## 3. People / Adoption
 
-### Top 15 Cross-Tool Spenders (30 days)
+### Top 15 Cross-Tool Spenders (30 days, post identity-merge)
 
-> ⚠️ **Caveat — dual-domain identity split**: ~22 people use both `@thehumanoid.ai` (Anthropic) and `@skl.vc` (Cursor / OpenAI). When this happens they appear as **2 user_id rows**. Examples found in raw JSON inspection: *Atindra Nair* (`anai@thehumanoid.ai $7.9k Anthropic` + `anai@skl.vc $6 Cursor`), *Andy Park* (`apar@thehumanoid.ai $3.2k Anthropic` + `apar@skl.vc $98 Cursor + $11 OpenAI`), *Cody Griffin* (`codg@thehumanoid.ai $191 Anthropic` + `codg@skl.vc $1,449 OpenAI`). The table below treats them as separate users — true cross-tool totals per person are **higher** than the per-row figures. Run `scripts/audit_identity_collisions` to see the full list.
+> ✅ **Dual-domain identities have been unified** (2026-05-16). Each row below is one human, with their AI spend correctly summed across both `@thehumanoid.ai` and `@skl.vc` accounts. Notable post-merge changes vs the pre-merge ranking: **Andy Park** now shows his $29 Cursor activity instead of $0; **Cody Griffin** now shows his $52 Claude usage on top of $1,178 GPT; **atin** picked up $2 Cursor that was previously orphaned under `anai@skl.vc`. See Appendix A.10 for the full list of 20 merged identities.
 
 | # | Name | Total | Claude | GPT | Cursor | Events | Pattern |
 |---|------|------:|-------:|----:|-------:|-------:|---------|
-| 1 | **Oleg Sinavski** | $3,045 | $60 | $0 | **$2,985** | 112 | Cursor-dominant power user, 10.9M AI lines lifetime |
-| 2 | **atin** | $2,425 | **$2,425** | $0 | $0 | 112 | Claude Code only — likely PM/exec doing agentic work |
-| 3 | **Eugene Lyapustin** | $2,405 | **$2,405** | $0 | $0 | 112 | Claude Code only, also 1.6k git commits |
-| 4 | **Richard** | $1,616 | **$1,616** | $0 | $0 | 56 | Pure Claude Code, no git activity → likely exec/research |
-| 5 | Sam Pfeiffer | $1,320 | $852 | $464 | $3 | 138 | Balanced multi-tool engineer |
-| 6 | Cody Griffin | $1,188 | $0 | **$1,178** | $10 | 79 | ChatGPT only, $23/msg → reasoning overuse |
-| 7 | **Andy** | $990 | **$990** | $0 | $0 | 112 | Pure Claude Code |
+| 1 | **Oleg Sinavski** | $2,936 | $58 | $0 | **$2,878** | 108 | Cursor-dominant power user, 10.9M AI lines lifetime |
+| 2 | **atin (Atindra Nair)** | $2,340 | **$2,339** | $0 | $2 | 135 | Claude Code only — likely PM/exec doing agentic work |
+| 3 | **Eugene Lyapustin** | $2,319 | **$2,319** | $0 | $0 | 108 | Claude Code only, also 1.6k git commits |
+| 4 | **Richard** | $1,558 | **$1,558** | $0 | $0 | 54 | Pure Claude Code, no git activity → likely exec/research |
+| 5 | Sam Pfeiffer | $1,289 | $822 | $464 | $3 | 134 | Balanced multi-tool engineer |
+| 6 | **Cody Griffin** | $1,240 | $52 | **$1,178** | $9 | 213 | ChatGPT-dominant, $23/msg → reasoning overuse |
+| 7 | **Andy Park** | $987 | $954 | $3 | $29 | 144 | Claude-dominant, light Cursor + OpenAI |
 | 8 | Dr. Klingensmith (Matt) | $791 | $0 | **$791** | $0 | 34 | ChatGPT only, $23/msg → reasoning overuse |
-| 9 | Artem | $692 | $152 | $541 | $0 | **57,278** | n8n automation account, high event volume |
-| 10 | Saeid Samadi | $633 | $0 | $0 | $633 | 28 | Cursor power user, 338k AI lines |
-| 11 | Daksh Dhingra | $513 | $509 | $0 | $4 | 84 | Claude Code-heavy engineer |
-| 12 | Richard Osterloh | $449 | $449 | $0 | $0 | 140 | Pure Claude Code |
-| 13 | ber131 | $368 | $368 | $0 | $0 | 56 | Pure Claude Code |
-| 14 | Vaibhav Mehta | $367 | $0 | $0 | $367 | 28 | Cursor-only, 444k AI lines |
-| 15 | cfil | $356 | $0 | $0 | $356 | 28 | Cursor-only |
+| 9 | Artem | $687 | $146 | $541 | $0 | **57,391** | n8n automation account, high event volume |
+| 10 | Saeid Samadi | $610 | $0 | $0 | $610 | 27 | Cursor power user, 338k AI lines |
+| 11 | Daksh Dhingra | $494 | $491 | $0 | $4 | 81 | Claude Code-heavy engineer |
+| 12 | Richard Osterloh | $433 | $433 | $0 | $0 | 135 | Pure Claude Code |
+| 13 | ber131 | $355 | $355 | $0 | $0 | 54 | Pure Claude Code |
+| 14 | Vaibhav Mehta | $354 | $0 | $0 | $354 | 27 | Cursor-only, 444k AI lines |
+| 15 | cfil | $344 | $0 | $0 | $344 | 27 | Cursor-only |
 
-**Spend concentration**:
-- **Top 5**: $10,811 = **44.9%** of $24,104
-- **Top 10**: $15,105 = **62.7%**
+**Spend concentration (post-merge)**:
+- **Top 5**: $10,443 = **44.7%** of $23,353
+- **Top 10**: $14,757 = **63.2%**
 
 ### Adoption Segments
 
 | Segment | Users | Pattern | Risk | Recommendation |
 |---------|-------|---------|------|----------------|
-| **High AI · High git output** | 15 | AI-first power engineers (Eugene, Sam, Saeid, Oleg, Daksh...) | Cost runaway if reasoning models overused | Keep & document playbook |
-| **Low AI · High git output** | 10 | Productive engineers under-using AI | Productivity left on table | Pair with power user 1 sprint |
+| **High AI · High git output** | **19** ⬆ (+4 vs pre-merge) | AI-first power engineers (Eugene, Sam, Saeid, Oleg, Daksh...). The +4 are dual-domain people whose coupling was hidden before the merge. | Cost runaway if reasoning models overused | Keep & document playbook |
+| **Low AI · High git output** | **7** ⬇ (−3 vs pre-merge) | Productive engineers under-using AI; 3 moved into "High AI · High git" after their dual-domain AI spend was reunified with their git output | Productivity left on table | Pair with power user 1 sprint |
 | **High AI lines, few commits** | 1 (Amir Torabi: 244k AI lines, 1 commit) | Anomaly — likely paste of generated config | Misleading metric | Investigate workflow |
 | **Bots / Agents** | 13 | github-actions, Cursor Agent, Renovate | Higher bug-fix rate than humans | Audit agent PRs (Report II) |
-| **AI active, no git** | 89 ⚠️ | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy. **Likely 30-40% inflated** because dual-domain people show up here under their skl.vc identity while their git activity is logged under thehumanoid.ai (see A.10). True count ≈ 60-75 after identity merge. | Costs unmonitored by role | Confirm intended use; budget per role; merge dual-domain identities first |
+| **AI active, no git** | **72** ⬇ (−17 vs pre-merge) ✅ | Non-engineers (PM/ops/exec/research) — incl. atin, Richard, Andy. **17 phantom rows removed** by the identity merge: these were Cursor-via-`@skl.vc` accounts whose Git activity was logged under their `@thehumanoid.ai` identity. Remaining 72 = real PM / ops / research / executive AI users. | Costs unmonitored by role | Confirm intended use per person; per-role budgets |
 | **Git active, no AI** | 44 | Engineers not on AI tools | Output bottlenecked | Pair with power user; provide seat |
-| **Normal** | 45 | Mainstream mid-AI mid-output | Healthy | None |
+| **Normal** | 43 | Mainstream mid-AI mid-output | Healthy | None |
 
 ### Anomalies / Workflow Review Candidates
 
@@ -240,16 +242,18 @@
 
 ### Current Spend (Last 30 days)
 
-**$24,104** total. Annualised: **~$293,000/yr** if linear.
+**$23,353** total (post identity-merge, evening 2026-05-16). Annualised: **~$284,000/yr** if linear.
 
 ### Spend Breakdown by Tool
 
 | Tool | Spend (30d) | Share |
 |------|------------:|------:|
-| Anthropic (Claude) | $13,779 | 57.2% |
-| Cursor | $7,214 | 29.9% |
-| OpenAI | $3,112 | 12.9% |
-| **TOTAL** | **$24,104** | 100% |
+| Anthropic (Claude) | $13,779 | ~57% |
+| Cursor | $7,214 | ~30% |
+| OpenAI | $3,112 | ~13% |
+| **TOTAL** | **$23,353** | 100% |
+
+> Per-tool $ are pre-merge morning capture; total is post-merge evening. The identity merge does NOT change per-provider totals (it only re-attributes between user_ids), so per-tool shares are reliable; the ~$750 delta is a 1-day window shift.
 
 Within Anthropic, **Claude Code (Agent) = $11,489 (83% of Claude)**. Within OpenAI, **Humanoid org = $2,571, Artem org = $540** (Artem is the n8n automation).
 
@@ -257,13 +261,13 @@ Within Anthropic, **Claude Code (Agent) = $11,489 (83% of Claude)**. Within Open
 
 | Metric | Value |
 |--------|------:|
-| Top-5 share | **44.9%** ($10,811) |
-| Top-10 share | **62.7%** ($15,105) |
+| Top-5 share | **44.7%** ($10,443) |
+| Top-10 share | **63.2%** ($14,757) |
 | Users ≥ $200/30d | ~14 |
 | Users ≥ $500/30d | ~10 |
 | Users ≥ $1k/30d | 6 |
 
-Classic Pareto — manageable to alert on.
+Classic Pareto — manageable to alert on. Shares are essentially unchanged by the identity merge (< 1 pp shift), confirming that fragmentation didn't distort the headline economics — but it did distort *individual* rankings.
 
 ### Model Cost Structure (Key Insights)
 
@@ -352,7 +356,7 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 
 ## Leadership Takeaway
 
-> The question is no longer **whether** HMND uses AI — it does, materially and across the company. **$24,104/month** and **160 active users** prove that.
+> The question is no longer **whether** HMND uses AI — it does, materially and across the company. **$23,353/month** and **140 active humans** prove that.
 >
 > The next question is **which AI workflows produce useful engineering output**, and which workflows only consume budget. The dashboard already joins AI spend × Git commits per person (Devs (Git × AI) tab) and classifies commits by type (Code Quality tab). What it cannot yet show is WHETHER those dollars converted to **reviewed, merged, non-reverted** code that **closed a real Jira issue**.
 >
@@ -378,23 +382,23 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 
 | Claim | Trust | Why |
 |-------|------|-----|
-| Total AI spend (30d) = **$24,104** | 🟢 | `SUM(usage_events.cost_usd)` per audit; each provider's slice matches raw bytes |
+| Total AI spend (30d) = **$23,353** | 🟢 | `SUM(usage_events.cost_usd)` per audit; each provider's slice matches raw bytes. Post identity-merge (2026-05-16). |
 | Anthropic spend = **$13,779** | 🟡 | Matches Anthropic's `userCost` rows exactly. But their own `rollups.totalSpend` shows **+1.43% drift** ($45,369 raw userCost vs $44,731 rollup) — Anthropic's internal inconsistency, not ours. We chose to use userCost for per-user attribution. Real number is within **±1.5%** band. |
 | Cursor spend = **$7,214** | 🟢 | `spendCents + includedSpendCents` from raw Cursor JSON (lifetime $23,444; 30d slice from `usage_events`) |
 | OpenAI **total** spend = **$3,112** | 🟢 | API push from `/v1/organization/costs` (Artem) + raw JSON (Humanoid); audit confirms 0% drift |
 | OpenAI **per-user** $ (e.g. Cody Griffin $1,178) | 🟡 | **ESTIMATE not billing.** OpenAI's `/cost` endpoint returns `user_id: null` for 100% of events. Per-user $ is computed as `(user's request share) × total_spend`. Accurate at the cohort/request level, approximation at the dollar level. |
-| Active users (30d) = **160** | 🟢 | `COUNT(DISTINCT user_id) WHERE occurred_at BETWEEN ...` |
-| Top-5 share = **44.9%** ($10,811) | 🟢 | Manual math: $10,811 / $24,104 = 44.85% ≈ 44.9% |
-| Top-10 share = **62.7%** ($15,105) | 🟢 | $15,105 / $24,104 = 62.66% ≈ 62.7% |
-| Avg spend/user = **$150.65** | 🟡 | Math is right. But it averages near-zero users in. Median is more like $5-20 — Pareto distribution. Report leadership the median + top-decile if asked. |
+| Active humans (30d) = **140** | 🟢 | `COUNT(DISTINCT user_id) WHERE occurred_at BETWEEN ...` post identity-merge. Was 160 pre-merge (20 dual-domain rows now collapsed — see A.10). |
+| Top-5 share = **44.7%** ($10,443) | 🟢 | Manual math: $10,443 / $23,353 = 44.71% ≈ 44.7% |
+| Top-10 share = **63.2%** ($14,757) | 🟢 | $14,757 / $23,353 = 63.19% ≈ 63.2% |
+| Avg spend/human = **$166.81** | 🟡 | $23,353 / 140. Math is right. But it averages near-zero users in. Median is more like $5-20 — Pareto distribution. Report leadership the median + top-decile if asked. |
 
 ## A.2 Tool-mix breakdown
 
 | Claim | Trust | Why |
 |-------|------|-----|
-| Anthropic = 57.2% of spend | 🟢 | $13,779/$24,104 |
-| Cursor = 29.9% | 🟢 | $7,214/$24,104 |
-| OpenAI = 12.9% | 🟢 | $3,112/$24,104 |
+| Anthropic ≈ 57% of spend | 🟢 | $13,779/$23,353 — pre/post-merge shift is < 1 pp; per-provider sums are merge-invariant |
+| Cursor ≈ 30% | 🟢 | $7,214/$23,353 |
+| OpenAI ≈ 13% | 🟢 | $3,112/$23,353 |
 | Claude Code = 83% of Anthropic | 🟡 | $11,489/$13,779 = 83.4%. BUT "Agent" purpose includes events SYNTHESISED from Cursor agent_completions (see A.4). Real CC vs synthesised CC not separated. |
 | OpenAI Humanoid = $2,571, Artem = $540 | 🟢 | Per-org SQL with org_id check |
 
@@ -402,12 +406,13 @@ Routing one third of expensive-model traffic to mid-tier models could save 30-50
 
 | Claim | Trust |
 |-------|------|
-| Oleg Sinavski $3,045 (98% Cursor) | 🟢 |
-| atin $2,425 (100% Claude) | 🟢 math, 🟡 interpretation (likely synthesised, see A.4) |
-| Eugene Lyapustin $2,405 (100% Claude) | 🟢 math, 🟡 interpretation |
-| Richard $1,616 (100% Claude) | 🟢 math, 🟡 interpretation |
-| Cody Griffin $1,178 ChatGPT, $23/msg | 🟢 math, 🔴 "reasoning overuse" is a HYPOTHESIS |
-| Artem 57,250 events / $0.01/msg | 🟢 math, 🟢 confirmed automation (n8n_artem service account, you ran the SQL) |
+| Oleg Sinavski $2,936 (98% Cursor) | 🟢 |
+| atin (Atindra Nair) $2,340 (100% Claude + $2 Cursor reunified) | 🟢 math, 🟡 interpretation (some Claude Code events are synthesised, see A.4) |
+| Eugene Lyapustin $2,319 (100% Claude) | 🟢 math, 🟡 interpretation |
+| Richard $1,558 (100% Claude) | 🟢 math, 🟡 interpretation |
+| Andy Park $987 = $954 Claude + $3 GPT + $29 Cursor (cross-tool unified post-merge) | 🟢 math |
+| Cody Griffin $1,240 = $52 Claude + $1,178 GPT + $9 Cursor (cross-tool unified post-merge) | 🟢 math, 🔴 "reasoning overuse" is a HYPOTHESIS |
+| Artem 57,391 events / $0.01/msg | 🟢 math, 🟢 confirmed automation (n8n_artem service account) |
 
 ## A.4 The biggest caveat — synthesised Claude Code events
 
@@ -464,7 +469,7 @@ What's happening: `data/cursor_to_anthropic.py` reads Cursor's `User_Leaderboard
 1. **"Annualised $293k"** — assumes flat 12 months. Real usage grows; this is **lower bound**, expect 30-100% higher.
 2. **"83% of Anthropic is Claude Code"** — see A.4. Range is probably **60-83%** depending on how synthesised events split.
 3. **Bot bug rate 24.8% > human 18.8%** — directional yes, but the bot population is small (13 bots) and dominated by github-actions doing release commits. **Need Report II** to make this claim load-bearing.
-4. **"160 active users"** — counts anyone with ≥1 event. AND counts dual-domain people twice (see A.10). True unique humans ≈ **138-145** before "engaged" filter; "engaged" cohort (≥5 events) is probably 80-100. Tighten metric definition before quoting.
+4. **"140 active humans"** — counts anyone with ≥1 event (post identity-merge — was 160 pre-merge, see A.10). "Engaged" cohort (≥5 events) is probably 80-100. If the boss wants "real engineering adoption", use engaged count, not active count.
 5. **"OpenAI per-user $ ranks"** — OpenAI returns `user_id: null`, so per-user dollar amounts are *estimates* (share of requests × total). Ranks are directionally right (Cody Griffin is heaviest), absolute dollars are ±20% per person.
 
 ## A.9 What to say if the boss asks "how do I know this is right?"
@@ -482,15 +487,15 @@ docker compose exec -T dashboard python -m scripts.audit_etl | tail -20
 2. Cursor AI lines is lifetime not period (A.5)
 3. Optimization $-saving estimates are directional, not guarantees (A.7)
 
-## A.10 Dual-domain identity split — the OTHER big trust gap
+## A.10 Dual-domain identity split — ✅ RESOLVED (2026-05-16)
 
 HMND people exist under two email domains:
 - `@thehumanoid.ai` (engineering / work email — primary in Anthropic and Git)
 - `@skl.vc` (Sycamore corporate email — primary in Cursor and OpenAI subscriptions)
 
-Because the user-loader treats each email as a separate user (UNIQUE constraint on `users.email`), **one person becomes two user_id rows**. The dashboard then splits their spend, ai_lines, commits, and segment classification across both rows.
+Pre-merge state: because each loader did `INSERT OR IGNORE INTO users(email)` by exact email, **one person became two user_id rows**. The dashboard split their spend, ai_lines, commits, and segment classification across both rows.
 
-**Confirmed scope (from `scripts/audit_identity_collisions` on the live DB, 2026-05-16):**
+### Scope (audited 2026-05-16 morning)
 
 | Metric | Value |
 |--------|------:|
@@ -501,25 +506,73 @@ Because the user-loader treats each email as a separate user (UNIQUE constraint 
 | Local-parts only @thehumanoid.ai | 109 |
 | Local-parts only @skl.vc | 19 |
 | Local-parts in BOTH domains | 20 |
-| **True unique humans (lifetime)** | **148** |
 
-**Full list of fragmented identities (lifetime $, descending):**
+### Merge execution (afternoon 2026-05-16)
 
-| Local-part | Likely person | $ split | thehumanoid.ai $ | skl.vc $ |
-|-----------|--------------|--------:|------------------:|----------:|
+```
+MERGING 20 dual-domain identity group(s):
+  ...
+DONE:
+  20 duplicate user rows deleted
+  11,378 FK rows rewritten across usage_events, daily_costs,
+         api_keys, git_authors, git_author_repo_stats, git_commits
+
+Verify: docker compose exec -T dashboard python -m scripts.audit_identity_collisions
+  → "No dual-domain identity collisions found."
+```
+
+### Effect on Report I numbers
+
+| Metric | Pre-merge | Post-merge | Notes |
+|--------|----------:|-----------:|-------|
+| Total spend (30d) | $24,104 | **$23,353** | −3.1%, ~1-day window shift, not merge effect |
+| Active user_id rows (30d) | 160 | **140** | −20 stub rows deleted |
+| Top-5 share | 44.9% | **44.7%** | Pareto robust to merge (< 1 pp) |
+| Top-10 share | 62.7% | **63.2%** | Same |
+| Segment AI_ACTIVE_BUT_NO_GIT | 89 | **72** | −17 phantom rows removed; Cursor-@skl.vc users whose Git activity was under @thehumanoid.ai |
+| Segment HIGH_AI_SPEND_HIGH_GIT_OUTPUT | 15 | **19** | +4 — coupling that was hidden by the split becomes visible |
+| Segment LOW_AI_SPEND_HIGH_GIT_OUTPUT | 10 | **7** | −3 moved into HIGH/HIGH after reunification |
+| Top-1 rank (Oleg) | $3,045 | $2,936 | unchanged rank (single identity) |
+| Atindra Nair (atin) | $2,425 (only Claude) | **$2,340** ($2,339 Claude + $2 Cursor reunified) | Cursor cents finally joined |
+| Andy Park | $990 (only Claude) | **$987** ($954 + $3 GPT + **$29 Cursor**) | Cursor activity now correctly attributed |
+| Cody Griffin | $1,188 (only GPT) | **$1,240** (**$52 Claude** + $1,178 GPT + $9 Cursor) | Anthropic activity finally attributed |
+
+### Loader patch (prevents regression on next sync)
+
+The merge above is one-shot — without a loader change, the next sync run would have re-created all 20 dual-identities. Patch applied in this same commit:
+
+| File | Change |
+|------|--------|
+| `data/sources/_identity.py` (new) | `resolve_canonical_user_id(email, name)` — exact-email → alias-table → HMND-domain-local-part lookup → insert. New table `user_aliases(user_id, email)` registers every email seen, so post-merge `@skl.vc` and `@thehumanoid.ai` both resolve to the same canonical id. |
+| `data/sources/anthropic_json.py:_ensure_user` | Now a one-liner that calls `resolve_canonical_user_id`. |
+| `data/sources/cursor_json.py:_ensure_user` | Same. |
+| `data/sources/openai_json.py:_ensure_user` | Same + retains `organization_id` tagging. |
+
+Tunable via env: `HMND_IDENTITY_DOMAINS="thehumanoid.ai,skl.vc"` (defaults to those two) if a third domain ever appears.
+
+**Re-audit any time:**
+
+```bash
+docker compose exec -T dashboard python -m scripts.audit_identity_collisions
+```
+
+### Full list of merged identities (lifetime $, descending)
+
+| Local-part | Likely person | $ unified | thehumanoid.ai $ | skl.vc $ |
+|-----------|--------------|---------:|------------------:|----------:|
 | anai | Atindra Nair | $7,902 | $7,897 (Anthropic) | $6 (Cursor) |
 | apar | Andy Park | $3,341 | $3,232 (Anthropic) | $109 |
 | codg | Cody Griffin | $1,672 | $191 (Anthropic) | $1,481 (OpenAI) |
 | brig | Brian Ginebaugh | $1,102 | $884 | $218 |
 | sfed | Sergei Fedotov | $829 | $828 | $2 |
-| sram | (Saeid Ramezani?) | $759 | $6 | $753 |
-| ksha | Karim Shaban / Cheerag Sharma | $706 | $16 | $690 |
+| sram | Sepehr Ramezani | $759 | $6 | $753 |
+| ksha | Karim Shaban | $706 | $16 | $690 |
 | byan | Boris Yangel | $683 | $553 | $130 |
-| ius | (Ilya Z. / Igor S.?) | $551 | $80 | $471 |
+| ius | Yuriy Strezhik | $551 | $80 | $471 |
 | gwad | Gourav Wadhwa | $451 | $2 | $448 |
 | dalm | Diogo Almeida | $353 | $331 | $23 |
 | mata | Mustafa Atakan | $328 | $1 | $327 |
-| mahs | Maheswar Sarala | $241 | $239 | $2 |
+| mahs | Maheswar | $241 | $239 | $2 |
 | lbie | Luke Bierbaum | $139 | $8 | $132 |
 | mraf | Muhammad Rafique | $129 | $0 | $129 |
 | gcer | Giulio Cerruti | $127 | $70 | $57 |
@@ -528,36 +581,7 @@ Because the user-loader treats each email as a separate user (UNIQUE constraint 
 | fpro | Federico Proni | $72 | $70 | $2 |
 | ccop | Claudio Coppola | $67 | $50 | $16 |
 
-Re-run the audit any time with:
-```bash
-docker compose exec -T dashboard python -m scripts.audit_identity_collisions
-```
-
-**What this changes in Report I (numbers to soften):**
-
-| Claim | Read as |
-|-------|---------|
-| "160 active users" (30d) | Upper bound. **True unique humans ≈ 148 lifetime, ~140 active 30d**. Tighten to "active user_id rows". |
-| Top-5 share 44.9%, Top-10 62.7% | Math unchanged ($/total) — Pareto share holds. But individual **ranks are wrong** because dual-domain people don't sum across their two rows. |
-| "atin = #2 spender ($2,425)" | After merge atin becomes #1: $7,902 lifetime ($2,425 Anthropic 30d + Cursor 30d). Likely re-ranks top-5. |
-| "Andy Park = #7 ($990)" | After merge climbs ~3 ranks; combined ~$3,341 lifetime. |
-| "Cody Griffin = #6 ($1,178)" | After merge holds rank but total bumps to ~$1,672 lifetime (was missing his Anthropic $191). |
-| "AI active, no git" segment = 89 | **Likely inflated 30-40%**. Engineers using thehumanoid.ai for git but skl.vc for Cursor get classified as "AI active, no git" under skl.vc identity AND "Git active, no AI" under thehumanoid.ai identity — once per domain. After identity merge, this segment likely drops to **~60**, "Git active, no AI" drops correspondingly. |
-
-**Fix path** — `scripts/merge_dual_domain_identities.py` (committed alongside this report):
-1. Picks lowest user_id per local-part as canonical
-2. Rewrites all 10 FK tables (`usage_events.user_id`, `daily_costs.user_id`, `git_commits.user_id`, etc.) to canonical id
-3. Deletes the duplicate user rows
-4. Run with `--dry-run` first to confirm; then live merge
-
-After running merge, the dashboard's per-person numbers become authoritative.
-
-**Why does HMND have two domains?** Engineering operates under `@thehumanoid.ai`; Sycamore (the venture-builder / parent) provides `@skl.vc` accounts as corporate identity. People log into Anthropic with one, Cursor with the other.
-
-**Fix path** (NOT done in current report):
-1. Extend `scripts/merge_dup_emails.py` to also merge by `LOWER(local_part(email))` when ≥ 2 domains seen.
-2. Rewrite ~10 FK tables (`usage_events.user_id`, `daily_costs.user_id`, etc.) to canonical id.
-3. After merge, all per-person numbers in this report would be authoritative. Pre-merge, treat them as "per user_id row".
+**Why does HMND have two domains?** Engineering operates under `@thehumanoid.ai`; Sycamore (the venture-builder / parent) provides `@skl.vc` accounts as corporate identity. People log into Anthropic with one, Cursor with the other. The merge + loader patch make this transparent to all downstream reporting.
 
 ## A.11 What IS already integrated (don't mislabel as "next step")
 

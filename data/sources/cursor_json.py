@@ -55,19 +55,9 @@ def _ensure_provider() -> int:
 
 
 def _ensure_user(email: str, name: str) -> int:
-    # Lowercase email to dodge case-sensitive UNIQUE constraint dupes.
-    email = (email or "").strip().lower()
-    with get_conn() as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)
-               VALUES(?, ?, 200, 1)""",
-            (email, name or email.split("@")[0]),
-        )
-        uid = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()["id"]
-        if name:
-            conn.execute("UPDATE users SET full_name=? WHERE id=?", (name, uid))
-        conn.commit()
-        return uid
+    # Canonical user resolution across HMND domains — see _identity.py.
+    from ._identity import resolve_canonical_user_id
+    return resolve_canonical_user_id(email, name)
 
 
 def _ensure_model(name: str, provider_id: int) -> int:

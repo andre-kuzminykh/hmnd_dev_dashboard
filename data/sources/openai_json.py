@@ -69,24 +69,19 @@ def _ensure_organization(provider_id: int, label: str) -> int:
 
 
 def _ensure_user(email: str, name: str, org_id: int | None = None) -> int:
-    # Lowercase email to dodge case-sensitive UNIQUE constraint dupes.
-    email = (email or "").strip().lower()
-    with get_conn() as conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO users(email, full_name, monthly_limit_usd, is_active)
-               VALUES(?, ?, 200, 1)""",
-            (email, name or email.split("@")[0]),
-        )
-        uid = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()["id"]
-        if name:
-            conn.execute("UPDATE users SET full_name=? WHERE id=?", (name, uid))
-        if org_id is not None:
+    # Canonical user resolution across HMND domains — see _identity.py.
+    # OpenAI-specific addition: tag the user with organization_id when first seen,
+    # so multi-org filter in the dashboard works.
+    from ._identity import resolve_canonical_user_id
+    uid = resolve_canonical_user_id(email, name)
+    if org_id is not None:
+        with get_conn() as conn:
             conn.execute(
                 "UPDATE users SET organization_id = ? WHERE id = ? AND organization_id IS NULL",
                 (org_id, uid),
             )
-        conn.commit()
-        return uid
+            conn.commit()
+    return uid
 
 
 def _ensure_model(name: str, provider_id: int) -> int:
