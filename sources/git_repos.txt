@@ -1,0 +1,35 @@
+# Repository list for scripts.extract_git_stats — one "org/repo" per line.
+# Blank lines and lines starting with '#' are ignored.
+#
+# This file (when present and non-empty) overrides the script's built-in
+# default list. Override priority: --repos CLI flag > HMND_GIT_REPOS env >
+# this file > built-in default (HumanoidTeam/hmnd + hmnd-cloud + hmnd-sim).
+#
+# To add more repos to dashboard tracking:
+#   1. Uncomment / add lines below
+#   2. Re-run on the VM:
+#        docker compose exec dashboard python -m scripts.extract_git_stats
+#   3. New repos appear in dashboard's git_commits + git_authors after next sync.
+#
+# Active first-party engineering repos that are reasonable extensions:
+
+HumanoidTeam/hmnd
+HumanoidTeam/hmnd-cloud
+HumanoidTeam/hmnd-sim
+
+# Uncomment as needed:
+#HumanoidTeam/hm-ops
+#HumanoidTeam/Gripper_Firmware
+#HumanoidTeam/firmware_hal_aurix_tc3
+#HumanoidTeam/firmware_hal_arm_stm32h7
+#HumanoidTeam/firmware_hal_c2000ware
+#HumanoidTeam/etherlab-ethercat
+#HumanoidTeam/manus_ros_drivers
+#HumanoidTeam/ros2_xhand
+#HumanoidTeam/beta-morphology-analysis-tools
+
+# Do NOT add: vendored forks (placo, IsaacLab, lerobot_lib, robocasa,
+# BehaviorTree.ROS2, ruckig, ros-noetic, etc.) — changes there belong
+# upstream, not in HMND productivity metrics.
+# Do NOT add: archived repos (hmnd-sim is borderline — deprecated but
+# kept for legacy; will phase out per Report II §5).

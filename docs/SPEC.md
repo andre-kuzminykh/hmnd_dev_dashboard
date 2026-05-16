@@ -750,6 +750,111 @@ And значок имеет aria-label с тем же текстом для scre
 
 ---
 
+## F-17 — Configurable repository list for git extraction
+
+**Цель:** Дать админу возможность расширить набор репо, по которым `scripts.extract_git_stats` собирает CSV для дашборда, **без правки кода**. Это нужно потому что Report II identified ~10 active first-party repos beyond the 3 monorepos (firmware, drivers, hm-ops, etc.) — их можно опционально включить в productivity-метрики.
+
+### US-17.1 — Override repo list via CLI / env / config file
+
+> *As an* admin
+> *I want* указать список репо для extract_git_stats через CLI флаг, env-переменную или конфиг-файл
+> *so that* я могу расширять scope аудита без коммита изменений в код.
+
+#### SC-17.1.1 — Default behaviour preserved
+
+```gherkin
+Given нет ни `--repos`, ни env-переменной `HMND_GIT_REPOS`, ни `sources/git_repos.txt`
+When запускается `python -m scripts.extract_git_stats`
+Then скрипт использует built-in список из 3 репо: HumanoidTeam/{hmnd, hmnd-cloud, hmnd-sim}
+And поведение идентично pre-F-17 версии — те же CSV-файлы, те же количество строк
+```
+
+**Требования:**
+
+- **FR-17.1.1.1** — `scripts.extract_git_stats._resolve_repos(cli_arg)` возвращает list[str] согласно priority CLI > env > config file > built-in default.
+- **FR-17.1.1.2** — Built-in default = `["HumanoidTeam/hmnd", "HumanoidTeam/hmnd-cloud", "HumanoidTeam/hmnd-sim"]` (3 элемента, тот же порядок).
+
+#### SC-17.1.2 — CLI flag override
+
+```gherkin
+Given пользователь запускает `python -m scripts.extract_git_stats --repos "org/a,org/b,org/c"`
+When _resolve_repos() вызывается
+Then возвращает ["org/a", "org/b", "org/c"]
+And env-переменная и config-файл игнорируются
+```
+
+**Требования:**
+
+- **FR-17.1.2.1** — `--repos "a/b,c/d"` парсится через split по запятой, whitespace по краям обрезается, пустые элементы выкидываются.
+- **FR-17.1.2.2** — CLI значение имеет приоритет над env и config — если оно непустое.
+
+#### SC-17.1.3 — Env var override
+
+```gherkin
+Given нет `--repos`, но установлен `HMND_GIT_REPOS="x/y, z/w"`
+When _resolve_repos(None) вызывается
+Then возвращает ["x/y", "z/w"]
+And config-файл игнорируется
+```
+
+**Требования:**
+
+- **FR-17.1.3.1** — `HMND_GIT_REPOS` parsing идентичен CLI (split по запятой, strip whitespace, skip empties).
+- **FR-17.1.3.2** — Пустой env-var (`HMND_GIT_REPOS=""` или одни пробелы) trigger-ит fallback к config-файлу.
+
+#### SC-17.1.4 — Config file (`sources/git_repos.txt`)
+
+```gherkin
+Given нет `--repos`, нет env, но существует `sources/git_repos.txt` со строками:
+  """
+  # Production repos
+  HumanoidTeam/hmnd
+  HumanoidTeam/hmnd-cloud
+
+  #HumanoidTeam/disabled-fork
+  HumanoidTeam/hm-ops
+  """
+When _resolve_repos(None) вызывается
+Then возвращает ["HumanoidTeam/hmnd", "HumanoidTeam/hmnd-cloud", "HumanoidTeam/hm-ops"]
+And строки-комментарии и пустые строки игнорируются
+```
+
+**Требования:**
+
+- **FR-17.1.4.1** — Config-файл парсится построчно: всё после `#` отбрасывается, потом `.strip()`. Если результат непустой — добавляется в list. Это поддерживает inline-комментарии (`HumanoidTeam/hmnd  # core monorepo`).
+- **FR-17.1.4.2** — Файл не обязателен. Если отсутствует или пустой — fallback к built-in default.
+
+#### SC-17.1.5 — Resilience: одно неудачное клонирование не валит весь run
+
+```gherkin
+Given в списке 5 репо, и 1 из них приватный без доступа PAT
+When extract_git_stats запускается
+Then 4 успешных репо обрабатываются как обычно
+And скрипт печатает SKIPPED список с failed репо
+And exit code = 0 (это не fatal)
+```
+
+**Требования:**
+
+- **FR-17.1.5.1** — `_ensure_repo()` возвращает `None` при failed clone (вместо ranta'я выхода). Caller skip-ает None и продолжает с остальными репо.
+- **FR-17.1.5.2** — В конце экстракции печатается список SKIPPED репо если он непуст.
+
+#### SC-17.1.6 — Repo identification
+
+```gherkin
+Given в строке "org/repo" формат корректный
+When _ensure_repo() обрабатывает её
+Then short_name = "repo" (всё после первого '/')
+And `git_commits.repo` column в CSV содержит short_name, не full org/repo
+```
+
+**Требования:**
+
+- **FR-17.1.6.1** — short name = `full_name.split("/", 1)[1]`. Для строк без '/' — skip с warning'ом.
+- **FR-17.1.6.2** — Существующие CSV-данные (3 default repos) под short names `hmnd`, `hmnd-cloud`, `hmnd-sim` остаются совместимы — никакого ре-export'а не требуется.
+
+---
+
 Каждый тест в `tests/` именуется `test_<req_id_lower>` и проверяет ровно одно требование.
 
 | Тест файла | Требование |
@@ -812,6 +917,15 @@ And значок имеет aria-label с тем же текстом для scre
 | `tests/test_ux_help.py::test_help_icon_escapes_html` | FR-16.1.1.3 |
 | `tests/test_ux_help.py::test_section_without_help_has_no_icon` | FR-16.1.1.4 |
 | `tests/test_ux_help.py::test_help_icon_carries_aria_label` | FR-16.1.2.1 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_1_1_priority_order` | FR-17.1.1.1 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_1_2_builtin_default` | FR-17.1.1.2 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_2_1_cli_parsing` | FR-17.1.2.1 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_2_2_cli_beats_env_and_file` | FR-17.1.2.2 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_3_1_env_parsing` | FR-17.1.3.1 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_3_2_empty_env_falls_through` | FR-17.1.3.2 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_4_1_file_strips_comments_and_blanks` | FR-17.1.4.1 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_4_2_missing_or_empty_file_falls_back_to_default` | FR-17.1.4.2 |
+| `tests/test_extract_git_stats.py::test_fr_17_1_6_1_short_name_after_slash` | FR-17.1.6.1 |
 
 ## Архитектура слоёв
 

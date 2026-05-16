@@ -1,19 +1,27 @@
-"""Extract git stats from the three Humanoid repos on the VM and drop
-CSVs into sources/ where the dashboard's loader will pick them up.
+"""Extract git stats from Humanoid repos on the VM and drop CSVs into
+sources/ where the dashboard's loader will pick them up.
 
 Run on the VM:
     docker compose exec dashboard python -m scripts.extract_git_stats
 
 Reads GitHub PAT from env GITHUB_TOKEN (or HMND_GITHUB_TOKEN).
-Clones / pulls the three repos shallow into /tmp/hmnd_repos_clone,
+Clones / pulls each repo shallow into /tmp/hmnd_repos_clone,
 walks `git log --numstat`, and writes:
     sources/git_commit_file_stats_YYYYMMDD.csv  (per-commit-file)
     sources/git_authors_YYYYMMDD.csv            (per-author rollup)
+
+Repository list — resolution order (first match wins):
+  1. --repos a/b,c/d on the command line
+  2. HMND_GIT_REPOS env var (comma-separated org/repo names)
+  3. sources/git_repos.txt — one "org/repo" per line, blank lines and
+     lines starting with '#' ignored
+  4. Built-in default: HumanoidTeam/{hmnd, hmnd-cloud, hmnd-sim}
 
 Idempotent: re-runs do `git fetch` + replace the CSVs.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import os
 import subprocess
@@ -22,7 +30,9 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-REPOS = [
+# Built-in default — the three core monorepos. Override via --repos /
+# HMND_GIT_REPOS / sources/git_repos.txt to widen the audit scope.
+DEFAULT_REPOS = [
     "HumanoidTeam/hmnd",
     "HumanoidTeam/hmnd-cloud",
     "HumanoidTeam/hmnd-sim",
@@ -31,9 +41,40 @@ REPOS = [
 CLONE_ROOT = Path("/tmp/hmnd_repos_clone")
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ROOT / "sources"
+REPO_LIST_FILE = SOURCES / "git_repos.txt"
 TODAY = date.today().strftime("%Y%m%d")
 OUT_COMMITS = SOURCES / f"git_commit_file_stats_{TODAY}.csv"
 OUT_AUTHORS = SOURCES / f"git_authors_{TODAY}.csv"
+
+
+def _resolve_repos(cli_arg: str | None) -> list[str]:
+    """Pick the repo list from CLI / env / config / default."""
+    # 1. CLI takes precedence
+    if cli_arg:
+        repos = [r.strip() for r in cli_arg.split(",") if r.strip()]
+        if repos:
+            print(f"[repos] using --repos: {len(repos)} repo(s)")
+            return repos
+    # 2. Env var
+    env = os.environ.get("HMND_GIT_REPOS", "").strip()
+    if env:
+        repos = [r.strip() for r in env.split(",") if r.strip()]
+        if repos:
+            print(f"[repos] using HMND_GIT_REPOS: {len(repos)} repo(s)")
+            return repos
+    # 3. Config file
+    if REPO_LIST_FILE.exists():
+        repos = []
+        for raw in REPO_LIST_FILE.read_text(encoding="utf-8").splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if line:
+                repos.append(line)
+        if repos:
+            print(f"[repos] using {REPO_LIST_FILE.name}: {len(repos)} repo(s)")
+            return repos
+    # 4. Built-in
+    print(f"[repos] using built-in default: {len(DEFAULT_REPOS)} repo(s)")
+    return list(DEFAULT_REPOS)
 
 
 def _token() -> str:
@@ -45,8 +86,13 @@ def _token() -> str:
     return tok
 
 
-def _ensure_repo(token: str, full_name: str) -> Path:
-    """Clone (shallow) or fast-forward the repo. Returns local .git dir."""
+def _ensure_repo(token: str, full_name: str) -> Path | None:
+    """Clone (shallow) or fast-forward the repo. Returns local .git dir,
+    or None if cloning failed (e.g. repo is private and PAT lacks access).
+    """
+    if "/" not in full_name:
+        print(f"  skip: '{full_name}' is not in org/repo form", file=sys.stderr)
+        return None
     org, name = full_name.split("/", 1)
     target = CLONE_ROOT / f"{name}.git"
     auth_url = f"https://{token}@github.com/{full_name}.git"
@@ -60,14 +106,16 @@ def _ensure_repo(token: str, full_name: str) -> Path:
             print(f"  fetch failed: {r.stderr.strip()[:200]}", file=sys.stderr)
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
-        print(f"[{name}] cloning (shallow bare)…")
+        print(f"[{name}] cloning (bare)…")
         r = subprocess.run(
             ["git", "clone", "--bare", "--quiet", auth_url, str(target)],
             capture_output=True, text=True,
         )
         if r.returncode != 0:
             print(f"  clone failed: {r.stderr.strip()[:200]}", file=sys.stderr)
-            return target
+            # Clean up partial clone so next run can retry cleanly
+            subprocess.run(["rm", "-rf", str(target)], check=False)
+            return None
     return target
 
 
@@ -113,8 +161,13 @@ def _walk_repo(repo_dir: Path, repo_short: str, writer: csv.writer) -> int:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Extract git stats from Humanoid repos")
+    parser.add_argument("--repos", help="Comma-separated 'org/repo' list (overrides env + file)")
+    args = parser.parse_args()
+
     SOURCES.mkdir(parents=True, exist_ok=True)
     token = _token()
+    repos = _resolve_repos(args.repos)
 
     # 1) Per-commit-file CSV
     print(f"\n→ writing {OUT_COMMITS}")
@@ -126,13 +179,21 @@ def main() -> int:
             "file_path", "additions", "deletions", "is_binary",
         ])
         total = 0
-        for full in REPOS:
-            short = full.split("/", 1)[1]
+        skipped: list[str] = []
+        for full in repos:
+            short = full.split("/", 1)[1] if "/" in full else full
             repo_dir = _ensure_repo(token, full)
+            if repo_dir is None:
+                skipped.append(full)
+                continue
             n = _walk_repo(repo_dir, short, w)
             total += n
             print(f"  {short}: {n:,} file-rows")
-        print(f"  TOTAL file-rows: {total:,}")
+        print(f"  TOTAL file-rows: {total:,}  (across {len(repos) - len(skipped)} repo(s))")
+        if skipped:
+            print(f"  SKIPPED {len(skipped)} (clone failed — check PAT access):")
+            for s in skipped:
+                print(f"    - {s}")
 
     # 2) Per-author rollup from the per-commit-file CSV
     print(f"\n→ aggregating to {OUT_AUTHORS}")
@@ -186,7 +247,7 @@ def main() -> int:
     print(f"  authors: {len(authors)}")
     print("\n✓ done. The next sync tick will load both CSVs into the dashboard.")
     print("  To trigger now:")
-    print("    docker compose exec dashboard python -m scripts.reset --days 90")
+    print("    docker compose exec dashboard python -m scripts.sync --days 90")
     return 0
 
 
