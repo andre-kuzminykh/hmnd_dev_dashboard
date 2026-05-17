@@ -883,14 +883,14 @@
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl">Lectures L1–L8<small>one per week, weeks 6–13</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-green-l">L1 Specs</div>
-          <div class="gantt-cell gc-green-l">L2 Tests</div>
-          <div class="gantt-cell gc-green-l">L3 AGENTS</div>
-          <div class="gantt-cell gc-green-l">L4 Evals</div>
-          <div class="gantt-cell gc-green-l">L5 IaC</div>
-          <div class="gantt-cell gc-green-l">L6 Agents</div>
-          <div class="gantt-cell gc-green-l">L7 Cost</div>
-          <div class="gantt-cell gc-green-l">L8 Gov</div>
+          <div class="gantt-cell gc-green-l">L1 Framework</div>
+          <div class="gantt-cell gc-green-l">L2 Spec</div>
+          <div class="gantt-cell gc-green-l">L3 Test</div>
+          <div class="gantt-cell gc-green-l">L4 Dev</div>
+          <div class="gantt-cell gc-green-l">L5 Refactor</div>
+          <div class="gantt-cell gc-green-l">L6 CI/CD</div>
+          <div class="gantt-cell gc-green-l">L7 CR</div>
+          <div class="gantt-cell gc-green-l">L8 Adoption</div>
         </div>
 
       </div>
@@ -966,57 +966,57 @@
       <p class="text-sm text-muted mb-4">One lecture per week (60-min recorded session + 30-min Q&amp;A + 1 take-home exercise reviewed in the next session). Champion-led — named in each card. Target audience: all 87 active engineers.</p>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L1</div><span class="pill pill-blue">Specs</span></div><span class="text-xs text-muted">Week 6</span></div>
-          <h4 class="font-bold text-navy mt-2">Spec discipline</h4>
-          <p class="text-xs text-muted mt-2">Feature → User Flow → Use Case → FR/NFR → Tests-by-4-layers (Infra · Data · Service · AI). The F-17 template, applied.</p>
-          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> rewrite one feature spec</p>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L1</div><span class="pill pill-blue">Framework</span></div><span class="text-xs text-muted">Week 6</span></div>
+          <h4 class="font-bold text-navy mt-2">AI-Native development framework</h4>
+          <p class="text-xs text-muted mt-2">The full picture: how Spec → Test → Dev → Refactor → CI/CD → CR → Adoption fits together with the AI tool stack (Cursor · Claude Code · Open Harness). Sets the vocabulary for L2–L8.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> map your team's current flow against the framework</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L2</div><span class="pill pill-blue">Tests</span></div><span class="text-xs text-muted">Week 7</span></div>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L2</div><span class="pill pill-blue">Spec</span></div><span class="text-xs text-muted">Week 7</span></div>
+          <h4 class="font-bold text-navy mt-2">Spec discipline</h4>
+          <p class="text-xs text-muted mt-2">Feature → User Flow → Use Case → FR/NFR → Tests-by-4-layers (Infra · Data · Service · AI). The F-17 template, applied. AGENTS.md craft included.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Atindra · <strong>Take-home:</strong> rewrite one feature spec + draft an AGENTS.md</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-blue">
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L3</div><span class="pill pill-blue">Test</span></div><span class="text-xs text-muted">Week 8</span></div>
           <h4 class="font-bold text-navy mt-2">Test pyramid that catches AI bugs</h4>
-          <p class="text-xs text-muted mt-2">Unit / contract / integration / E2E. Snapshot tests for AI-generated output. Why: <code>hmnd_wholebody</code> (4 tests / 60k LoC) and <code>hmnd_firmware</code> (0 tests) need a floor.</p>
+          <p class="text-xs text-muted mt-2">Unit / contract / integration / E2E. Snapshot tests for AI-generated output. Prompt-regression evals. Why: <code>hmnd_wholebody</code> (4 tests / 60k LoC) and <code>hmnd_firmware</code> (0 tests) need a floor.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> hmnd_robot owner · <strong>Demo:</strong> 401-test layout</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L3</div><span class="pill pill-blue">AGENTS</span></div><span class="text-xs text-muted">Week 8</span></div>
-          <h4 class="font-bold text-navy mt-2">AGENTS.md craft</h4>
-          <p class="text-xs text-muted mt-2">Anatomy of <code>hmnd/AGENTS.md</code>: TL;DR, architecture rule, language-specific anti-patterns, build/test commands. Why: 9/14 hmnd modules + all of hmnd-cloud have no AGENTS.md.</p>
-          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Atindra · <strong>Take-home:</strong> AGENTS.md for one module</p>
-        </div>
-        <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L4</div><span class="pill pill-blue">Evals</span></div><span class="text-xs text-muted">Week 9</span></div>
-          <h4 class="font-bold text-navy mt-2">Prompt-regression evals</h4>
-          <p class="text-xs text-muted mt-2">5–10 canonical tasks run quarterly against current AGENTS.md / .cursor/rules. Why: single biggest cross-cutting gap; AGENTS edits silently break AI behaviour today.</p>
-          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> write 2 eval tasks</p>
-        </div>
-        <div class="det-card p-4 border-t-4 border-t-green-600">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L5</div><span class="pill pill-ok">IaC</span></div><span class="text-xs text-muted">Week 10</span></div>
-          <h4 class="font-bold text-navy mt-2">Safe Terraform with AI</h4>
-          <p class="text-xs text-muted mt-2">Plan, never apply from AI. Per-domain blast-radius matrix. tflint / tfsec / checkov as PR gate. Why: hmnd-cloud is highest-blast-radius repo in scope.</p>
-          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> matakan · <strong>Demo:</strong> PR-validation workflow</p>
-        </div>
-        <div class="det-card p-4 border-t-4 border-t-green-600">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L6</div><span class="pill pill-ok">Agents</span></div><span class="text-xs text-muted">Week 11</span></div>
-          <h4 class="font-bold text-navy mt-2">Agent workflows that ship code</h4>
-          <p class="text-xs text-muted mt-2">Claude Code multi-file refactors, Cursor Agent for boilerplate, when to drop to Tab. Why: Eugene's pattern (Claude $2.3k + 1.6k commits) is the gold standard.</p>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L4</div><span class="pill pill-blue">Dev</span></div><span class="text-xs text-muted">Week 9</span></div>
+          <h4 class="font-bold text-navy mt-2">Dev workflows with AI agents</h4>
+          <p class="text-xs text-muted mt-2">Claude Code multi-file refactors · Cursor Agent for boilerplate · when to drop to Tab. Eugene's pattern (Claude $2.3k + 1.6k commits) is the gold standard. Open Harness for sensitive data.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eugene · <strong>Demo:</strong> one Claude Code session end-to-end</p>
         </div>
-        <div class="det-card p-4 border-t-4 border-t-amber-500">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L7</div><span class="pill pill-warn">Cost</span></div><span class="text-xs text-muted">Week 12</span></div>
-          <h4 class="font-bold text-navy mt-2">Cost discipline &amp; routing</h4>
-          <p class="text-xs text-muted mt-2">$0.001 → $0.37/req is a 370× spread. When o-series is right, when it's habit. Why: 3 users burn $1k/mo on o-series for routine queries.</p>
-          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eng Manager · <strong>Demo:</strong> routing policy in action</p>
+        <div class="det-card p-4 border-t-4 border-t-green-600">
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L5</div><span class="pill pill-ok">Refactoring</span></div><span class="text-xs text-muted">Week 10</span></div>
+          <h4 class="font-bold text-navy mt-2">Refactoring &amp; technical debt</h4>
+          <p class="text-xs text-muted mt-2">Code-quality alerts as the trigger. AI-assisted duplication removal. Cost of 21+-file commits (15% of total) — review depth policy. Why: hmnd_fleet 35.3% bug rate signals deferred cleanup.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> module owners · <strong>Take-home:</strong> 1 PR closing a code-quality alert</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-green-600">
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L6</div><span class="pill pill-ok">CI/CD</span></div><span class="text-xs text-muted">Week 11</span></div>
+          <h4 class="font-bold text-navy mt-2">CI/CD for AI-generated code</h4>
+          <p class="text-xs text-muted mt-2">PR-validation: terraform validate · tflint · tfsec · checkov. Per-module test workflows. Safe Terraform with AI — plan, never apply. Why: hmnd-cloud is the highest-blast-radius repo in scope.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> matakan · <strong>Demo:</strong> PR-validation workflow on hmnd-cloud</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-amber-500">
-          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L8</div><span class="pill pill-warn">Gov</span></div><span class="text-xs text-muted">Week 13</span></div>
-          <h4 class="font-bold text-navy mt-2">Governance &amp; review rules</h4>
-          <p class="text-xs text-muted mt-2">CODEOWNERS · branch protection · AI-assist PR template · audit policy for 21+-file commits (15% of total). Why: the line between "AI-accelerated" and "AI-incident" team is process.</p>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L7</div><span class="pill pill-warn">CR</span></div><span class="text-xs text-muted">Week 12</span></div>
+          <h4 class="font-bold text-navy mt-2">Code Review of AI PRs</h4>
+          <p class="text-xs text-muted mt-2">CODEOWNERS-driven routing. Audit policy for 21+-file commits. AI-assist PR template checkbox. What to look for in AI-generated code: hallucinated APIs, silent type drift, missing tests, over-broad refactors.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eng Manager + Eugene · <strong>Demo:</strong> reviewing 3 real AI PRs live</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-amber-500">
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L8</div><span class="pill pill-warn">Adoption</span></div><span class="text-xs text-muted">Week 13</span></div>
+          <h4 class="font-bold text-navy mt-2">Adoption · governance · cost</h4>
+          <p class="text-xs text-muted mt-2">Q1 champion playbook rollout to Q3 (42 engineers off AI). Budget alerts $500/$1k. Model-routing policy ($3–5k/mo opportunity). Cross-train 4 single-person modules. Closing the loop on adoption.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> CTO + Eng Manager</p>
         </div>
       </div>
       <div class="conclusion mt-4 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">8 lectures × 8 weeks (W6–W13) = the full AI-Native curriculum. <strong>W6–W9</strong> are foundational (L1 Specs · L2 Tests · L3 AGENTS · L4 Evals). <strong>W10–W11</strong> deepen technique (L5 IaC · L6 Agents). <strong>W12–W13</strong> close on cost discipline + governance (L7 Cost · L8 Gov). Total cost: ~12 prep-hours + 12 attendee-hours × 87 engineers.</p>
+        <p class="text-navy">8 lectures × 8 weeks (W6–W13) = the full AI-Native curriculum. <strong>L1 Framework</strong> sets the vocabulary. <strong>L2 Spec · L3 Test · L4 Dev</strong> build the development loop. <strong>L5 Refactoring · L6 CI/CD · L7 CR</strong> shape the quality &amp; delivery side. <strong>L8 Adoption</strong> closes on rollout, cost discipline, and governance. Total cost: ~12 prep-hours + 12 attendee-hours × 87 engineers.</p>
       </div>
     </div>
 
