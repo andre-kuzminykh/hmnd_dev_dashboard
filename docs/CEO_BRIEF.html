@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#06091c" />
+  <title>HMND · AI Engineering Transformation — CEO Brief</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #06091c; --blue: #4953d8; --muted: #64748b; --text: #0f172a;
+      --line: #e8edf3; --soft: #f8fafc;
+      --success: #16a34a; --warning: #f59e0b; --danger: #ef4444;
+      --success-bg: #ecfdf5; --warning-bg: #fffbeb; --danger-bg: #fef2f2;
+    }
+    body { font-family: 'Inter', sans-serif; background: var(--soft); color: var(--text); -webkit-font-smoothing: antialiased; }
+    .shadow-card { box-shadow: 0 1px 3px rgba(6,9,28,.03), 0 4px 20px rgba(6,9,28,.04); }
+    .shadow-glow { box-shadow: 0 0 60px rgba(73,83,216,.25); }
+
+    /* Tooltip */
+    .has-tooltip { position: relative; display: inline-flex; align-items: center; cursor: help; }
+    .tooltip {
+      visibility: hidden; opacity: 0; position: absolute; bottom: calc(100% + 10px); left: 50%;
+      transform: translateX(-50%) translateY(5px); transition: all .18s cubic-bezier(.16,1,.3,1);
+      z-index: 100; width: max-content; max-width: 320px; white-space: normal; pointer-events: none;
+      background: rgba(255,255,255,.97); backdrop-filter: blur(10px); border: 1px solid var(--line);
+      box-shadow: 0 10px 40px rgba(6,9,28,.12); border-radius: .75rem; padding: .85rem 1rem;
+      color: var(--navy); font-size: .73rem; line-height: 1.5; text-align: left;
+    }
+    .tooltip::after {
+      content: ''; position: absolute; top: 100%; left: 50%; margin-left: -6px;
+      border-width: 6px; border-style: solid;
+      border-color: rgba(255,255,255,.97) transparent transparent transparent;
+    }
+    .has-tooltip:hover .tooltip, .has-tooltip:focus-within .tooltip {
+      visibility: visible; opacity: 1; transform: translateX(-50%) translateY(0);
+    }
+    .has-tooltip.dark .tooltip { background: var(--navy); color: #fff; border-color: rgba(255,255,255,.1); }
+    .has-tooltip.dark .tooltip::after { border-top-color: var(--navy); }
+    /* keep tooltip on screen on mobile — flip to bottom for cards near top */
+    @media (max-width: 640px) {
+      .tooltip { max-width: 280px; }
+      .has-tooltip.flip .tooltip { bottom: auto; top: calc(100% + 10px); }
+      .has-tooltip.flip .tooltip::after {
+        top: auto; bottom: 100%; border-color: transparent transparent rgba(255,255,255,.97) transparent;
+      }
+      .has-tooltip.flip.dark .tooltip::after { border-bottom-color: var(--navy); }
+    }
+
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] > summary .chev { transform: rotate(180deg); }
+    .chev { transition: transform .2s; }
+
+    .grid-dots { background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 22px 22px; opacity: .35; }
+
+    /* Bars */
+    .bar { transition: width .6s cubic-bezier(.16,1,.3,1); }
+
+    /* Tab buttons (lecture switcher) */
+    .tab-btn[aria-selected="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .tab-btn { transition: all .15s; }
+
+    /* Print-friendly */
+    @media print {
+      .no-print, nav { display: none !important; }
+      details { break-inside: avoid; }
+      details summary + * { display: block !important; }
+    }
+
+    /* Mobile-friendly: hide deep table columns on small screens */
+    @media (max-width: 640px) {
+      .col-hide-mob { display: none; }
+    }
+  </style>
+  <script>
+    tailwind.config = { theme: { extend: { colors: {
+      navy: '#06091c', blue: '#4953d8', muted: '#64748b', line: '#e8edf3', soft: '#f8fafc',
+    } } } };
+  </script>
+</head>
+<body class="selection:bg-blue selection:text-white">
+
+<!-- ────────────────────────── NAV ────────────────────────── -->
+<nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-line px-4 sm:px-6 py-3 no-print">
+  <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
+    <a href="#top" class="flex items-center gap-2 font-bold text-navy">
+      <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="HMND" class="w-7 h-7" />
+      <span class="hidden sm:inline tracking-widest text-sm">HUMANOID</span>
+    </a>
+    <div class="hidden md:flex gap-5 text-xs font-medium text-muted">
+      <a href="#snapshot" class="hover:text-blue">Snapshot</a>
+      <a href="#part1" class="hover:text-blue">Часть 1: Economics</a>
+      <a href="#part2" class="hover:text-blue">Часть 2: Tech</a>
+      <a href="#week1" class="hover:text-blue">Week 1</a>
+      <a href="#month1" class="hover:text-blue">Month 1</a>
+      <a href="#months3" class="hover:text-blue">Months 1–3</a>
+      <a href="#decisions" class="hover:text-blue">Decisions</a>
+    </div>
+    <button onclick="window.print()" class="text-xs bg-blue/10 text-blue px-3 py-1.5 rounded-lg border border-blue/20 hover:bg-blue hover:text-white transition flex items-center gap-1.5">
+      <i data-lucide="printer" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">PDF / Print</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ────────────────────────── HERO ────────────────────────── -->
+<header id="top" class="bg-navy relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6 text-white border-b-4 border-blue">
+  <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-blue/20 rounded-full blur-[100px] pointer-events-none"></div>
+  <div class="max-w-5xl mx-auto relative z-10">
+    <div class="text-[10px] font-bold tracking-widest text-blue uppercase mb-4 flex items-center gap-2">
+      <span class="w-2 h-2 rounded-full bg-blue animate-pulse"></span> Confidential · CEO Brief · 2026-05-16
+    </div>
+    <h1 class="text-3xl sm:text-5xl md:text-6xl font-bold leading-tight tracking-tight mb-6">
+      AI Engineering<br><span class="text-white/60">Transformation</span>
+    </h1>
+    <p class="text-base sm:text-xl text-white/85 leading-relaxed mb-8 max-w-3xl">
+      HMND уже использует AI <em>materially</em>: <strong>$23,353</strong> за 30 дней, <strong>140 активных людей</strong>,
+      <strong>top-10 = 63.2%</strong> расхода (управляемая концентрация).
+      Сейчас задача — построить три слоя: <strong>измеримость</strong>, <strong>безопасное окружение</strong>, <strong>обучение</strong>.
+    </p>
+    <div class="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-7 backdrop-blur-sm">
+      <p class="text-blue font-bold tracking-widest uppercase text-[10px] mb-3">Главный вопрос</p>
+      <p class="text-lg sm:text-xl font-medium">
+        «Какие AI-workflow реально улучшают delivery, quality и business outcomes — а какие только потребляют бюджет?»
+      </p>
+      <p class="text-xs sm:text-sm text-white/70 mt-4">
+        Текущие данные доказывают <strong>адопшн</strong> и <strong>концентрацию расходов</strong>.
+        ROI пока <strong>не доказан</strong> — нужна связка с Jira / PR review / CI / деплоями / инцидентами.
+      </p>
+    </div>
+  </div>
+</header>
+
+<!-- ────────────────────────── SNAPSHOT KPIs ────────────────────────── -->
+<section id="snapshot" class="bg-navy py-12 sm:py-16 px-4 sm:px-6 text-white border-y border-line">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <h2 class="text-xl sm:text-2xl font-bold uppercase tracking-widest mb-1">0. Executive Snapshot</h2>
+      <p class="text-white/60 text-sm">Telemetry: spend, humans, ROI, repo readiness.</p>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <!-- 1 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="dollar-sign" class="w-5 h-5 text-blue"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Post identity-merge, последние 30 дней. $23,353 × 12 ≈ $284k/год. Все 17 audit-проверок зелёные.</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1">$23.4k</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">AI Spend / Month</div>
+      </div>
+      <!-- 2 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="users" class="w-5 h-5 text-blue"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Люди с ≥ 1 AI-событием за последние 30 дней. Не путать с 206 lifetime-сегментацией (там все когда-либо видимые в Git/AI + 13 ботов).</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1">140</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">Active Humans (30d)</div>
+      </div>
+      <!-- 3 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="pie-chart" class="w-5 h-5 text-blue"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Anthropic 57.2% / Cursor 29.9% / OpenAI 12.9% по 30-day spend. Claude Code (Agent) — 83% от Anthropic = $11.5k.</span></span>
+        </div>
+        <div class="text-xl sm:text-2xl font-bold mb-1">57 / 30 / 13</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">Anth / Cur / OAI %</div>
+      </div>
+      <!-- 4 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="bar-chart-3" class="w-5 h-5 text-blue"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Top 5 = 44.7%, Top 10 = 63.2%. Pareto-pattern: cost управляется через alerts + model-routing, а не через cuts.</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1">63.2%</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">Top 10 Share</div>
+      </div>
+      <!-- 5 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="trending-up" class="w-5 h-5 text-amber-400"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Дашборд связал AI × Git. PR review / Jira / deploys / incidents ещё не подключены — без них AI ROI не доказан.</span></span>
+        </div>
+        <div class="text-base sm:text-xl font-bold mb-1">Not Proven</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">Productivity ROI</div>
+      </div>
+      <!-- 6 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="folder-check" class="w-5 h-5 text-emerald-400"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">hmnd: 14 модулей, 969k Python LoC, 864 теста, AGENTS.md в 5/14, README в 10/14. 2 модуля требуют гейтов: hmnd_wholebody, hmnd_firmware.</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1 text-emerald-400">4.0 / 5</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">hmnd Readiness</div>
+      </div>
+      <!-- 7 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-red-400"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">Terraform IaC, 124 .tf, 0 тестов, 0 AGENTS.md, 0 CODEOWNERS. Plane production-blast — пауза AI-PR до настройки гейтов.</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1 text-red-400">2.0 / 5</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">hmnd-cloud Readiness</div>
+      </div>
+      <!-- 8 -->
+      <div class="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5">
+        <div class="flex justify-between items-start mb-2">
+          <i data-lucide="bug" class="w-5 h-5 text-amber-400"></i>
+          <span class="has-tooltip dark flip"><i data-lucide="help-circle" class="w-4 h-4 text-white/40"></i>
+            <span class="tooltip">hmnd_fleet — 35.3% bug-fix rate (2× средний по hmnd). Топ-2 контрибутора там же — top-2 OpenAI reasoning-spender. Сигнал для 10-PR audit.</span></span>
+        </div>
+        <div class="text-2xl font-bold mb-1">35.3%</div>
+        <div class="text-[10px] text-white/50 uppercase tracking-widest">hmnd_fleet Bug Rate</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- ЧАСТЬ 1 — ЭКОНОМИКА ИИ (Report I)                                    -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="part1" class="py-12 sm:py-16 px-4 sm:px-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8 flex items-end justify-between flex-wrap gap-4">
+      <div>
+        <div class="text-[11px] font-bold tracking-widest text-blue uppercase mb-2">Часть 1 · Report I</div>
+        <h2 class="text-2xl sm:text-3xl font-bold text-navy">Экономика использования ИИ</h2>
+        <p class="text-muted text-sm mt-1">Где деньги, кто тратит, какие модели, и как governance.</p>
+      </div>
+      <a href="https://github.com/andre-kuzminykh/hmnd_dev_dashboard/blob/claude/token-monitoring-dashboard-aDaNV/docs/REPORT_I.md"
+         target="_blank"
+         class="text-xs bg-blue/10 text-blue px-3 py-2 rounded-lg border border-blue/20 hover:bg-blue hover:text-white transition flex items-center gap-1.5">
+        <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Полный Report I
+      </a>
+    </div>
+
+    <!-- 1.1 Spend Breakdown + Pareto -->
+    <div class="grid lg:grid-cols-2 gap-5 sm:gap-6 mb-6">
+      <!-- Tool mix -->
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <div class="flex items-start justify-between mb-4">
+          <h3 class="font-bold text-navy flex items-center gap-2"><i data-lucide="pie-chart" class="w-4 h-4 text-blue"></i> 1.1 Spend Mix (30d)</h3>
+          <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Anthropic — главный игрок, в основном через Claude Code (Agent). Cursor — повседневный IDE. OpenAI — небольшая база, но 4 пользователя там с $7-23 за msg.</span></span>
+        </div>
+        <!-- horizontal stacked bar -->
+        <div class="w-full h-7 flex rounded-lg overflow-hidden border border-line mb-4">
+          <div class="bar bg-blue text-white text-[10px] font-bold flex items-center justify-center" style="width:57.2%">57.2%</div>
+          <div class="bar bg-slate-500 text-white text-[10px] font-bold flex items-center justify-center" style="width:29.9%">29.9%</div>
+          <div class="bar bg-slate-300 text-navy text-[10px] font-bold flex items-center justify-center" style="width:12.9%">12.9%</div>
+        </div>
+        <div class="grid grid-cols-3 text-xs gap-2">
+          <div><div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-blue"></span>Anthropic</div><div class="font-bold">$13,779</div></div>
+          <div><div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-slate-500"></span>Cursor</div><div class="font-bold">$7,214</div></div>
+          <div><div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-slate-300"></span>OpenAI</div><div class="font-bold">$3,112</div></div>
+        </div>
+        <div class="mt-4 bg-soft border-l-4 border-blue p-3 text-xs text-navy rounded-r">
+          <strong>Anthropic split:</strong> Claude Code (Agent) <strong>$11,489 = 83%</strong>; Chat $1,334; Cowork $819; др. <$200.
+        </div>
+      </div>
+
+      <!-- Pareto -->
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <div class="flex items-start justify-between mb-4">
+          <h3 class="font-bold text-navy flex items-center gap-2"><i data-lucide="trending-up" class="w-4 h-4 text-blue"></i> 1.2 Spend Concentration (Pareto)</h3>
+          <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Top-10 покрывают 63.2% бюджета. Это управляемая концентрация — alerts на 10 человек = 80% контроля над cost drift. Не значит, что нужно «резать» power users.</span></span>
+        </div>
+        <div class="space-y-2 text-xs">
+          <div>
+            <div class="flex justify-between mb-1"><span>Top 5 spenders</span><span class="font-bold">44.7% ($10,443)</span></div>
+            <div class="w-full bg-soft border border-line rounded-full h-2.5 overflow-hidden"><div class="bar bg-blue h-full" style="width:44.7%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1"><span>Top 10 spenders</span><span class="font-bold">63.2% ($14,757)</span></div>
+            <div class="w-full bg-soft border border-line rounded-full h-2.5 overflow-hidden"><div class="bar bg-blue h-full" style="width:63.2%"></div></div>
+          </div>
+          <div>
+            <div class="flex justify-between mb-1"><span>Top 20 spenders</span><span class="font-bold">~85%</span></div>
+            <div class="w-full bg-soft border border-line rounded-full h-2.5 overflow-hidden"><div class="bar bg-blue/80 h-full" style="width:85%"></div></div>
+          </div>
+        </div>
+        <details class="mt-4 group">
+          <summary class="text-xs font-medium text-blue flex items-center justify-between p-2 bg-blue/5 rounded-lg hover:bg-blue/10">
+            <span>Top 5 spenders details</span><i data-lucide="chevron-down" class="w-4 h-4 chev"></i>
+          </summary>
+          <div class="mt-2 text-xs space-y-1">
+            <div class="flex justify-between p-2 bg-soft rounded"><span>1. Oleg Sinavski (Cursor)</span><span class="font-bold">$2,936</span></div>
+            <div class="flex justify-between p-2 bg-soft rounded"><span>2. Atindra Nair (Claude)</span><span class="font-bold">$2,340</span></div>
+            <div class="flex justify-between p-2 bg-soft rounded"><span>3. Eugene Lyapustin (Claude)</span><span class="font-bold">$2,319</span></div>
+            <div class="flex justify-between p-2 bg-soft rounded"><span>4. Richard (Claude)</span><span class="font-bold">$1,558</span></div>
+            <div class="flex justify-between p-2 bg-soft rounded"><span>5. Sam Pfeiffer (mixed)</span><span class="font-bold">$1,289</span></div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- 1.3 Model Cost Ladder + Outliers -->
+    <div class="grid lg:grid-cols-2 gap-5 sm:gap-6 mb-6">
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <div class="flex items-start justify-between mb-4">
+          <h3 class="font-bold text-navy flex items-center gap-2"><i data-lucide="layers" class="w-4 h-4 text-blue"></i> 1.3 Model Routing Policy</h3>
+          <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Reasoning-модели должны использоваться <em>осознанно</em> для сложных задач, не по умолчанию. ChatGPT outliers платят $17-23/msg — это reasoning-overuse, потенциал экономии ~$1,500/мес.</span></span>
+        </div>
+        <div class="space-y-2 text-xs">
+          <div class="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <i data-lucide="zap" class="w-4 h-4 text-emerald-700 shrink-0"></i>
+            <div class="flex-grow"><div class="font-bold text-emerald-900">Mini / Fast</div><div class="text-emerald-700">Routine Q&A, lookups</div></div>
+            <span class="text-[10px] uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded">Default</span>
+          </div>
+          <div class="flex items-center gap-3 p-3 bg-blue/10 border border-blue/30 rounded-lg">
+            <i data-lucide="code-2" class="w-4 h-4 text-blue shrink-0"></i>
+            <div class="flex-grow"><div class="font-bold text-navy">Mid-tier (Sonnet, 4.x-mini)</div><div class="text-muted">Normal coding, tests, docs</div></div>
+            <span class="text-[10px] uppercase tracking-wider bg-blue/20 text-blue px-2 py-0.5 rounded">Most work</span>
+          </div>
+          <div class="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <i data-lucide="cpu" class="w-4 h-4 text-amber-700 shrink-0"></i>
+            <div class="flex-grow"><div class="font-bold text-amber-900">Reasoning (Opus, o-series)</div><div class="text-amber-700">Architecture, multi-file refactor</div></div>
+            <span class="text-[10px] uppercase tracking-wider bg-amber-200 text-amber-900 px-2 py-0.5 rounded">Explicit only</span>
+          </div>
+          <div class="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <i data-lucide="alert-octagon" class="w-4 h-4 text-red-700 shrink-0"></i>
+            <div class="flex-grow"><div class="font-bold text-red-900">Special (TTS, vision)</div><div class="text-red-700">Voice / specialised workloads</div></div>
+            <span class="text-[10px] uppercase tracking-wider bg-red-200 text-red-900 px-2 py-0.5 rounded">Avoid accidental</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outliers chart -->
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <div class="flex items-start justify-between mb-4">
+          <h3 class="font-bold text-navy flex items-center gap-2"><i data-lucide="scatter-chart" class="w-4 h-4 text-blue"></i> 1.4 OpenAI Outliers — $/msg</h3>
+          <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">4 из 5 top OpenAI users платят $7-23 за каждое сообщение — это reasoning-модели для рутины. Тренировка / coaching экономит ~$1,000-1,500/мес.</span></span>
+        </div>
+        <!-- conceptual scatter -->
+        <div class="relative h-44 bg-soft border border-line rounded-xl overflow-hidden mb-3">
+          <div class="absolute inset-0 grid-dots"></div>
+          <div class="absolute left-2 sm:left-4 bottom-2 text-[9px] text-muted font-mono">Messages →</div>
+          <div class="absolute left-2 sm:left-4 top-1/2 -rotate-90 -translate-y-1/2 text-[9px] text-muted font-mono whitespace-nowrap origin-left">↑ Spend / msg</div>
+          <!-- outliers (low msg, high $/msg) -->
+          <span class="has-tooltip absolute" style="left:20%; top:18%;">
+            <span class="block w-9 h-9 bg-red-400/80 rounded-full shadow-md hover:scale-110 transition"></span>
+            <span class="tooltip">Cody Griffin: 51 msg, $23.11/msg — reasoning outlier</span>
+          </span>
+          <span class="has-tooltip absolute" style="left:32%; top:24%;">
+            <span class="block w-8 h-8 bg-red-400/70 rounded-full shadow-md"></span>
+            <span class="tooltip">Dr. Klingensmith: 34 msg, $23.25/msg</span>
+          </span>
+          <span class="has-tooltip absolute" style="left:25%; top:36%;">
+            <span class="block w-7 h-7 bg-amber-400/70 rounded-full shadow-md"></span>
+            <span class="tooltip">Sam Pfeiffer: 26 msg, $17.85/msg</span>
+          </span>
+          <span class="has-tooltip absolute" style="left:50%; top:55%;">
+            <span class="block w-6 h-6 bg-slate-400/70 rounded-full shadow-md"></span>
+            <span class="tooltip">Tobias Jacob: 18 msg, $7.46/msg</span>
+          </span>
+          <!-- automation (high msg, very low $/msg) -->
+          <span class="has-tooltip absolute" style="left:80%; top:80%;">
+            <span class="block w-10 h-10 bg-blue/70 rounded-full shadow-md hover:scale-110 transition"></span>
+            <span class="tooltip">Artem (n8n_artem): 57,250 msg, $0.01/msg — pure automation</span>
+          </span>
+        </div>
+        <div class="text-xs text-muted">
+          <strong class="text-red-600">Красный кластер</strong> (top-left) — coaching candidates.
+          <strong class="text-blue">Синий</strong> (bottom-right) — n8n automation, OK as-is.
+        </div>
+      </div>
+    </div>
+
+    <!-- 1.5 Adoption Segments -->
+    <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card mb-6">
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
+        <h3 class="font-bold text-navy flex items-center gap-2"><i data-lucide="grid-2x2" class="w-4 h-4 text-blue"></i> 1.5 Adoption Segments (Git × AI, lifetime universe = 206)</h3>
+        <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+          <span class="tooltip">Lifetime universe = все когда-либо видимые в users или git_authors + 13 ботов. ≠ "140 active 30d". Это разные cohort'ы — оба корректны.</span></span>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 text-xs">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-emerald-700">21</div>
+          <div class="text-[10px] uppercase tracking-wider text-emerald-900 mt-1">High AI · High Git</div>
+          <div class="text-[10px] text-emerald-700 mt-1">Power users — playbook</div>
+        </div>
+        <div class="bg-blue/5 border border-blue/30 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-blue">7</div>
+          <div class="text-[10px] uppercase tracking-wider text-navy mt-1">Low AI · High Git</div>
+          <div class="text-[10px] text-muted mt-1">Coaching target</div>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-amber-700">1</div>
+          <div class="text-[10px] uppercase tracking-wider text-amber-900 mt-1">AI lines, few commits</div>
+          <div class="text-[10px] text-amber-700 mt-1">Workflow review</div>
+        </div>
+        <div class="bg-slate-100 border border-slate-300 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-slate-700">13</div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-900 mt-1">Bots / Agents</div>
+          <div class="text-[10px] text-slate-700 mt-1">Audit PR quality</div>
+        </div>
+        <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-purple-700">79</div>
+          <div class="text-[10px] uppercase tracking-wider text-purple-900 mt-1">AI active, no Git</div>
+          <div class="text-[10px] text-purple-700 mt-1">PM / Ops / Exec</div>
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-red-700">42</div>
+          <div class="text-[10px] uppercase tracking-wider text-red-900 mt-1">Git active, no AI</div>
+          <div class="text-[10px] text-red-700 mt-1">Onboarding gap</div>
+        </div>
+        <div class="bg-soft border border-line rounded-lg p-3 text-center">
+          <div class="text-2xl font-bold text-navy">43</div>
+          <div class="text-[10px] uppercase tracking-wider text-navy mt-1">Normal</div>
+          <div class="text-[10px] text-muted mt-1">Healthy</div>
+        </div>
+      </div>
+      <div class="mt-4 text-xs text-muted text-center bg-soft rounded-lg p-2">
+        <strong>Reconciliation:</strong> 206 lifetime − 13 ботов = 193 humans. Из них <strong>140</strong> использовали AI за 30 дней. Разница (53) = git-active в прошлом но не в окне.
+      </div>
+    </div>
+
+    <!-- 1.6 ECONOMICS RECOMMENDATIONS -->
+    <details class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card mb-6" open>
+      <summary class="font-bold text-navy flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2"><i data-lucide="target" class="w-4 h-4 text-blue"></i> 1.6 Рекомендации по экономике (5)</span>
+        <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev"></i>
+      </summary>
+      <div class="mt-5 grid md:grid-cols-2 gap-3 text-xs">
+        <div class="border border-line rounded-lg p-3">
+          <div class="font-bold text-navy mb-1">1 · Model-routing policy</div>
+          <div class="text-muted">Default mid-tier, escalate to reasoning only on demand. Экономия: <strong class="text-emerald-700">$1.5-3k/мес</strong>.</div>
+        </div>
+        <div class="border border-line rounded-lg p-3">
+          <div class="font-bold text-navy mb-1">2 · Budget alerts $500 / $1,000</div>
+          <div class="text-muted">Не cap, а early-warning. Покрывает 80% cost drift через ~10 человек.</div>
+        </div>
+        <div class="border border-line rounded-lg p-3">
+          <div class="font-bold text-navy mb-1">3 · Top-5 power-user interviews</div>
+          <div class="text-muted">Oleg, atin, Eugene, Richard, Sam Pfeiffer — записать workflow, опубликовать playbook.</div>
+        </div>
+        <div class="border border-line rounded-lg p-3">
+          <div class="font-bold text-navy mb-1">4 · Onboard 42 "Git-active, no AI"</div>
+          <div class="text-muted">Pair с champions на 1 sprint каждого. Productivity left on the table.</div>
+        </div>
+        <div class="border border-line rounded-lg p-3 md:col-span-2">
+          <div class="font-bold text-navy mb-1">5 · Connect Jira + PR + Incidents для ROI proof</div>
+          <div class="text-muted">AI ↔ Git уже подключён. Не хватает: PR review (time-to-merge, review comments, reverts) + Jira (cycle time, closures, incidents). Только тогда возможна метрика «cost per merged PR» / «cost per closed ticket».</div>
+        </div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- ЧАСТЬ 2 — ТЕХНИЧЕСКАЯ АДАПТАЦИЯ (Report II)                          -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="part2" class="py-12 sm:py-16 px-4 sm:px-6 bg-white border-y border-line">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8 flex items-end justify-between flex-wrap gap-4">
+      <div>
+        <div class="text-[11px] font-bold tracking-widest text-blue uppercase mb-2">Часть 2 · Report II</div>
+        <h2 class="text-2xl sm:text-3xl font-bold text-navy">Готовность инженерной среды к AI-codegen</h2>
+        <p class="text-muted text-sm mt-1">Глубокий аудит 2 из 120 репо — там 95%+ инженерной работы (hmnd, hmnd-cloud + deprecated hmnd-sim).</p>
+      </div>
+      <a href="https://github.com/andre-kuzminykh/hmnd_dev_dashboard/blob/claude/token-monitoring-dashboard-aDaNV/docs/REPORT_II.md"
+         target="_blank"
+         class="text-xs bg-blue/10 text-blue px-3 py-2 rounded-lg border border-blue/20 hover:bg-blue hover:text-white transition flex items-center gap-1.5">
+        <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Полный Report II
+      </a>
+    </div>
+
+    <!-- 2.1 Repo Readiness Scorecard -->
+    <div class="grid md:grid-cols-3 gap-4 sm:gap-5 mb-6">
+      <div class="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 shadow-card">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-700 bg-emerald-100 px-2 py-1 rounded">MOSTLY READY</span>
+          <span class="text-3xl font-bold text-emerald-700">4.0<span class="text-base text-emerald-500">/5</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-lg mb-2">hmnd</h3>
+        <p class="text-xs text-muted mb-3">Main monorepo. 14 модулей, 969k Python LoC, 864 теста. AGENTS.md best-in-class.</p>
+        <div class="text-xs space-y-1.5">
+          <div class="flex justify-between"><span>AGENTS.md root</span><span class="text-emerald-700 font-bold">✓</span></div>
+          <div class="flex justify-between"><span>.cursor/rules + .claude/</span><span class="text-emerald-700 font-bold">✓</span></div>
+          <div class="flex justify-between"><span>CODEOWNERS</span><span class="text-emerald-700 font-bold">✓</span></div>
+          <div class="flex justify-between"><span>40+ CI workflows</span><span class="text-emerald-700 font-bold">✓</span></div>
+          <div class="flex justify-between"><span>pre-commit 10 KB</span><span class="text-emerald-700 font-bold">✓</span></div>
+        </div>
+      </div>
+
+      <div class="bg-red-50 border-2 border-red-300 rounded-2xl p-5 shadow-card relative">
+        <div class="absolute top-0 right-0 bg-red-600 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase tracking-widest">Pause AI PRs</div>
+        <div class="flex items-center justify-between mb-3 mt-6">
+          <span class="text-[10px] font-bold uppercase tracking-widest text-red-700 bg-red-100 px-2 py-1 rounded">PARTIALLY READY</span>
+          <span class="text-3xl font-bold text-red-700">2.0<span class="text-base text-red-500">/5</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-lg mb-2">hmnd-cloud</h3>
+        <p class="text-xs text-muted mb-3">Terraform IaC. 124 .tf, production blast radius. Highest risk.</p>
+        <div class="text-xs space-y-1.5">
+          <div class="flex justify-between"><span>AGENTS.md</span><span class="text-red-600 font-bold">✗</span></div>
+          <div class="flex justify-between"><span>CODEOWNERS</span><span class="text-red-600 font-bold">✗</span></div>
+          <div class="flex justify-between"><span>Tests (terratest / tflint)</span><span class="text-red-600 font-bold">0</span></div>
+          <div class="flex justify-between"><span>PR validation gate</span><span class="text-red-600 font-bold">✗</span></div>
+          <div class="flex justify-between"><span>docs/</span><span class="text-red-600 font-bold">✗</span></div>
+        </div>
+      </div>
+
+      <div class="bg-slate-100 border-2 border-slate-300 rounded-2xl p-5 shadow-card">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-[10px] font-bold uppercase tracking-widest text-slate-700 bg-slate-200 px-2 py-1 rounded">DEPRECATED</span>
+          <span class="text-2xl font-bold text-slate-500">N/A</span>
+        </div>
+        <h3 class="font-bold text-navy text-lg mb-2">hmnd-sim</h3>
+        <p class="text-xs text-muted mb-3">Sim repo deprecated 2025-08. Реальный sim — в hmnd/hmnd_sim директории.</p>
+        <div class="text-xs space-y-1.5">
+          <div class="flex justify-between"><span>Last commit</span><span class="font-mono">2025-08-20</span></div>
+          <div class="flex justify-between"><span>Commits last 90d</span><span class="font-bold text-slate-500">0</span></div>
+          <div class="flex justify-between"><span>Status</span><span class="font-bold text-slate-700">Archive recommended</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2.2 hmnd Per-Module Heatmap -->
+    <details class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card mb-6" open>
+      <summary class="font-bold text-navy flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2"><i data-lucide="grid-3x3" class="w-4 h-4 text-blue"></i> 2.2 hmnd — Per-Module Breakdown (Phase 2 verified)</span>
+        <span class="has-tooltip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+          <span class="tooltip">14 модулей внутри hmnd. Цвета: 🟢 ready, 🟡 gated (нужен test floor / senior review), 🔴 critical (paused).</span></span>
+      </summary>
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full text-xs min-w-[700px]">
+          <thead class="bg-soft border-y border-line text-muted uppercase tracking-wider text-[10px]">
+            <tr>
+              <th class="py-2 px-3 text-left">Module</th>
+              <th class="py-2 px-3 text-right">LoC</th>
+              <th class="py-2 px-3 text-right">Tests</th>
+              <th class="py-2 px-3 text-center">AGENTS</th>
+              <th class="py-2 px-3 text-center">README</th>
+              <th class="py-2 px-3 text-right col-hide-mob">Bug %</th>
+              <th class="py-2 px-3 text-left col-hide-mob">Top owner</th>
+              <th class="py-2 px-3 text-center">AI Policy</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            <tr><td class="py-2 px-3 font-mono">hmnd_robot</td><td class="py-2 px-3 text-right">335k</td><td class="py-2 px-3 text-right font-bold text-emerald-700">401</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">22.6%</td><td class="py-2 px-3 col-hide-mob">Anubhav D. (9%)</td><td class="py-2 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">READY</span></td></tr>
+            <tr><td class="py-2 px-3 font-mono">hmnd_training</td><td class="py-2 px-3 text-right">108k</td><td class="py-2 px-3 text-right font-bold text-emerald-700">93</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">16.3%</td><td class="py-2 px-3 col-hide-mob">Artem I. (13%)</td><td class="py-2 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">READY</span></td></tr>
+            <tr><td class="py-2 px-3 font-mono">hmnd_flywheel</td><td class="py-2 px-3 text-right">110k</td><td class="py-2 px-3 text-right font-bold text-emerald-700">129</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-right col-hide-mob">17.7%</td><td class="py-2 px-3 col-hide-mob">Sergei F. (22%)</td><td class="py-2 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">READY</span></td></tr>
+            <tr><td class="py-2 px-3 font-mono">hmnd_sim</td><td class="py-2 px-3 text-right">109k</td><td class="py-2 px-3 text-right font-bold text-emerald-700">62</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">20.3%</td><td class="py-2 px-3 col-hide-mob">Luke B. (30%)</td><td class="py-2 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">READY</span></td></tr>
+            <tr class="bg-amber-50"><td class="py-2 px-3 font-mono">hmnd_fleet</td><td class="py-2 px-3 text-right">82k</td><td class="py-2 px-3 text-right font-bold">65</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob text-amber-700 font-bold">35.3% ⚠</td><td class="py-2 px-3 col-hide-mob">Sam P. (33%)</td><td class="py-2 px-3 text-center"><span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">AUDIT</span></td></tr>
+            <tr class="bg-red-50"><td class="py-2 px-3 font-mono">hmnd_wholebody</td><td class="py-2 px-3 text-right">60k</td><td class="py-2 px-3 text-right font-bold text-red-700">4 ⚠</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">10.0%</td><td class="py-2 px-3 col-hide-mob">Thomas C. (47%)</td><td class="py-2 px-3 text-center"><span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-[10px] font-bold">GATED</span></td></tr>
+            <tr class="bg-red-50"><td class="py-2 px-3 font-mono">hmnd_firmware</td><td class="py-2 px-3 text-right">495 C++</td><td class="py-2 px-3 text-right font-bold text-red-700">0 ⚠</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-right col-hide-mob">26.7%</td><td class="py-2 px-3 col-hide-mob">ntan (36%)</td><td class="py-2 px-3 text-center"><span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-[10px] font-bold">GATED</span></td></tr>
+            <tr><td class="py-2 px-3 font-mono">hmnd_playground</td><td class="py-2 px-3 text-right">116k</td><td class="py-2 px-3 text-right font-bold">71</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-right col-hide-mob">11.8%</td><td class="py-2 px-3 col-hide-mob">Vaibhav M. (24%)</td><td class="py-2 px-3 text-center"><span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">READY</span></td></tr>
+            <tr class="bg-amber-50/50"><td class="py-2 px-3 font-mono">hmnd_services</td><td class="py-2 px-3 text-right">5.6k</td><td class="py-2 px-3 text-right">15</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-right col-hide-mob">16.7%</td><td class="py-2 px-3 col-hide-mob text-amber-700">Cody G. (100%)</td><td class="py-2 px-3 text-center"><span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">BUS RISK</span></td></tr>
+            <tr class="bg-amber-50/50"><td class="py-2 px-3 font-mono">hmnd_agents</td><td class="py-2 px-3 text-right">2.3k</td><td class="py-2 px-3 text-right">2</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-right col-hide-mob">16.7%</td><td class="py-2 px-3 col-hide-mob text-amber-700">Atindra (100%)</td><td class="py-2 px-3 text-center"><span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">BUS RISK</span></td></tr>
+            <tr class="bg-amber-50/50"><td class="py-2 px-3 font-mono">hmnd_infra</td><td class="py-2 px-3 text-right">0.6k</td><td class="py-2 px-3 text-right">—</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">18.2%</td><td class="py-2 px-3 col-hide-mob text-amber-700">Cody G. (80%)</td><td class="py-2 px-3 text-center"><span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">BUS RISK</span></td></tr>
+            <tr class="bg-amber-50/50"><td class="py-2 px-3 font-mono">hmnd_update</td><td class="py-2 px-3 text-right">3.3k</td><td class="py-2 px-3 text-right">7</td><td class="py-2 px-3 text-center">❌</td><td class="py-2 px-3 text-center">✅</td><td class="py-2 px-3 text-right col-hide-mob">28.6%</td><td class="py-2 px-3 col-hide-mob text-amber-700">Tobias J. (83%)</td><td class="py-2 px-3 text-center"><span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">BUS RISK</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- 2.3 Tech Recommendations -->
+    <details class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card mb-6" open>
+      <summary class="font-bold text-navy flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2"><i data-lucide="wrench" class="w-4 h-4 text-blue"></i> 2.3 Технические рекомендации (по приоритету)</span>
+        <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev"></i>
+      </summary>
+      <div class="mt-5 space-y-3 text-xs">
+        <div class="flex gap-3 p-3 bg-red-50 border-l-4 border-red-500 rounded-r">
+          <div class="font-bold text-red-700 text-lg leading-none mt-1">1</div>
+          <div><div class="font-bold text-navy">Pause AI-assisted PRs в hmnd-cloud</div>
+            <div class="text-muted mt-0.5">Эффект сразу. AI можно использовать для objяснения / planning, не для mergeable Terraform PR. Эффорт: 0 (политика).</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r">
+          <div class="font-bold text-amber-700 text-lg leading-none mt-1">2</div>
+          <div><div class="font-bold text-navy">CODEOWNERS + AGENTS.md в hmnd-cloud</div>
+            <div class="text-muted mt-0.5">~1 день. Закрывает largest production risk. Один человек = backup CODEOWNERS на каждую `domains/*`.</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r">
+          <div class="font-bold text-amber-700 text-lg leading-none mt-1">3</div>
+          <div><div class="font-bold text-navy">PR-validation workflow hmnd-cloud</div>
+            <div class="text-muted mt-0.5">`terraform validate` + `tflint` + `tfsec` + `checkov`, blocking. ~3 дня. Превращает «доверьтесь» в «CI проверит».</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-amber-50 border-l-4 border-amber-500 rounded-r">
+          <div class="font-bold text-amber-700 text-lg leading-none mt-1">4</div>
+          <div><div class="font-bold text-navy">Test floor для hmnd_wholebody + hmnd_firmware</div>
+            <div class="text-muted mt-0.5">Mandate ≥ 1 test per 5k LoC прежде чем принимать AI-PR. Сейчас 1:15k (wholebody) и 0 (firmware).</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-blue/5 border-l-4 border-blue rounded-r">
+          <div class="font-bold text-blue text-lg leading-none mt-1">5</div>
+          <div><div class="font-bold text-navy">Cross-train 4 single-person модуля</div>
+            <div class="text-muted mt-0.5">hmnd_services (100% Cody), hmnd_agents (100% Atindra), hmnd_update (83% Tobias), hmnd_infra (80% Cody). Backup на 30 дней.</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-blue/5 border-l-4 border-blue rounded-r">
+          <div class="font-bold text-blue text-lg leading-none mt-1">6</div>
+          <div><div class="font-bold text-navy">Per-module AGENTS.md (4 production paths)</div>
+            <div class="text-muted mt-0.5">hmnd_fleet, hmnd_flywheel, hmnd_wholebody, hmnd_services. Уже есть pattern в hmnd_robot, hmnd_sim, hmnd_training, hmnd_firmware, hmnd_agents (5/14). Расширить.</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-blue/5 border-l-4 border-blue rounded-r">
+          <div class="font-bold text-blue text-lg leading-none mt-1">7</div>
+          <div><div class="font-bold text-navy">10-PR audit на hmnd_fleet</div>
+            <div class="text-muted mt-0.5">35.3% bug rate (2× средний). Sam+Matt = top OpenAI reasoning-spenders. Sample 10 PR — узнать causality: fleet intrinsically buggy ИЛИ AI-induced fragility.</div></div>
+        </div>
+        <div class="flex gap-3 p-3 bg-soft border-l-4 border-slate-400 rounded-r">
+          <div class="font-bold text-slate-700 text-lg leading-none mt-1">8</div>
+          <div><div class="font-bold text-navy">Prompt-regression eval framework</div>
+            <div class="text-muted mt-0.5">Сквозной gap — нет нигде. AGENTS.md change может silent break AI behaviour. Самая ценная missing infrastructure для масштабирования.</div></div>
+        </div>
+      </div>
+    </details>
+
+    <!-- 2.4 Risk Matrix (compact) -->
+    <details class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+      <summary class="font-bold text-navy flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2"><i data-lucide="shield-alert" class="w-4 h-4 text-red-500"></i> 2.4 Business Exposure Risk Matrix</span>
+        <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev"></i>
+      </summary>
+      <div class="mt-4 overflow-x-auto">
+        <table class="w-full text-xs min-w-[600px]">
+          <thead class="bg-soft border-y border-line text-muted uppercase tracking-wider text-[10px]">
+            <tr><th class="py-2 px-3 text-left">Risk</th><th class="py-2 px-3">Severity</th><th class="py-2 px-3">Business exposure</th><th class="py-2 px-3">Control</th><th class="py-2 px-3 text-right">When</th></tr>
+          </thead>
+          <tbody class="divide-y divide-line text-navy">
+            <tr><td class="py-2 px-3">Bad AI Terraform PR в hmnd-cloud</td><td class="py-2 px-3 text-red-600 font-bold">High</td><td class="py-2 px-3">Downtime, security, cost spike</td><td class="py-2 px-3">Pause + TF validation</td><td class="py-2 px-3 text-right text-red-600 font-bold">Сегодня</td></tr>
+            <tr><td class="py-2 px-3">Weak tests в wholebody / firmware</td><td class="py-2 px-3 text-red-600 font-bold">High</td><td class="py-2 px-3">Quality / safety burden</td><td class="py-2 px-3">Test floor + senior gates</td><td class="py-2 px-3 text-right">Месяц 1</td></tr>
+            <tr><td class="py-2 px-3">IP / sensitive data leakage</td><td class="py-2 px-3 text-red-600 font-bold">High</td><td class="py-2 px-3">Proprietary code exposed</td><td class="py-2 px-3">Local model path для secret-touching кода</td><td class="py-2 px-3 text-right">Месяц 1</td></tr>
+            <tr><td class="py-2 px-3">AI ROI не доказан</td><td class="py-2 px-3 text-amber-600 font-bold">Medium</td><td class="py-2 px-3">Spend растёт без proof</td><td class="py-2 px-3">Jira baseline + PR linkage</td><td class="py-2 px-3 text-right">Неделя 1</td></tr>
+            <tr><td class="py-2 px-3">Reasoning-model overuse</td><td class="py-2 px-3 text-amber-600 font-bold">Medium</td><td class="py-2 px-3">Avoidable AI spend</td><td class="py-2 px-3">Routing policy + alerts</td><td class="py-2 px-3 text-right">Месяц 1</td></tr>
+            <tr><td class="py-2 px-3">Bus factor в 4 модулях</td><td class="py-2 px-3 text-amber-600 font-bold">Medium</td><td class="py-2 px-3">Знания у 1 человека</td><td class="py-2 px-3">Cross-train backup</td><td class="py-2 px-3 text-right">Месяц 1</td></tr>
+            <tr><td class="py-2 px-3">No prompt-regression evals</td><td class="py-2 px-3 text-amber-600 font-bold">Medium</td><td class="py-2 px-3">AGENTS.md drift невидим</td><td class="py-2 px-3">Eval framework</td><td class="py-2 px-3 text-right">Месяц 2-3</td></tr>
+            <tr><td class="py-2 px-3">Bot/agent quality drift</td><td class="py-2 px-3 text-amber-600 font-bold">Medium</td><td class="py-2 px-3">CI failures, review burden</td><td class="py-2 px-3">20-PR audit</td><td class="py-2 px-3 text-right">Месяц 1</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- EXECUTION TIMELINE                                                   -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="timeline" class="bg-navy text-white py-12 sm:py-16 px-4 sm:px-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-10 text-center">
+      <h2 class="text-2xl sm:text-3xl font-bold uppercase tracking-widest mb-3">План трансформации · 90 дней</h2>
+      <p class="text-white/60 text-base max-w-2xl mx-auto">Сначала измерение → потом среда → потом обучение и масштаб.</p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6 sm:gap-8 relative">
+      <div class="hidden md:block absolute top-7 left-[16%] right-[16%] h-[2px] bg-white/10 z-0"></div>
+      <a href="#week1" class="relative z-10 flex flex-col items-center text-center group">
+        <div class="w-14 h-14 rounded-full bg-blue border-4 border-navy flex items-center justify-center font-bold font-mono shadow-glow group-hover:scale-110 transition">W1</div>
+        <h3 class="text-blue font-bold text-lg mt-4 uppercase tracking-widest">Measure</h3>
+        <p class="text-sm text-white/70 mt-2 max-w-[200px]">Подключить Jira, baseline 4-8 недель назад.</p>
+      </a>
+      <a href="#month1" class="relative z-10 flex flex-col items-center text-center group">
+        <div class="w-14 h-14 rounded-full bg-amber-500 border-4 border-navy flex items-center justify-center font-bold font-mono shadow-glow group-hover:scale-110 transition">M1</div>
+        <h3 class="text-amber-400 font-bold text-lg mt-4 uppercase tracking-widest">Harden</h3>
+        <p class="text-sm text-white/70 mt-2 max-w-[200px]">Среда: AS-IS, спеки, тесты, гейты, перегенерация кода.</p>
+      </a>
+      <a href="#months3" class="relative z-10 flex flex-col items-center text-center group">
+        <div class="w-14 h-14 rounded-full bg-purple-600 border-4 border-navy flex items-center justify-center font-bold font-mono shadow-glow text-sm group-hover:scale-110 transition">M1-3</div>
+        <h3 class="text-purple-300 font-bold text-lg mt-4 uppercase tracking-widest">Scale</h3>
+        <p class="text-sm text-white/70 mt-2 max-w-[200px]">8 лекций AI-Native development + corporate platform.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- WEEK 1 — JIRA                                                        -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="week1" class="py-12 sm:py-16 px-4 sm:px-6 bg-white border-y border-line">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <div class="text-[11px] font-bold tracking-widest text-blue uppercase mb-2 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-blue"></span> WEEK 1 · MEASURE
+      </div>
+      <h2 class="text-2xl sm:text-3xl font-bold text-navy">Подключить Jira и установить baseline</h2>
+      <p class="text-muted text-sm mt-1">Не меняем процесс на этой неделе — строим «before»-снимок чтобы потом сравнивать.</p>
+    </div>
+
+    <!-- Daily breakdown -->
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-8">
+      <!-- Day 1 -->
+      <div class="bg-soft border border-line rounded-xl p-4">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-blue mb-2">День 1 · Пн</div>
+        <div class="font-bold text-navy mb-2 text-sm">Доступ + Schema</div>
+        <ul class="text-xs space-y-1 text-muted">
+          <li>• Jira API token (scope: read)</li>
+          <li>• Список проектов и issue types</li>
+          <li>• Schema: status, assignee, labels</li>
+          <li>• Тестовый pull 10 issues</li>
+        </ul>
+      </div>
+      <!-- Day 2 -->
+      <div class="bg-soft border border-line rounded-xl p-4">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-blue mb-2">День 2 · Вт</div>
+        <div class="font-bold text-navy mb-2 text-sm">ETL: issues</div>
+        <ul class="text-xs space-y-1 text-muted">
+          <li>• Pull last 90d issues</li>
+          <li>• Загрузить в SQLite таблицу `jira_issues`</li>
+          <li>• Колонки: key, type, priority, status, assignee, created, resolved</li>
+          <li>• Audit: row count match</li>
+        </ul>
+      </div>
+      <!-- Day 3 -->
+      <div class="bg-soft border border-line rounded-xl p-4">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-blue mb-2">День 3 · Ср</div>
+        <div class="font-bold text-navy mb-2 text-sm">ETL: status history</div>
+        <ul class="text-xs space-y-1 text-muted">
+          <li>• Issue changelog API</li>
+          <li>• Таблица `jira_status_history` (issue, from, to, at)</li>
+          <li>• Cycle time computed query</li>
+          <li>• Time-in-status query</li>
+        </ul>
+      </div>
+      <!-- Day 4 -->
+      <div class="bg-soft border border-line rounded-xl p-4">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-blue mb-2">День 4 · Чт</div>
+        <div class="font-bold text-navy mb-2 text-sm">Dashboard tab</div>
+        <ul class="text-xs space-y-1 text-muted">
+          <li>• Новая страница «Jira Delivery»</li>
+          <li>• 6 KPI cards (см. ниже)</li>
+          <li>• 4 charts (cycle / bottleneck / mix / heatmap)</li>
+          <li>• Filter: period, team, issue type</li>
+        </ul>
+      </div>
+      <!-- Day 5 -->
+      <div class="bg-soft border border-line rounded-xl p-4 border-emerald-400 border-2">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-2">День 5 · Пт</div>
+        <div class="font-bold text-navy mb-2 text-sm">Baseline снимок</div>
+        <ul class="text-xs space-y-1 text-muted">
+          <li>• 4-8 недель назад snapshot</li>
+          <li>• Зафиксировать «before»</li>
+          <li>• Опубликовать для leadership</li>
+          <li>• Slack alert если data > 24h stale</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Metrics + Charts side by side -->
+    <div class="grid lg:grid-cols-2 gap-5 sm:gap-6 mb-6">
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <h3 class="font-bold text-navy mb-3 flex items-center gap-2"><i data-lucide="gauge" class="w-4 h-4 text-blue"></i> 6 Jira KPIs (baseline)</h3>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Median Cycle Time</div>
+            <div class="text-muted text-[11px] mt-1">created → resolved</div>
+          </div>
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Median Time-in-Progress</div>
+            <div class="text-muted text-[11px] mt-1">in-progress → done</div>
+          </div>
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Blocked Time</div>
+            <div class="text-muted text-[11px] mt-1">total в blocked/waiting</div>
+          </div>
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Throughput</div>
+            <div class="text-muted text-[11px] mt-1">closed / week</div>
+          </div>
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Bug Share</div>
+            <div class="text-muted text-[11px] mt-1">% bug/incident/hotfix</div>
+          </div>
+          <div class="bg-soft p-3 rounded-lg border border-line">
+            <div class="font-bold text-navy">Reopen Rate</div>
+            <div class="text-muted text-[11px] mt-1">% reopened after done</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card">
+        <h3 class="font-bold text-navy mb-3 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-4 h-4 text-blue"></i> 4 Charts</h3>
+        <div class="space-y-3 text-xs">
+          <div class="border border-line rounded-lg p-3">
+            <div class="font-bold text-navy mb-1">📈 Cycle Time Trend (line)</div>
+            <div class="text-muted">X: week · Y: median cycle time · Segment: issue type</div>
+          </div>
+          <div class="border border-line rounded-lg p-3">
+            <div class="font-bold text-navy mb-1">📊 Status Bottleneck (stacked bar)</div>
+            <div class="text-muted">Y: status · X: avg time-in-status</div>
+          </div>
+          <div class="border border-line rounded-lg p-3">
+            <div class="font-bold text-navy mb-1">🍩 Issue Type Mix (donut)</div>
+            <div class="text-muted">Feature · Bug · Incident · Tech debt · Research · Ops</div>
+          </div>
+          <div class="border border-line rounded-lg p-3">
+            <div class="font-bold text-navy mb-1">🔥 Team Delivery Heatmap</div>
+            <div class="text-muted">Rows: team/component · Cols: cycle/throughput/bug share/reopen</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success criteria -->
+    <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 sm:p-6">
+      <h3 class="font-bold text-emerald-900 mb-3 flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600"></i> Success criteria — пятница недели 1</h3>
+      <ul class="grid sm:grid-cols-2 gap-2 text-xs text-emerald-900">
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> Jira data в БД (issues + status history)</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> Baseline 4-8 недель live</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> Cycle time dashboard рендерится</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> Bottleneck dashboard рендерится</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> Team heatmap рендерится</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i> «Before»-snapshot сохранён + опубликован</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- MONTH 1 — ENVIRONMENT                                                -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="month1" class="py-12 sm:py-16 px-4 sm:px-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <div class="text-[11px] font-bold tracking-widest text-amber-600 uppercase mb-2 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span> MONTH 1 · HARDEN
+      </div>
+      <h2 class="text-2xl sm:text-3xl font-bold text-navy">Среда для AI-разработки</h2>
+      <p class="text-muted text-sm mt-1">AS-IS → спеки → тесты → roadmap → перегенерация кода. По одной неделе на каждый шаг.</p>
+    </div>
+
+    <!-- 4 weeks of Month 1 -->
+    <div class="space-y-4">
+      <!-- Week 2: AS-IS -->
+      <details class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-soft hover:bg-line/30 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0">W2</div>
+            <div>
+              <div class="font-bold text-navy">AS-IS картирование</div>
+              <div class="text-xs text-muted mt-0.5">Снять текущее состояние всех 14 модулей hmnd</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <p class="text-navy">Цель: документировать текущую архитектуру так, чтобы AI агенты могли в неё навигировать и менять безопасно.</p>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="bg-soft rounded-lg p-3 border border-line"><strong>Deliverables:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Architecture map (Mermaid) для каждого модуля</li>
+                <li>Dependency graph (cross-module imports)</li>
+                <li>Public API surface каждого модуля</li>
+                <li>Critical paths: deploy → robot, training → checkpoints</li>
+              </ul>
+            </div>
+            <div class="bg-soft rounded-lg p-3 border border-line"><strong>Tools:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li><code>pydeps</code> / <code>madge</code> для dep graph</li>
+                <li><code>sphinx-apidoc</code> / <code>typer</code> для API surface</li>
+                <li><code>mermaid-cli</code> для architecture diagrams</li>
+                <li>Output → <code>docs/architecture/AS_IS_2026-05.md</code></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Week 3: Specs -->
+      <details class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-soft hover:bg-line/30 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0">W3</div>
+            <div>
+              <div class="font-bold text-navy">Спецификации + ADRs</div>
+              <div class="text-xs text-muted mt-0.5">Living specs + retroactive architecture decision records</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <p class="text-navy">AI agents не могут intuitively понимать «почему так сделано». Spec + ADR — это контекст для AI.</p>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="bg-soft rounded-lg p-3 border border-line"><strong>Module specs:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Per-module README (4 missing: agents, design, flywheel, playground, services)</li>
+                <li>Per-module AGENTS.md (4 missing: fleet, flywheel, wholebody, services)</li>
+                <li>Format: Feature → User Flow → Use Case → FR/NFR → Tests-by-layer</li>
+                <li>Уже применён в `docs/SPEC.md` F-17 как образец</li>
+              </ul>
+            </div>
+            <div class="bg-soft rounded-lg p-3 border border-line"><strong>Retroactive ADRs:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>ADR-001: Bazel as primary build</li>
+                <li>ADR-002: ROS2 vs alternatives</li>
+                <li>ADR-003: Functional core / imperative shell rule</li>
+                <li>ADR-004: AGENTS.md instruction structure</li>
+                <li>ADR-005: git-crypt для secrets</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Week 4: Tests -->
+      <details class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-soft hover:bg-line/30 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0">W4</div>
+            <div>
+              <div class="font-bold text-navy">Тесты + гейты</div>
+              <div class="text-xs text-muted mt-0.5">Test floor для слабых модулей + CI гейты для AI-PR</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3"><strong class="text-red-700">hmnd_wholebody:</strong>
+              <ul class="mt-1 space-y-1 text-red-800 list-disc list-inside">
+                <li>4 теста на 60k LoC = 1:15k ratio</li>
+                <li>Mandate: ≥ 1 test per 5k LoC = +8 тестов minimum</li>
+                <li>Senior review required для AI-PR</li>
+                <li>Hardware-in-the-loop validation для control loops</li>
+              </ul>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-3"><strong class="text-red-700">hmnd_firmware:</strong>
+              <ul class="mt-1 space-y-1 text-red-800 list-disc list-inside">
+                <li>0 тестов на 495 C++ files</li>
+                <li>Unit tests на HAL boundary (минимум)</li>
+                <li>Smoke tests для каждого хардвара</li>
+                <li>AI-PR → automatic hardware validation pipeline</li>
+              </ul>
+            </div>
+          </div>
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3"><strong class="text-amber-800">hmnd-cloud (Terraform):</strong>
+            <ul class="mt-1 grid sm:grid-cols-2 gap-1 text-amber-900 list-disc list-inside">
+              <li><code>terraform validate</code> — синтаксис</li>
+              <li><code>terraform fmt</code> — стиль</li>
+              <li><code>tflint</code> — best practices</li>
+              <li><code>tfsec</code> — security</li>
+              <li><code>checkov</code> — compliance / IaC policy</li>
+              <li><code>cost estimation</code> — infracost / opentofu plan</li>
+            </ul>
+          </div>
+        </div>
+      </details>
+
+      <!-- Week 5: Roadmap + Regenerate -->
+      <details class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-soft hover:bg-line/30 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-800 font-bold flex items-center justify-center shrink-0">W5</div>
+            <div>
+              <div class="font-bold text-navy">Roadmap + перегенерация</div>
+              <div class="text-xs text-muted mt-0.5">TO-BE архитектура и pilot AI-driven refactor</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <p class="text-navy">Под занавес месяца 1: построить «TO-BE» картину и провести pilot AI-перегенерации одного небольшого модуля.</p>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div class="bg-soft rounded-lg p-3 border border-line"><strong>Roadmap:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>TO-BE architecture для каждого модуля (3-6 мес)</li>
+                <li>Зависимости работ между командами</li>
+                <li>Что можно делать в parallel</li>
+                <li>Quarterly milestones</li>
+              </ul>
+            </div>
+            <div class="bg-blue/5 border border-blue/30 rounded-lg p-3"><strong>Pilot AI re-generation:</strong>
+              <ul class="mt-1 space-y-1 text-navy list-disc list-inside">
+                <li>Кандидат: `hmnd_update` или `hmnd_services` (малый, ясный scope)</li>
+                <li>Existing spec → AI prompt → new implementation</li>
+                <li>Сравнить: same tests pass, less LoC, более чистый код</li>
+                <li>Document: что AI сделал хорошо, что плохо</li>
+                <li>Source для playbook на Months 1-3</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Month 1 success criteria -->
+    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 sm:p-6 mt-6">
+      <h3 class="font-bold text-amber-900 mb-3 flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-amber-600"></i> Success criteria — конец месяца 1</h3>
+      <ul class="grid sm:grid-cols-2 gap-2 text-xs text-amber-900">
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> hmnd-cloud: AGENTS.md + CODEOWNERS live</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> Terraform PR validation blocking</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> hmnd_wholebody + hmnd_firmware test gates active</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> 4 module READMEs добавлены</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> 4 module AGENTS.md добавлены</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> 5+ retroactive ADRs опубликованы</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> Budget alerts $500 / $1k active</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> Model-routing policy опубликован</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> AS-IS architecture map для всех модулей</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i> Pilot AI-regeneration отчёт</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- MONTHS 1-3 — TRAINING                                                -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="months3" class="py-12 sm:py-16 px-4 sm:px-6 bg-white border-y border-line">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <div class="text-[11px] font-bold tracking-widest text-purple-600 uppercase mb-2 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-purple-500"></span> MONTHS 1-3 · SCALE
+      </div>
+      <h2 class="text-2xl sm:text-3xl font-bold text-navy">8 лекций: AI-Native разработка</h2>
+      <p class="text-muted text-sm mt-1">2 месяца интенсивных еженедельных сессий. Каждая лекция = workflow + playbook + outcomes.</p>
+    </div>
+
+    <!-- Lecture index -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <a href="#lec1" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">1</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">AI-Native сегодня</div>
+      </a>
+      <a href="#lec2" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">2</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Спеки с AI</div>
+      </a>
+      <a href="#lec3" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">3</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Тесты с AI</div>
+      </a>
+      <a href="#lec4" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">4</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Код с AI</div>
+      </a>
+      <a href="#lec5" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">5</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Рефакторинг</div>
+      </a>
+      <a href="#lec6" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">6</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Deploy / Security</div>
+      </a>
+      <a href="#lec7" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">7</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Обратная связь</div>
+      </a>
+      <a href="#lec8" class="p-3 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-center">
+        <div class="text-2xl font-bold text-purple-700">8</div>
+        <div class="text-[10px] font-medium text-purple-900 mt-1">Production system</div>
+      </a>
+    </div>
+
+    <!-- Lectures detailed -->
+    <div class="space-y-3">
+      <!-- L1 -->
+      <details id="lec1" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L1</div>
+            <div>
+              <div class="font-bold text-navy">AI-Native разработка: как сегодня это делается</div>
+              <div class="text-xs text-muted mt-0.5">Обзор state-of-the-art workflows · 1 ч лекция + 1 ч demo · Week 5</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Что значит «AI-Native» (vs AI-assisted)</li>
+                <li>Spec-first vs code-first development</li>
+                <li>Agentic workflows: Claude Code, Cursor Agent, Copilot Workspace</li>
+                <li>Цикл разработки: spec → tests → code → review → deploy</li>
+                <li>Real industry examples (Anthropic, OpenAI, Replit, etc.)</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Единое понимание терминологии</li>
+                <li>Mental model AI-Native workflow</li>
+                <li>Baseline для следующих 7 лекций</li>
+                <li>Список HMND power users + их workflow</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L2 -->
+      <details id="lec2" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L2</div>
+            <div>
+              <div class="font-bold text-navy">Спецификации: писать так, чтобы AI понимал</div>
+              <div class="text-xs text-muted mt-0.5">Living specs, ADRs, AGENTS.md · 1 ч лекция + 2 ч hands-on · Week 6</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Spec формат: Feature → UF → UC → FR/NFR → Tests-by-layer</li>
+                <li>Когда использовать BDD scenarios (Gherkin)</li>
+                <li>ADR pattern: context → decision → consequences</li>
+                <li>AGENTS.md anatomy: TL;DR + repo map + rules + safety constraints</li>
+                <li>Antipatterns: vague specs, dead docs, over-engineering</li>
+                <li>Workshop: написать spec для реального feature из текущего sprint</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Каждый участник пишет 1 spec + 1 ADR</li>
+                <li>Peer review через AI agent (auto-feedback)</li>
+                <li>1 module без README получает его</li>
+                <li>Template добавлен в team handbook</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L3 -->
+      <details id="lec3" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L3</div>
+            <div>
+              <div class="font-bold text-navy">Тесты: AI генерирует, человек валидирует</div>
+              <div class="text-xs text-muted mt-0.5">4-layer test taxonomy + prompt-eval · 1 ч + 2 ч hands-on · Week 7</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>4 уровня тестов: <strong>T-INFRA</strong> (env/files/auth), <strong>T-DATA</strong> (schema), <strong>T-SVC</strong> (logic), <strong>T-AI</strong> (prompts)</li>
+                <li>Tests as executable spec (Kent Beck pattern)</li>
+                <li>AI generates tests from spec → human reviews edge cases</li>
+                <li>Property-based testing с AI (Hypothesis)</li>
+                <li>Snapshot testing для ML pipelines (как в hmnd_training)</li>
+                <li>Prompt-regression evals: 5-10 канонических задач, run quarterly</li>
+                <li>Workshop: написать T-SVC + T-INFRA для существующего модуля</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Каждый пишет 5 тестов через AI workflow</li>
+                <li>Prompt-eval framework черновик</li>
+                <li>hmnd_wholebody / hmnd_firmware test gates документированы</li>
+                <li>Test floor enforcement live</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L4 -->
+      <details id="lec4" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L4</div>
+            <div>
+              <div class="font-bold text-navy">Код: AI генерирует, человек владеет архитектурой</div>
+              <div class="text-xs text-muted mt-0.5">Agentic coding workflows · 1 ч + 3 ч hands-on · Week 8</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Claude Code workflow: scope → plan → implement → verify</li>
+                <li>Cursor: inline tab + Agent mode + Composer</li>
+                <li>Когда писать руками, когда — AI</li>
+                <li>Model routing: mini → mid → reasoning (cost-aware)</li>
+                <li>Functional core / imperative shell rule (из hmnd AGENTS.md)</li>
+                <li>PR-size discipline: 15% коммитов в hmnd трогают 21+ файла — это AI?</li>
+                <li>Live coding: реализовать feature под наблюдением</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Каждый завершает 1 feature через AI workflow</li>
+                <li>Peer review с AI feedback</li>
+                <li>Personal cost-routing rules</li>
+                <li>«AI used» PR template checkbox активирован</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L5 -->
+      <details id="lec5" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L5</div>
+            <div>
+              <div class="font-bold text-navy">Рефакторинг и большие изменения</div>
+              <div class="text-xs text-muted mt-0.5">Multi-file refactor, migrations, safe AI-driven change · Week 9</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>«Make before break» pattern (parallel implementations + feature flags)</li>
+                <li>Multi-file refactor: чек-листы + AI agent навигация</li>
+                <li>Migration strategies (API, schema, framework version)</li>
+                <li>Когда AI ускоряет, когда замедляет</li>
+                <li>Анализ hmnd_fleet (35.3% bug rate) — где AI помог, где навредил</li>
+                <li>10-PR audit template из Report II</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Каждый делает refactor PR через AI</li>
+                <li>1 pilot migration с AI assistance</li>
+                <li>Refactor playbook (как делать безопасно)</li>
+                <li>hmnd_fleet root cause analysis шаги</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L6 -->
+      <details id="lec6" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L6</div>
+            <div>
+              <div class="font-bold text-navy">Деплой, мониторинг и безопасность</div>
+              <div class="text-xs text-muted mt-0.5">CI/CD, observability, IaC safety, secrets · Week 10</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>AI generates deploy configs — но не applies</li>
+                <li>Terraform safety: validate → plan → human review → apply</li>
+                <li>hmnd-cloud case study (production blast radius)</li>
+                <li>Secrets: что AI можно показывать, что нельзя</li>
+                <li>Local model path для confidential code</li>
+                <li>Observability: AI помогает читать stack traces / logs / metrics</li>
+                <li>Incident response: AI как first-responder для diagnosis</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>«Never AI apply» policy опубликована</li>
+                <li>Secrets-classification document</li>
+                <li>Local-model setup guide для restricted code</li>
+                <li>Incident response playbook (AI-augmented)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L7 -->
+      <details id="lec7" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L7</div>
+            <div>
+              <div class="font-bold text-navy">Обратная связь и итерация</div>
+              <div class="text-xs text-muted mt-0.5">Code review, retro, измерение собственного workflow · Week 11</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Review AI-generated code: на что смотреть</li>
+                <li>Self-measurement: личный AI cost / merged PR ratio</li>
+                <li>Retrospective workflow: что работает, что нет</li>
+                <li>Cost vs leverage analysis для своих задач</li>
+                <li>Knowledge sharing: champion model</li>
+                <li>Workshop: пара engineer × champion (pair-program)</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Personal AI workflow assessment</li>
+                <li>Pair-program log (4-8 часов вместе)</li>
+                <li>5-10 verified champions</li>
+                <li>Workflow playbooks от champions</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <!-- L8 -->
+      <details id="lec8" class="bg-white border border-line rounded-xl shadow-card overflow-hidden">
+        <summary class="p-4 sm:p-5 flex items-start justify-between gap-3 bg-purple-50/40 hover:bg-purple-50 transition">
+          <div class="flex gap-3 items-start">
+            <div class="w-10 h-10 rounded-lg bg-purple-100 text-purple-800 font-bold flex items-center justify-center shrink-0">L8</div>
+            <div>
+              <div class="font-bold text-navy">Новая производственная система</div>
+              <div class="text-xs text-muted mt-0.5">Институализация: процессы, метрики, governance · Week 12</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev mt-2"></i>
+        </summary>
+        <div class="p-5 border-t border-line text-xs space-y-3">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><strong>Agenda:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Before / after сравнение: Jira cycle time, throughput, quality</li>
+                <li>Что встроить в onboarding нового инженера</li>
+                <li>Engineering rituals: weekly AI review, monthly champion council</li>
+                <li>Quarterly cost-routing policy review</li>
+                <li>AI Engineering Leverage Index (новая North Star метрика)</li>
+                <li>Corporate platform (internal knowledge hub)</li>
+                <li>Roadmap на следующий квартал</li>
+              </ul>
+            </div>
+            <div><strong>Outcomes:</strong>
+              <ul class="mt-1 space-y-1 text-muted list-disc list-inside">
+                <li>Internal AI Engineering Handbook published</li>
+                <li>Onboarding revised с AI workflows</li>
+                <li>Rituals на calendar (recurring meetings)</li>
+                <li>ROI dashboard live</li>
+                <li>Decision: какие workflows scale company-wide</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Schedule chart -->
+    <div class="bg-white border border-line rounded-2xl p-5 sm:p-6 shadow-card mt-8">
+      <h3 class="font-bold text-navy mb-4 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4 text-purple-600"></i> Расписание · 12 недель</h3>
+      <div class="space-y-2 text-xs">
+        <div class="grid grid-cols-12 gap-1 mb-2 text-[10px] text-muted">
+          <div>W1</div><div>W2</div><div>W3</div><div>W4</div><div>W5</div><div>W6</div><div>W7</div><div>W8</div><div>W9</div><div>W10</div><div>W11</div><div>W12</div>
+        </div>
+        <div class="grid grid-cols-12 gap-1">
+          <div class="bg-blue h-6 rounded col-span-1 flex items-center justify-center text-white text-[9px] font-bold">Jira</div>
+          <div class="bg-amber-400 h-6 rounded col-span-4 flex items-center justify-center text-white text-[9px] font-bold">Среда (AS-IS · Spec · Tests · Roadmap)</div>
+          <div class="bg-purple-500 h-6 rounded col-span-8 flex items-center justify-center text-white text-[9px] font-bold">8 лекций · Eженедельно · Champions cohort</div>
+        </div>
+        <div class="grid grid-cols-12 gap-1 mt-1">
+          <div></div><div></div><div></div><div></div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L1</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L2</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L3</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L4</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L5</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L6</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L7</div>
+          <div class="bg-purple-200 h-4 rounded col-span-1 text-[9px] text-purple-900 flex items-center justify-center">L8</div>
+        </div>
+      </div>
+      <p class="text-[10px] text-muted mt-3">
+        Неделя 1 — Jira baseline. Недели 2-5 — среда (AS-IS, спеки, тесты, roadmap). Недели 5-12 — 8 лекций еженедельно.
+      </p>
+    </div>
+
+    <!-- Months 1-3 success criteria -->
+    <div class="bg-purple-50 border border-purple-200 rounded-2xl p-5 sm:p-6 mt-6">
+      <h3 class="font-bold text-purple-900 mb-3 flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-purple-600"></i> Success criteria — конец 90 дней</h3>
+      <ul class="grid sm:grid-cols-2 gap-2 text-xs text-purple-900">
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> 8 лекций проведены и записаны</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> 5-10 champions сертифицированы</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> 10+ workflow playbooks опубликованы</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> Corporate platform (knowledge hub) live</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> Internal AI Engineering Handbook published</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> Onboarding revised</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> Before/after Jira comparison shows non-zero signal</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> ROI dashboard live (cost per merged PR / closed ticket)</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> Prompt-regression eval framework deployed</li>
+        <li class="flex gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-600 shrink-0 mt-0.5"></i> 42 "Git-active, no AI" — половина onboarded</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- CEO DECISIONS                                                        -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section id="decisions" class="py-12 sm:py-16 px-4 sm:px-6">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <h2 class="text-2xl sm:text-3xl font-bold text-navy uppercase tracking-widest mb-2">CEO Decisions Required</h2>
+      <p class="text-muted text-sm">5 решений, каждое с owner + deadline + success metric.</p>
+    </div>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <!-- D1 -->
+      <div class="bg-white border-t-4 border-blue rounded-xl p-4 sm:p-5 shadow-card relative">
+        <div class="flex justify-between items-start mb-2">
+          <span class="text-[10px] font-bold text-blue uppercase tracking-wider">Decision 1</span>
+          <span class="has-tooltip flip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Jira не докажет ROI сама по себе. Это baseline. Сравнение before/after после трансформации = доказательство.</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-sm mb-2">Approve Jira-first measurement</h3>
+        <p class="text-xs text-muted mb-3"><strong>Status:</strong> AI × Git connected, business impact — нет.</p>
+        <div class="bg-soft border border-line rounded p-2 text-[10px] space-y-1 mb-2">
+          <div class="flex justify-between"><span class="text-muted">Owner:</span><span class="font-bold">Data / EngOps</span></div>
+          <div class="flex justify-between"><span class="text-muted">Deadline:</span><span class="font-bold">Week 1</span></div>
+        </div>
+        <div class="text-[10px] font-bold text-blue bg-blue/10 px-2 py-1.5 rounded text-center">4-8 week baseline live</div>
+      </div>
+
+      <!-- D2 -->
+      <div class="bg-white border-t-4 border-amber-500 rounded-xl p-4 sm:p-5 shadow-card relative">
+        <div class="flex justify-between items-start mb-2">
+          <span class="text-[10px] font-bold text-amber-600 uppercase tracking-wider">Decision 2</span>
+          <span class="has-tooltip flip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">AI не создаёт качество. Он усиливает то качество, которое уже есть в среде. Слабые спеки, тесты, ownership становятся бОльшим риском когда AI ускоряет change.</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-sm mb-2">Approve environment hardening</h3>
+        <p class="text-xs text-muted mb-3"><strong>Status:</strong> hmnd mostly ready, hmnd-cloud не безопасен.</p>
+        <div class="bg-soft border border-line rounded p-2 text-[10px] space-y-1 mb-2">
+          <div class="flex justify-between"><span class="text-muted">Owner:</span><span class="font-bold">Eng / Platform</span></div>
+          <div class="flex justify-between"><span class="text-muted">Deadline:</span><span class="font-bold">Month 1</span></div>
+        </div>
+        <div class="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-1.5 rounded text-center">Priority repos have guardrails</div>
+      </div>
+
+      <!-- D3 -->
+      <div class="bg-white border-t-4 border-red-600 rounded-xl p-4 sm:p-5 shadow-card relative">
+        <div class="flex justify-between items-start mb-2">
+          <span class="text-[10px] font-bold text-red-600 uppercase tracking-wider">Decision 3</span>
+          <span class="has-tooltip flip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">AI можно использовать для explanation, planning, draft suggestions. Пауза относится к AI-assisted PR, которые могут менять production infrastructure.</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-sm mb-2">Pause AI-PRs в hmnd-cloud</h3>
+        <p class="text-xs text-muted mb-3"><strong>Status:</strong> Terraform 0 tests, 0 AGENTS, 0 CODEOWNERS.</p>
+        <div class="bg-soft border border-line rounded p-2 text-[10px] space-y-1 mb-2">
+          <div class="flex justify-between"><span class="text-muted">Owner:</span><span class="font-bold">Infra / Platform</span></div>
+          <div class="flex justify-between"><span class="text-muted">Deadline:</span><span class="font-bold text-red-600">Immediate</span></div>
+        </div>
+        <div class="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-1.5 rounded text-center">Exit when guards green</div>
+      </div>
+
+      <!-- D4 -->
+      <div class="bg-white border-t-4 border-slate-600 rounded-xl p-4 sm:p-5 shadow-card relative">
+        <div class="flex justify-between items-start mb-2">
+          <span class="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Decision 4</span>
+          <span class="has-tooltip flip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Budget alerts — не cap. Это early-warning для cost drift и model-routing mistakes.</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-sm mb-2">Approve cost governance</h3>
+        <p class="text-xs text-muted mb-3"><strong>Status:</strong> Top 10 = 63.2%. Routing > cuts.</p>
+        <div class="bg-soft border border-line rounded p-2 text-[10px] space-y-1 mb-2">
+          <div class="flex justify-between"><span class="text-muted">Owner:</span><span class="font-bold">AI Plat / Finance</span></div>
+          <div class="flex justify-between"><span class="text-muted">Deadline:</span><span class="font-bold">Month 1</span></div>
+        </div>
+        <div class="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-1.5 rounded text-center">$500 / $1k alerts active</div>
+      </div>
+
+      <!-- D5 -->
+      <div class="bg-white border-t-4 border-purple-600 rounded-xl p-4 sm:p-5 shadow-card relative">
+        <div class="flex justify-between items-start mb-2">
+          <span class="text-[10px] font-bold text-purple-600 uppercase tracking-wider">Decision 5</span>
+          <span class="has-tooltip flip"><i data-lucide="help-circle" class="w-4 h-4 text-muted"></i>
+            <span class="tooltip">Champion — не тот, кто больше тратит на AI. Champion — тот, чей workflow даёт measurable delivery/quality improvement.</span></span>
+        </div>
+        <h3 class="font-bold text-navy text-sm mb-2">Approve 3-month champion program</h3>
+        <p class="text-xs text-muted mb-3"><strong>Status:</strong> Power users visible. Repeatable practices missing.</p>
+        <div class="bg-soft border border-line rounded p-2 text-[10px] space-y-1 mb-2">
+          <div class="flex justify-between"><span class="text-muted">Owner:</span><span class="font-bold">Enablement</span></div>
+          <div class="flex justify-between"><span class="text-muted">Deadline:</span><span class="font-bold">3 Months</span></div>
+        </div>
+        <div class="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-1.5 rounded text-center">5-10 champions certified</div>
+      </div>
+    </div>
+
+    <!-- Resource estimate -->
+    <details class="bg-white border border-line rounded-xl shadow-card mt-6 p-5">
+      <summary class="font-bold text-navy flex items-center justify-between gap-3">
+        <span class="flex items-center gap-2"><i data-lucide="users" class="w-4 h-4 text-blue"></i> Программа · стоимость в FTE-днях</span>
+        <i data-lucide="chevron-down" class="w-5 h-5 text-muted chev"></i>
+      </summary>
+      <div class="mt-4 grid md:grid-cols-3 gap-4 text-xs">
+        <div class="bg-blue/5 rounded-lg p-4 border border-blue/30">
+          <div class="font-bold text-navy mb-2">Week 1 · Jira</div>
+          <div class="text-2xl font-bold text-blue mb-1">~7</div>
+          <div class="text-muted">FTE-дней (1 data engineer)</div>
+        </div>
+        <div class="bg-amber-50 rounded-lg p-4 border border-amber-200">
+          <div class="font-bold text-navy mb-2">Month 1 · Environment</div>
+          <div class="text-2xl font-bold text-amber-700 mb-1">~25</div>
+          <div class="text-muted">FTE-дней (распределённо между Infra, Eng leads, Platform)</div>
+        </div>
+        <div class="bg-purple-50 rounded-lg p-4 border border-purple-200">
+          <div class="font-bold text-navy mb-2">Months 1-3 · Training</div>
+          <div class="text-2xl font-bold text-purple-700 mb-1">~40</div>
+          <div class="text-muted">FTE-дней (Enablement + champions × 4-8 ч/неделя × 8 недель)</div>
+        </div>
+      </div>
+      <div class="mt-4 p-3 bg-soft border-l-4 border-navy rounded-r text-xs">
+        <strong>Итого:</strong> ~72 FTE-дней = <strong>~1 FTE на 90 дней</strong>, plus participation от champions / engineers (4-8 ч/неделя в течение 8 недель = ~30-60 ч на person).
+      </div>
+    </details>
+
+    <!-- What we WON'T do -->
+    <div class="bg-white border-2 border-dashed border-line rounded-xl shadow-card mt-6 p-5">
+      <h3 class="font-bold text-navy mb-3 flex items-center gap-2"><i data-lucide="x-circle" class="w-4 h-4 text-red-500"></i> Что мы НЕ будем делать (explicit non-goals)</h3>
+      <ul class="grid sm:grid-cols-2 gap-2 text-xs text-muted">
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Резать AI spend across the board — top users могут быть high-leverage</li>
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Мандатить один AI tool на инженера</li>
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Заменять human review на AI для production code</li>
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Генерировать Terraform через AI без human review</li>
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Внедрять AI в hmnd_wholebody / hmnd_firmware без test floor</li>
+        <li class="flex gap-2"><i data-lucide="x" class="w-4 h-4 text-red-500 shrink-0 mt-0.5"></i> Использовать AI-line counts как KPI продуктивности</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<!-- FINAL                                                                -->
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<section class="py-16 px-4 sm:px-6">
+  <div class="max-w-3xl mx-auto bg-navy text-white rounded-3xl p-8 sm:p-12 text-center shadow-2xl relative overflow-hidden">
+    <div class="absolute inset-0 bg-blue/10 blur-3xl pointer-events-none"></div>
+    <i data-lucide="check-circle" class="w-12 h-12 text-blue mx-auto mb-5 relative z-10"></i>
+    <h2 class="text-2xl sm:text-3xl font-bold mb-4 relative z-10">
+      HMND уже использует AI <em>materially</em>.<br>
+      <span class="text-white/60 text-xl">Дальше — измерить, обезопасить и масштабировать.</span>
+    </h2>
+    <p class="text-white/80 mb-6 relative z-10 max-w-xl mx-auto">
+      Adopt-ишн широкий. Cost концентрирован и управляем. Power users видны.
+      <strong class="text-white">AI ROI пока не доказан</strong> — это и есть следующий шаг.
+    </p>
+    <div class="bg-[#0b102b] border border-white/10 rounded-xl p-6 mb-6 text-left relative z-10">
+      <div class="text-[10px] uppercase tracking-widest text-blue font-bold mb-2">Final CEO Decision</div>
+      <p class="text-base sm:text-lg italic">
+        «Approve этот staged AI engineering transformation program: <strong>measure first</strong>,
+        <strong>harden the environment</strong>, then <strong>scale only the workflows that prove value</strong>.»
+      </p>
+    </div>
+    <div class="flex flex-wrap justify-center gap-2 relative z-10 text-[11px] font-bold uppercase tracking-widest">
+      <span class="bg-white/10 border border-white/20 px-3 py-2 rounded-lg text-blue">1 · Measure (W1)</span>
+      <span class="bg-white/10 border border-white/20 px-3 py-2 rounded-lg text-amber-300">2 · Harden (M1)</span>
+      <span class="bg-white/10 border border-white/20 px-3 py-2 rounded-lg text-purple-300">3 · Scale (M1-3)</span>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="py-6 text-center bg-white border-t border-line no-print">
+  <div class="text-[10px] text-muted font-mono uppercase tracking-widest flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-6">
+    <span class="flex items-center gap-1"><i data-lucide="shield-check" class="w-3 h-3 text-blue"></i> HMND Internal · Confidential</span>
+    <span>Generated 2026-05-16 · all data verified via audit_etl 17/17 ✓</span>
+    <a href="https://github.com/andre-kuzminykh/hmnd_dev_dashboard/tree/claude/token-monitoring-dashboard-aDaNV/docs" target="_blank" class="text-blue hover:underline">Source: docs/REPORT_I.md + REPORT_II.md</a>
+  </div>
+</footer>
+
+<script>
+  lucide.createIcons();
+  // Smooth-scroll for anchor links
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+  });
+</script>
+</body>
+</html>
