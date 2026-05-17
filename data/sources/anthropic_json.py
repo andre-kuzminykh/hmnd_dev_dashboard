@@ -62,6 +62,134 @@ def _parse_iso(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _compute_daily_product_weights(
+    doc: dict[str, Any],
+    start_dt: datetime,
+    end_dt: datetime,
+) -> dict[str, dict[int, float]]:
+    """F-18 / FR-18.1.
+
+    Inspect `raw.costByProduct.data[*]` (preferred) or `raw.cost.data[*]`
+    (fallback) and build a mapping:
+
+        { product_code: { day_index: weight_fraction } }
+
+    `day_index` is days since `start_dt.date()`. `weight_fraction` is the
+    share of that product's spend that landed on that day (sums to 1.0
+    over the period if the product has any recorded spend; empty dict
+    means "fall back to uniform").
+
+    A special key ``"*"`` carries the same shape but built from total
+    daily amounts (provider-wide), used for products that don't appear
+    in costByProduct or when costByProduct is empty.
+    """
+    raw = doc.get("raw") or {}
+    cbp = (raw.get("costByProduct") or {}).get("data") or []
+    cost = (raw.get("cost") or {}).get("data") or []
+
+    n_days = max((end_dt.date() - start_dt.date()).days + 1, 1)
+    weights: dict[str, dict[int, float]] = {}
+    totals: dict[str, float] = {}
+
+    # 1. Per-product daily series from costByProduct.
+    for bucket in cbp:
+        try:
+            day_iso = bucket.get("starting_at")
+            if not day_iso:
+                continue
+            day_dt = _parse_iso(day_iso)
+            d_idx = (day_dt.date() - start_dt.date()).days
+            if d_idx < 0 or d_idx >= n_days:
+                continue
+            for r in bucket.get("results") or []:
+                prod = r.get("product") or "*"
+                amt = float(r.get("amount") or 0)  # cents
+                if amt <= 0:
+                    continue
+                weights.setdefault(prod, {}).setdefault(d_idx, 0.0)
+                weights[prod][d_idx] += amt
+                totals[prod] = totals.get(prod, 0.0) + amt
+        except Exception:
+            continue
+
+    # 2. Wildcard series from `cost.data` (used as fallback per product).
+    wild_w: dict[int, float] = {}
+    wild_total = 0.0
+    for bucket in cost:
+        try:
+            day_iso = bucket.get("starting_at")
+            if not day_iso:
+                continue
+            day_dt = _parse_iso(day_iso)
+            d_idx = (day_dt.date() - start_dt.date()).days
+            if d_idx < 0 or d_idx >= n_days:
+                continue
+            for r in bucket.get("results") or []:
+                amt = float(r.get("amount") or 0)
+                if amt <= 0:
+                    continue
+                wild_w[d_idx] = wild_w.get(d_idx, 0.0) + amt
+                wild_total += amt
+        except Exception:
+            continue
+    if wild_total > 0:
+        weights["*"] = wild_w
+        totals["*"] = wild_total
+
+    # 3. Normalise each series to sum to 1.0
+    for prod, day_amt in weights.items():
+        t = totals.get(prod) or 0.0
+        if t <= 0:
+            weights[prod] = {}
+            continue
+        weights[prod] = {d: a / t for d, a in day_amt.items()}
+    return weights
+
+
+def _allocate_user_product_to_days(
+    amount_usd: float,
+    requests: int,
+    weights: dict[int, float],
+    n_days: int,
+) -> list[tuple[int, float, int]]:
+    """Given a user×product total + a normalised daily weight series,
+    return a list of (day_index, day_cost_usd, day_requests) tuples.
+
+    If `weights` is empty or all-zero → uniform split (back-compat,
+    FR-18.3).
+    Requests are split proportionally to cost (rounded; remainder spread).
+    """
+    nonzero = {d: w for d, w in (weights or {}).items() if w > 0}
+    if not nonzero:
+        # Uniform fallback
+        if n_days <= 0:
+            return []
+        per = amount_usd / n_days
+        per_req = requests // n_days
+        rem = requests - per_req * n_days
+        out: list[tuple[int, float, int]] = []
+        for d in range(n_days):
+            r = per_req + (1 if d < rem else 0)
+            out.append((d, per, r))
+        return out
+
+    # Weighted: distribute cost by weight, requests proportionally.
+    out: list[tuple[int, float, int]] = []
+    remaining_reqs = requests
+    keys = sorted(nonzero.keys())
+    for i, d in enumerate(keys):
+        w = nonzero[d]
+        day_cost = amount_usd * w
+        if i == len(keys) - 1:
+            day_reqs = remaining_reqs
+        else:
+            day_reqs = int(round(requests * w))
+            day_reqs = min(day_reqs, remaining_reqs)
+            remaining_reqs -= day_reqs
+        out.append((d, day_cost, day_reqs))
+    return out
+
+
 def _ensure_provider() -> int:
     with get_conn() as conn:
         conn.execute("INSERT OR IGNORE INTO providers(name) VALUES('anthropic')")
@@ -147,6 +275,11 @@ def load_anthropic_json(path: Path | str) -> dict[str, Any]:
                 "period_to": end_dt.date().isoformat(),
                 "note": "no userCostByProduct rows"}
 
+    # F-18 / FR-18.1 — build per-product daily weight series. Empty dict
+    # for a product means "use the wildcard (*) series", and an empty *
+    # means "uniform" (handled inside _allocate_user_product_to_days).
+    daily_weights = _compute_daily_product_weights(doc, start_dt, end_dt)
+
     inserted = 0
     user_ids: set[int] = set()
     for rec in records:
@@ -171,38 +304,31 @@ def load_anthropic_json(path: Path | str) -> dict[str, Any]:
 
         kid = _ensure_api_key(pid, f"sk-ant-json-{email}-{product}",
                               f"{name}/{product}", uid)
-        per_day_reqs = max(requests // days, 0)
-        rem = requests - per_day_reqs * days
-        per_event_cost = (amount / requests) if requests > 0 else (amount / days)
 
-        # Insert one event per day with the day's aggregated counts. This
-        # keeps total row count low and downstream COUNT(*) per day stays
-        # meaningful as "number of (user, product) active days".
+        # F-18 / FR-18.2 — allocate this user×product total across the
+        # period using the product's own daily weight curve, falling back
+        # to the provider-wide curve, then to uniform.
+        weights = (daily_weights.get(product)
+                   or daily_weights.get("*")
+                   or {})
+        slices = _allocate_user_product_to_days(amount, requests, weights, days)
+
         rows: list[tuple] = []
-        for d in range(days):
-            day_dt = start_dt + timedelta(days=d)
-            n = per_day_reqs + (1 if d < rem else 0)
-            if n <= 0 and requests > 0:
+        for d_idx, day_cost, n in slices:
+            if day_cost <= 0 and n <= 0:
+                # FR-18 / UC-18.3 — days with zero recorded activity stay empty.
                 continue
-            if n == 0 and requests == 0:
-                # Pure cost-only record (no request count): still emit one
-                # marker event per day so cost shows up.
-                day_cost = amount / days
-                rows.append((
-                    uid, pid, generic_mid, kid,
-                    day_dt.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S"),
-                    0, 0, 0, round(day_cost, 6), 0, 0, purpose,
-                ))
-                continue
-            day_cost = n * per_event_cost
+            day_dt = start_dt + timedelta(days=d_idx)
+            # Token counts are approximations: rollups.totalTokens / totalRequests
+            # gives ~112K avg tokens/request, but per-user/per-product token split
+            # isn't in this dump. Use a representative split so the UI shows
+            # non-zero token columns; cost is exact and that's what matters.
+            tin = int(2500 * n) if n > 0 else 0
+            tout = int(800 * n) if n > 0 else 0
             rows.append((
                 uid, pid, generic_mid, kid,
                 day_dt.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S"),
-                # Token counts are approximations: rollups.totalTokens / totalRequests
-                # gives ~112K avg tokens/request, but per-user/per-product token split
-                # isn't in this dump. Use a representative split so the UI shows
-                # non-zero token columns; cost is exact and that's what matters.
-                int(2500 * n), int(800 * n), 0, round(day_cost, 6),
+                tin, tout, 0, round(day_cost, 6),
                 0, 0, purpose,
             ))
         if rows:

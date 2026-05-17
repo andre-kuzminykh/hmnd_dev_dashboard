@@ -1101,3 +1101,81 @@ And `git_commits.repo` column в CSV содержит short_name, не full org/
 - `theme.py` — палитра, CSS-инъекция в стиле HUMANOID
 - `components.py` — KPI-карточки, бейджи, фильтры
 - `pages/` — отдельные экраны (multi-page)
+
+---
+
+## F-18 — Real per-day spend curves for Anthropic and Cursor
+
+### Feature
+"Spend over time" KPI chart must show **true daily variance** for every
+provider, not a constant straight line. Both Anthropic and Cursor JSON
+exports already carry day-level data; the v1 loaders ignore it and emit
+`amount / days` per day, producing a flat line in `frontend/sections/overview.py`.
+
+### User Flow
+1. Provider pull writes `sources/Anthropics_*.json` and `sources/Cursor_*.json`
+2. `data/sources/anthropic_json.load_anthropic_json` ingests events into `usage_events`
+3. `data/sources/cursor_json.load_cursor_json` does the same for Cursor
+4. Dashboard `Spend over time` chart does `GROUP BY date(occurred_at)` and renders
+5. Curve must show real day-to-day variance (peaks on busy days, troughs on weekends/idle days)
+
+### Use Cases
+- **UC-18.1** Anthropic Admin export contains a daily breakdown
+  (`raw.cost.data[].starting_at|amount|requests`,
+  `raw.costByProduct.data[].results[]`) → loader uses these as the **per-day
+  weight** for distributing each user×product spend across the period.
+- **UC-18.2** Cursor export contains per-user-per-day activity
+  (`raw.usage.data[].userId|day|acceptedLinesAdded|...`) → loader uses
+  **each user's own daily activity profile** as the weight when spreading
+  that user's monthly `spendCents + includedSpendCents` across days.
+- **UC-18.3** A day with zero recorded activity in the source JSON
+  produces **zero `usage_events.cost_usd` for that day** (chart hits 0,
+  not the flat-line mean).
+- **UC-18.4** Per-user totals stay invariant — `SUM(cost_usd) WHERE
+  user_id=X AND provider=Y` after load == that user's total from
+  `userCostByProduct.amount` (Anthropic) / `spend.teamMemberSpend.spendCents
+  + includedSpendCents` (Cursor).
+
+### Functional Requirements
+
+| ID | Requirement |
+|---|---|
+| FR-18.1 | Anthropic loader MUST read `raw.costByProduct.data[*]` (or `raw.cost.data` as fallback) and compute a per-product daily weight series. |
+| FR-18.2 | Anthropic loader MUST allocate each user×product total across the period proportionally to that product's daily weight; per-user-per-product TOTAL must be preserved exactly. |
+| FR-18.3 | Anthropic loader, when the daily series is missing or all-zero for a product, MUST fall back to even split (current behaviour) and still load. |
+| FR-18.4 | Cursor loader MUST read `raw.usage.data[*]` and compute per-(user, day) weights from `acceptedLinesAdded` (falling back to `totalLinesAdded`, then `agentChatTotalRequests`, then uniform). |
+| FR-18.5 | Cursor loader MUST allocate each user's `spendCents + includedSpendCents` across days using that user's own activity weights; per-user TOTAL must be preserved exactly. |
+| FR-18.6 | Both loaders MUST remain idempotent (DELETE-then-INSERT in `[rangeStart, rangeEnd]`). |
+| FR-18.7 | Both loaders MUST keep the existing return-dict shape (`inserted`, `users`, `period_from`, `period_to`, `total_spend_usd`). |
+
+### NFR
+
+- **NFR-18.1** Acceptable extra runtime: < 2× current loader runtime for the full dump (90 days × ~5,000 Cursor usage rows ≈ < 5 s on the sync container).
+- **NFR-18.2** Memory footprint must stay below 200 MB during ingest.
+- **NFR-18.3** No new external dependencies.
+
+### Tests — by 4 layers
+
+**T-INFRA-18.* (smoke / regression)**
+- T-INFRA-18.1 — Both loaders complete on the production-shape JSON in `sources/` without raising. Run via `python -m scripts.sync`.
+
+**T-DATA-18.* (data / loaders)**
+- T-DATA-18.1 — Anthropic loader: with a fixture containing two days of differing daily amounts ($10 day 1, $90 day 2) for one product and one user with total = $100, after load the `SUM(cost_usd) WHERE date(occurred_at)='day 1'` ≈ $10 and `… 'day 2'` ≈ $90 (within $0.01).
+- T-DATA-18.2 — Anthropic loader: per-user-per-product total is preserved within $0.01 of the source `userCostByProduct.amount`.
+- T-DATA-18.3 — Anthropic loader: days with zero `amount` in the daily series produce zero `cost_usd` events for that day.
+- T-DATA-18.4 — Anthropic loader: fixture with NO daily series (`raw.costByProduct` empty) → falls back to uniform split and still loads (back-compat).
+- T-DATA-18.5 — Cursor loader: per-user daily weights come from `acceptedLinesAdded` — fixture with a user adding 100 lines on day 1 and 900 on day 2 → after load, that user's `cost_usd` on day 1 is 10% of their total, day 2 is 90%, within $0.01.
+- T-DATA-18.6 — Cursor loader: per-user lifetime total is preserved within $0.01 of `spend.teamMemberSpend.spendCents + includedSpendCents`.
+- T-DATA-18.7 — Cursor loader: user with zero activity across all days falls back to uniform split (so spend ≠ 0 but still attributed).
+
+**T-SVC-18.* (downstream service unchanged)**
+- T-SVC-18.1 — `backend/services/overview.get_spend_over_time(...)` returns a list where Anthropic-day-totals vary day-to-day (stdev > 0) when the source had non-uniform daily amounts. (Replaces the previous "all-equal" silent assumption.)
+
+**T-AI-18.* (none)** — no model prompts, no AI evals needed.
+
+### Implementation notes
+- `data/sources/anthropic_json.py:_compute_daily_product_weights(doc) -> dict[(date, product), float]` — builds weight map.
+- `data/sources/anthropic_json.py:_emit_user_events_with_daily_weights(rec, weights)` — replaces the inner per-day loop.
+- `data/sources/cursor_json.py:_compute_user_daily_weights(usage_data) -> dict[(uid, date), float]` — same pattern.
+- Each loader keeps the existing fallback-to-uniform path when weights are absent — this makes the change strictly additive and keeps the v1 fixtures green.
+

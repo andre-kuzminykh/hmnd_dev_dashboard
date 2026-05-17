@@ -42,6 +42,57 @@ def latest_cursor_file() -> SourceFile | None:
     return latest_match(_PATTERNS)
 
 
+def _compute_user_daily_weights(
+    usage_data: list[dict],
+    start_dt: "datetime",
+    n_days: int,
+) -> dict[str, dict[int, float]]:
+    """F-18 / FR-18.4.
+
+    Build a per-(email, day_index) normalised weight series from
+    `raw.usage.data[*]`. For each user we prefer `acceptedLinesAdded`,
+    falling back to `totalLinesAdded`, then `agentChatTotalRequests`. An
+    email with no activity rows or all-zero counters yields an empty
+    dict (caller falls back to uniform — FR-18.4 / UC-18.7).
+    """
+    raw: dict[str, dict[int, float]] = {}
+    totals: dict[str, float] = {}
+    for row in usage_data or []:
+        try:
+            email = (row.get("email") or "").lower().strip()
+            day = row.get("day")
+            if not email or not day:
+                continue
+            # day is "YYYY-MM-DD" — parse safely.
+            y, m, d = (int(x) for x in day.split("-"))
+            from datetime import date as _date
+            day_dt = _date(y, m, d)
+            d_idx = (day_dt - start_dt.date()).days
+            if d_idx < 0 or d_idx >= n_days:
+                continue
+            w = float(row.get("acceptedLinesAdded") or 0)
+            if w <= 0:
+                w = float(row.get("totalLinesAdded") or 0)
+            if w <= 0:
+                w = float(row.get("agentChatTotalRequests") or 0)
+            if w <= 0:
+                continue
+            raw.setdefault(email, {}).setdefault(d_idx, 0.0)
+            raw[email][d_idx] += w
+            totals[email] = totals.get(email, 0.0) + w
+        except Exception:
+            continue
+    # Normalise per user
+    out: dict[str, dict[int, float]] = {}
+    for email, day_w in raw.items():
+        t = totals.get(email) or 0.0
+        if t <= 0:
+            out[email] = {}
+            continue
+        out[email] = {d: w / t for d, w in day_w.items()}
+    return out
+
+
 def _parse_iso(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
@@ -193,7 +244,11 @@ def load_cursor_json(path: Path | str) -> dict[str, Any]:
     per_user_rollup = rollups.get("perUser") or {}
     members = ((doc.get("raw") or {}).get("members") or {}).get("teamMembers") or []
     spend_rows = ((doc.get("raw") or {}).get("spend") or {}).get("teamMemberSpend") or []
+    usage_data = ((doc.get("raw") or {}).get("usage") or {}).get("data") or []
     members_by_email = {(m.get("email") or "").lower(): m for m in members if m.get("email")}
+
+    # F-18 / FR-18.4 — per-user daily weights (acceptedLinesAdded etc).
+    user_weights = _compute_user_daily_weights(usage_data, start_dt, days)
 
     inserted = 0
     user_ids_seen: set[int] = set()
@@ -217,29 +272,57 @@ def load_cursor_json(path: Path | str) -> dict[str, Any]:
         uid = _ensure_user(email, name)
         user_ids_seen.add(uid)
 
-        # One row per day with the day's slice of activity.
-        per_day_lines = lines // days
-        rem_lines = lines - per_day_lines * days
-        per_day_agent = agent // days
-        rem_agent = agent - per_day_agent * days
-        # Spend is the user's monthly allowance + overage in cents — split evenly.
-        per_day_cost = (total_cents / 100.0) / days
-
+        # F-18 / FR-18.5 — distribute this user's monthly spend across days
+        # by their own daily weight curve. Falls back to uniform when no
+        # activity rows for this email (UC-18.7).
+        weights = user_weights.get(email) or {}
+        total_usd = total_cents / 100.0
         rows: list[tuple] = []
-        for d in range(days):
-            day_dt = start_dt + timedelta(days=d)
-            day_lines = per_day_lines + (1 if d < rem_lines else 0)
-            day_agent = per_day_agent + (1 if d < rem_agent else 0)
-            # Token estimate: 1 line ≈ 20 tokens (very rough). UI shows it as
-            # "tokens_out" so the developer-by-AI-output panels aren't empty.
-            tokens_out_est = day_lines * 20
-            rows.append((
-                uid, pid, cursor_generic_mid, None,  # no api_key
-                day_dt.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S"),
-                tokens_out_est * 5, tokens_out_est, 0,  # tokens_in ~5x out
-                round(per_day_cost, 6),
-                0, 0, "Cursor",
-            ))
+        if weights:
+            # Weighted slices — only emit on days with non-zero weight, so
+            # idle days hit $0 in the dashboard chart.
+            keys = sorted(weights.keys())
+            remaining_lines = lines
+            remaining_agent = agent
+            remaining_cost = total_usd
+            for i, d_idx in enumerate(keys):
+                w = weights[d_idx]
+                day_dt = start_dt + timedelta(days=d_idx)
+                if i == len(keys) - 1:
+                    day_cost = remaining_cost
+                    day_lines = remaining_lines
+                    day_agent = remaining_agent
+                else:
+                    day_cost = total_usd * w
+                    day_lines = int(round(lines * w))
+                    day_agent = int(round(agent * w))
+                    remaining_cost -= day_cost
+                    remaining_lines -= day_lines
+                    remaining_agent -= day_agent
+                tokens_out_est = max(day_lines, 0) * 20
+                rows.append((
+                    uid, pid, cursor_generic_mid, None,
+                    day_dt.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S"),
+                    tokens_out_est * 5, tokens_out_est, 0,
+                    round(day_cost, 6),
+                    0, 0, "Cursor",
+                ))
+        else:
+            # Uniform fallback — back-compat for users with no daily activity rows.
+            per_day_lines = lines // days
+            rem_lines = lines - per_day_lines * days
+            per_day_cost = total_usd / days
+            for d in range(days):
+                day_dt = start_dt + timedelta(days=d)
+                day_lines = per_day_lines + (1 if d < rem_lines else 0)
+                tokens_out_est = day_lines * 20
+                rows.append((
+                    uid, pid, cursor_generic_mid, None,
+                    day_dt.replace(hour=12, minute=0, second=0).strftime("%Y-%m-%d %H:%M:%S"),
+                    tokens_out_est * 5, tokens_out_est, 0,
+                    round(per_day_cost, 6),
+                    0, 0, "Cursor",
+                ))
         with get_conn() as conn:
             conn.executemany(
                 """INSERT INTO usage_events(
