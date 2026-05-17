@@ -632,17 +632,17 @@
       <details class="det-card mb-3" open>
         <summary><span class="font-semibold text-navy text-sm">Guardrail table</span><span class="chev text-muted">▶</span></summary>
         <div class="body scroll-x"><table class="dt">
-          <thead><tr><th>Guardrail</th><th class="text-center">hmnd</th><th class="text-center">hmnd-cloud</th><th class="text-center">hmnd-sim</th><th>Why it matters for AI</th></tr></thead>
+          <thead><tr><th>Guardrail</th><th class="text-center">hmnd</th><th class="text-center">hmnd-cloud</th><th>Why it matters for AI</th></tr></thead>
           <tbody>
-            <tr><td>AGENTS.md (root)</td><td class="text-center check">✓ 9KB</td><td class="text-center cross">✗</td><td class="text-center warn">CLAUDE.md only</td><td>Tells AI agents conventions, anti-patterns, build/test commands</td></tr>
-            <tr><td>Per-module AGENTS.md</td><td class="text-center warn">5/14</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td>Per-bounded-context guardrails</td></tr>
-            <tr><td>.cursor/rules</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td>Cursor-specific runtime guidance</td></tr>
-            <tr><td>.claude/ markers</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td>Claude Code project context</td></tr>
-            <tr><td>CODEOWNERS</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td>Forces human reviewer; blocks AI auto-merge</td></tr>
-            <tr><td>pre-commit hooks</td><td class="text-center check">✓ 10.3KB</td><td class="text-center warn">2.6KB</td><td class="text-center cross">✗</td><td>Catches AI-generated style/secret issues before push</td></tr>
-            <tr><td>CI / test workflows</td><td class="text-center check">40+</td><td class="text-center warn">8 (build)</td><td class="text-center cross">✗</td><td>Validates AI code at PR time</td></tr>
-            <tr><td>Formal ADRs / docs/</td><td class="text-center warn">light</td><td class="text-center warn">README only</td><td class="text-center cross">✗</td><td>Architectural decisions AI can respect</td></tr>
-            <tr><td>Prompt-regression eval</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td><strong>Single biggest gap</strong> — detects when instructions silently break AI</td></tr>
+            <tr><td>AGENTS.md (root)</td><td class="text-center check">✓ 9KB</td><td class="text-center cross">✗</td><td>Tells AI agents conventions, anti-patterns, build/test commands</td></tr>
+            <tr><td>Per-module AGENTS.md</td><td class="text-center warn">5/14</td><td class="text-center cross">✗</td><td>Per-bounded-context guardrails</td></tr>
+            <tr><td>.cursor/rules</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td>Cursor-specific runtime guidance</td></tr>
+            <tr><td>.claude/ markers</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td>Claude Code project context</td></tr>
+            <tr><td>CODEOWNERS</td><td class="text-center check">✓</td><td class="text-center cross">✗</td><td>Forces human reviewer; blocks AI auto-merge</td></tr>
+            <tr><td>pre-commit hooks</td><td class="text-center check">✓ 10.3KB</td><td class="text-center warn">2.6KB</td><td>Catches AI-generated style/secret issues before push</td></tr>
+            <tr><td>CI / test workflows</td><td class="text-center check">40+</td><td class="text-center warn">8 (build)</td><td>Validates AI code at PR time</td></tr>
+            <tr><td>Formal ADRs / docs/</td><td class="text-center warn">light</td><td class="text-center warn">README only</td><td>Architectural decisions AI can respect</td></tr>
+            <tr><td>Prompt-regression eval</td><td class="text-center cross">✗</td><td class="text-center cross">✗</td><td><strong>Single biggest gap</strong> — detects when instructions silently break AI</td></tr>
           </tbody>
         </table></div>
       </details>
@@ -722,29 +722,28 @@
       </table></div>
     </details>
 
-    <!-- §2.10 — 17 PRIORITY ACTIONS (collapsed) -->
+    <!-- §2.10 — 16 PRIORITY ACTIONS (collapsed) -->
     <details class="det-card mb-8">
-      <summary><span class="font-semibold text-navy"><span class="section-num">§2.10</span> 17 priority actions — full list, sequenced</span><span class="chev text-muted">▶</span></summary>
+      <summary><span class="font-semibold text-navy"><span class="section-num">§2.10</span> 16 priority actions — full list, sequenced</span><span class="chev text-muted">▶</span></summary>
       <div class="body scroll-x"><table class="dt">
         <thead><tr><th>#</th><th>Horizon</th><th>Action</th><th>Repo</th><th>Owner</th><th>Effort</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td><span class="pill pill-bad">Now</span></td><td>Archive hmnd-sim on GitHub</td><td>hmnd-sim</td><td>Eng Manager</td><td>15 min</td></tr>
-          <tr><td>2</td><td><span class="pill pill-bad">Now</span></td><td>Add CODEOWNERS to hmnd-cloud</td><td>hmnd-cloud</td><td>matakan</td><td>2 h</td></tr>
-          <tr><td>3</td><td><span class="pill pill-bad">Now</span></td><td>AGENTS.md for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + Eugene</td><td>1 day</td></tr>
-          <tr><td>4</td><td><span class="pill pill-bad">Now</span></td><td>READMEs for 4 missing hmnd modules</td><td>hmnd</td><td>module owners</td><td>2 h</td></tr>
-          <tr><td>5</td><td><span class="pill pill-warn">30d</span></td><td>PR-validation workflow for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + AI lead</td><td>3 days</td></tr>
-          <tr><td>6</td><td><span class="pill pill-warn">30d</span></td><td>Per-domain READMEs in hmnd-cloud</td><td>hmnd-cloud</td><td>IaC team</td><td>3 days</td></tr>
-          <tr><td>7</td><td><span class="pill pill-warn">30d</span></td><td>Per-module AGENTS.md (fleet/flywheel/wholebody/services)</td><td>hmnd</td><td>module owners</td><td>1 week</td></tr>
-          <tr><td>8</td><td><span class="pill pill-warn">30d</span></td><td>Test-floor enforcement (wholebody &amp; firmware)</td><td>hmnd</td><td>module owners</td><td>2 weeks</td></tr>
-          <tr><td>9</td><td><span class="pill pill-warn">30d</span></td><td>First 5 ADRs each repo</td><td>both</td><td>tech leads</td><td>1 week</td></tr>
-          <tr><td>10</td><td><span class="pill pill-warn">30d</span></td><td>Identity merge for hmnd-cloud contributors</td><td>hmnd-cloud</td><td>Data infra</td><td>1 day</td></tr>
-          <tr><td>11</td><td><span class="pill pill-warn">30d</span></td><td>AI-assist PR checkbox in templates</td><td>both</td><td>Eng Manager</td><td>1 h</td></tr>
-          <tr><td>12</td><td><span class="pill pill-blue">60–90d</span></td><td>Prompt-regression eval framework</td><td>both</td><td>AI lead</td><td>2 weeks</td></tr>
-          <tr><td>13</td><td><span class="pill pill-blue">60–90d</span></td><td>terratest for high-blast-radius modules</td><td>hmnd-cloud</td><td>IaC team</td><td>2 weeks</td></tr>
-          <tr><td>14</td><td><span class="pill pill-blue">60–90d</span></td><td>Audit policy for 21+-file commits</td><td>hmnd</td><td>Eng Manager</td><td>1 day</td></tr>
-          <tr><td>15</td><td><span class="pill pill-blue">60–90d</span></td><td>hmnd_firmware unit-test scaffold</td><td>hmnd</td><td>firmware team</td><td>1 week</td></tr>
-          <tr><td>16</td><td><span class="pill pill-blue">60–90d</span></td><td>10-PR qualitative audit of hmnd_fleet bug-fixes</td><td>hmnd</td><td>AI lead</td><td>2 days</td></tr>
-          <tr><td>17</td><td><span class="pill pill-blue">60–90d</span></td><td>Cross-train 4 single-person modules</td><td>hmnd</td><td>Eng Manager</td><td>30d elapsed</td></tr>
+          <tr><td>1</td><td><span class="pill pill-bad">Now</span></td><td>Add CODEOWNERS to hmnd-cloud</td><td>hmnd-cloud</td><td>matakan</td><td>2 h</td></tr>
+          <tr><td>2</td><td><span class="pill pill-bad">Now</span></td><td>AGENTS.md for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + Eugene</td><td>1 day</td></tr>
+          <tr><td>3</td><td><span class="pill pill-bad">Now</span></td><td>READMEs for 4 missing hmnd modules</td><td>hmnd</td><td>module owners</td><td>2 h</td></tr>
+          <tr><td>4</td><td><span class="pill pill-warn">30d</span></td><td>PR-validation workflow for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + AI lead</td><td>3 days</td></tr>
+          <tr><td>5</td><td><span class="pill pill-warn">30d</span></td><td>Per-domain READMEs in hmnd-cloud</td><td>hmnd-cloud</td><td>IaC team</td><td>3 days</td></tr>
+          <tr><td>6</td><td><span class="pill pill-warn">30d</span></td><td>Per-module AGENTS.md (fleet/flywheel/wholebody/services)</td><td>hmnd</td><td>module owners</td><td>1 week</td></tr>
+          <tr><td>7</td><td><span class="pill pill-warn">30d</span></td><td>Test-floor enforcement (wholebody &amp; firmware)</td><td>hmnd</td><td>module owners</td><td>2 weeks</td></tr>
+          <tr><td>8</td><td><span class="pill pill-warn">30d</span></td><td>First 5 ADRs each repo</td><td>both</td><td>tech leads</td><td>1 week</td></tr>
+          <tr><td>9</td><td><span class="pill pill-warn">30d</span></td><td>Identity merge for hmnd-cloud contributors</td><td>hmnd-cloud</td><td>Data infra</td><td>1 day</td></tr>
+          <tr><td>10</td><td><span class="pill pill-warn">30d</span></td><td>AI-assist PR checkbox in templates</td><td>both</td><td>Eng Manager</td><td>1 h</td></tr>
+          <tr><td>11</td><td><span class="pill pill-blue">60–90d</span></td><td>Prompt-regression eval framework</td><td>both</td><td>AI lead</td><td>2 weeks</td></tr>
+          <tr><td>12</td><td><span class="pill pill-blue">60–90d</span></td><td>terratest for high-blast-radius modules</td><td>hmnd-cloud</td><td>IaC team</td><td>2 weeks</td></tr>
+          <tr><td>13</td><td><span class="pill pill-blue">60–90d</span></td><td>Audit policy for 21+-file commits</td><td>hmnd</td><td>Eng Manager</td><td>1 day</td></tr>
+          <tr><td>14</td><td><span class="pill pill-blue">60–90d</span></td><td>hmnd_firmware unit-test scaffold</td><td>hmnd</td><td>firmware team</td><td>1 week</td></tr>
+          <tr><td>15</td><td><span class="pill pill-blue">60–90d</span></td><td>10-PR qualitative audit of hmnd_fleet bug-fixes</td><td>hmnd</td><td>AI lead</td><td>2 days</td></tr>
+          <tr><td>16</td><td><span class="pill pill-blue">60–90d</span></td><td>Cross-train 4 single-person modules</td><td>hmnd</td><td>Eng Manager</td><td>30d elapsed</td></tr>
         </tbody>
       </table></div>
     </details>
@@ -778,38 +777,47 @@
 
     <!-- WEEK 1 -->
     <div class="mb-10">
-      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.1</span> Week 1 · Jira foundation &amp; ROI baseline</h3>
+      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.1</span> Week 1 · Connect Jira → unlock ROI measurement</h3>
+
+      <div class="mb-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-sm text-amber-900 flex items-start gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 mt-0.5 shrink-0 text-amber-600"></i>
+        <div>
+          <strong>Data source gap.</strong> Jira is <strong>not yet integrated</strong> in the dashboard pipeline. AI spend, Git, and Cursor/Anthropic/OpenAI telemetry are live; Jira (and PR review data) are the only missing pieces. Until Jira ingestion lands, ROI metrics that depend on closed-ticket counts are <em>baseline-only</em> and cannot be tracked over time. <strong>HMND-AI-1 below establishes that integration — it is the prerequisite for everything else.</strong>
+        </div>
+      </div>
+
       <details class="det-card mb-3" open>
         <summary><span class="font-semibold text-navy text-sm">7 tickets + ROI metrics</span><span class="chev text-muted">▶</span></summary>
         <div class="body">
           <div class="scroll-x"><table class="dt">
             <thead><tr><th>Key</th><th>Summary</th><th>Owner (suggested)</th><th>Definition of done</th></tr></thead>
             <tbody>
-              <tr><td class="mono">HMND-AI-1</td><td>Archive hmnd-sim on GitHub</td><td>Eng Manager</td><td>Repo "Archived" banner; README redirects to <code>hmnd/hmnd_sim</code></td></tr>
+              <tr style="background:rgba(73,83,216,.06)"><td class="mono">HMND-AI-1</td><td><strong>Connect Jira → ROI baseline</strong></td><td>Data infra + Eng Manager</td><td>Jira API key provisioned; nightly sync into <code>jira_issues</code> table; loader audited via <code>scripts/audit_etl</code>; first ROI cut shown in dashboard for $/closed-Jira, $/merged-PR, $/passing-test</td></tr>
               <tr><td class="mono">HMND-AI-2</td><td>CODEOWNERS to hmnd-cloud</td><td>matakan / Daniel</td><td><code>.github/CODEOWNERS</code> pins each <code>domains/*/</code>; branch-protection requires owner review</td></tr>
               <tr><td class="mono">HMND-AI-3</td><td>AGENTS.md for hmnd-cloud</td><td>matakan + Eugene</td><td>~1 page; "never apply from AI"; per-domain blast-radius matrix</td></tr>
               <tr><td class="mono">HMND-AI-4</td><td>Coaching × 3 ChatGPT outliers</td><td>Eng Manager</td><td>15-min calls × Cody, Matt, Sam; agree default-to-mini routing</td></tr>
               <tr><td class="mono">HMND-AI-5</td><td>Interview Q1 champions → playbook v0</td><td>AI lead</td><td>5 recorded calls; Notion page with 5 workflows + canonical tool-per-task</td></tr>
-              <tr><td class="mono">HMND-AI-6</td><td>Budget alerts + ROI baseline</td><td>Data infra</td><td>Slack pings at $500 / $1k; baseline dashboards for $/closed-Jira, $/merged-PR, $/passing-test</td></tr>
+              <tr><td class="mono">HMND-AI-6</td><td>Budget alerts (Slack)</td><td>Data infra</td><td>Slack pings at $500 / $1k per user; tested with a synthetic user</td></tr>
               <tr><td class="mono">HMND-AI-7</td><td>READMEs for 4 missing hmnd modules</td><td>Module owners</td><td>One paragraph each: <code>hmnd_agents</code>, <code>hmnd_flywheel</code>, <code>hmnd_playground</code>, <code>hmnd_services</code></td></tr>
             </tbody>
           </table></div>
           <div class="mt-4 grid sm:grid-cols-3 gap-3">
-            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 1</div><div class="font-bold text-navy mt-1">$ / closed-Jira</div><p class="text-xs text-muted mt-1">Sum AI spend by author × month, divide by closed Jira tickets. Baseline week 1; target -20% by month 3.</p></div>
-            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 2</div><div class="font-bold text-navy mt-1">$ / merged-PR</div><p class="text-xs text-muted mt-1">Same denominator: merged PRs. Distinguishes "AI active" from "AI productive".</p></div>
-            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 3</div><div class="font-bold text-navy mt-1">$ / passing-test</div><p class="text-xs text-muted mt-1">Tracks Test-before-Code discipline. Should rise on test-floor enforcement.</p></div>
+            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 1</div><div class="font-bold text-navy mt-1">$ / closed-Jira</div><p class="text-xs text-muted mt-1">Sum AI spend by author × month, divide by closed Jira tickets. <strong class="text-amber-700">Requires HMND-AI-1.</strong> Baseline week 1; target −20% by month 3.</p></div>
+            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 2</div><div class="font-bold text-navy mt-1">$ / merged-PR</div><p class="text-xs text-muted mt-1">Already computable from existing Git telemetry. Distinguishes "AI active" from "AI productive".</p></div>
+            <div class="p-3 bg-soft border border-line rounded-lg"><div class="kpi-label">ROI metric 3</div><div class="font-bold text-navy mt-1">$ / passing-test</div><p class="text-xs text-muted mt-1">Already computable from CI artefacts. Should rise on test-floor enforcement (PA #7).</p></div>
           </div>
         </div>
       </details>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Seven Jira tickets, named owners, definitions of done. Plus the ROI baseline: <strong>$/closed-Jira</strong>, <strong>$/merged-PR</strong>, <strong>$/passing-test</strong>. Without baseline, no future improvement is measurable.</p>
+        <p class="text-navy">Week 1 has one strategic goal — <strong>land the Jira integration (HMND-AI-1)</strong> — and six supporting tickets that don't depend on it. Two of the three ROI metrics ($/merged-PR, $/passing-test) work from existing Git + CI data. The third ($/closed-Jira) is the one that requires the new Jira source.</p>
       </div>
     </div>
 
     <!-- GANTT CHART -->
     <div class="mb-10">
-      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.2</span> Months 1–3 · 4-week repeating cycle</h3>
+      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.2</span> Months 1–3 · two parallel directions</h3>
+      <p class="text-sm text-muted mb-4">Week 1 sets up the data source (Jira). From week 2 two streams run side-by-side for 12 weeks: <strong>(A) Environment rollout</strong> in a 4-week cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor, repeated 3×) and <strong>(B) Education</strong> — 8 weekly lectures L1 … L8.</p>
       <div class="det-card p-4 sm:p-6 scroll-x">
         <!-- Header: 13 weeks -->
         <div class="gantt-head" style="min-width:920px">
@@ -820,16 +828,21 @@
           <div class="col">W10</div><div class="col">W11</div><div class="col">W12</div><div class="col">W13</div>
         </div>
 
-        <!-- WEEK 1 SETUP -->
-        <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">Jira &amp; ROI setup<small>baseline measurement</small></div>
-          <div class="gantt-cell gc-navy">JIRA+ROI</div>
+        <!-- WEEK 1 · JIRA SETUP -->
+        <div class="gantt-row" style="min-width:920px; background:rgba(73,83,216,.04)">
+          <div class="lbl">Setup<small>connect Jira → ROI</small></div>
+          <div class="gantt-cell gc-navy">JIRA</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
 
-        <!-- SPEC track: weeks 2, 6, 10 -->
+        <!-- DIRECTION A · ENVIRONMENT ROLLOUT -->
+        <div class="gantt-row" style="min-width:920px">
+          <div class="lbl text-xs text-blue font-bold uppercase tracking-widest pt-3" style="border-top:1px solid var(--line)">A · Environment Rollout</div>
+          <div class="col-span-13" style="border-top:1px solid var(--line)"></div>
+        </div>
+
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl">W1 of month · Spec<small>Feature → FR/NFR → Tests</small></div>
           <div class="gantt-cell"></div>
@@ -840,8 +853,6 @@
           <div class="gantt-cell gc-blue">SPEC</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
-
-        <!-- TEST+DEV track: weeks 3, 7, 11 -->
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl">W2 · Test &amp; Dev<small>TDD per layer</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div>
@@ -852,8 +863,6 @@
           <div class="gantt-cell gc-green">TEST+DEV</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
-
-        <!-- REFACTOR track: weeks 4, 8, 12 -->
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl">W3 · Refactor<small>code review · debt paydown</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
@@ -864,8 +873,6 @@
           <div class="gantt-cell gc-amber">REFACTOR</div>
           <div class="gantt-cell"></div>
         </div>
-
-        <!-- ENV+MON track: weeks 5, 9, 13 -->
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl">W4 · Env &amp; Monitor<small>CI · dashboards · analytics</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
@@ -876,6 +883,25 @@
           <div class="gantt-cell gc-navy">ENV+MON</div>
         </div>
 
+        <!-- DIRECTION B · EDUCATION (8 weekly lectures) -->
+        <div class="gantt-row" style="min-width:920px">
+          <div class="lbl text-xs font-bold uppercase tracking-widest pt-3" style="border-top:1px solid var(--line); color:#15803d">B · Education</div>
+          <div class="col-span-13" style="border-top:1px solid var(--line)"></div>
+        </div>
+        <div class="gantt-row" style="min-width:920px">
+          <div class="lbl">Lectures L1–L8<small>one per week, weeks 2–9</small></div>
+          <div class="gantt-cell"></div>
+          <div class="gantt-cell gc-green-l">L1</div>
+          <div class="gantt-cell gc-green-l">L2</div>
+          <div class="gantt-cell gc-green-l">L3</div>
+          <div class="gantt-cell gc-green-l">L4</div>
+          <div class="gantt-cell gc-green-l">L5</div>
+          <div class="gantt-cell gc-green-l">L6</div>
+          <div class="gantt-cell gc-green-l">L7</div>
+          <div class="gantt-cell gc-green-l">L8</div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+        </div>
+
       </div>
 
       <!-- Legend -->
@@ -884,16 +910,17 @@
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-blue" style="width:22px;height:14px"></span>Spec</span>
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-green" style="width:22px;height:14px"></span>Test &amp; Dev</span>
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-amber" style="width:22px;height:14px"></span>Refactor</span>
+        <span class="flex items-center gap-1.5"><span class="gantt-cell gc-green-l" style="width:22px;height:14px"></span>Lectures L1–L8</span>
       </div>
       <div class="conclusion mt-4 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Each month repeats: <strong>W1 Spec → W2 Test &amp; Dev → W3 Refactor → W4 Environment &amp; Monitoring</strong>. The tool stack (Cursor / Claude Code / Open Harness — see §3.4) runs in parallel across all 13 weeks.</p>
+        <p class="text-navy">Week 1 is dedicated to <strong>connecting Jira</strong> — the data source that unlocks ROI measurement. From week 2, two streams run side-by-side for 12 weeks: <strong>(A)</strong> the 4-week <em>Environment Rollout</em> cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor, repeated 3×); <strong>(B)</strong> the <em>Education</em> stream — 8 weekly lectures L1–L8 (weeks 2–9). The tool stack (Cursor · Claude Code · Open Harness — see §3.4) runs in parallel across all 13 weeks.</p>
       </div>
     </div>
 
     <!-- 4-WEEK CYCLE DETAILS -->
     <div class="mb-10">
-      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.3</span> 4-week cycle · what happens in each phase</h3>
+      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.3</span> Direction A · Environment rollout · what happens each week of the month</h3>
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="det-card p-5 border-t-4 border-t-blue">
           <div class="text-xs font-bold text-blue uppercase tracking-widest">Week 1 · Spec</div>
@@ -942,9 +969,69 @@
       </div>
     </div>
 
+    <!-- §3.4 · DIRECTION B · EDUCATION (8 LECTURES) -->
+    <div class="mb-10">
+      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.4</span> Direction B · Education · 8 weekly lectures</h3>
+      <p class="text-sm text-muted mb-4">One lecture per week (60-min recorded session + 30-min Q&amp;A + 1 take-home exercise reviewed in the next session). Champion-led — named in each card. Target audience: all 87 active engineers.</p>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="det-card p-4 border-t-4 border-t-blue">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L1</div><span class="text-xs text-muted">Week 2</span></div>
+          <h4 class="font-bold text-navy mt-1">Spec discipline</h4>
+          <p class="text-xs text-muted mt-2">Feature → User Flow → Use Case → FR/NFR → Tests-by-4-layers (Infra · Data · Service · AI). The F-17 template, applied.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> rewrite one feature spec</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-blue">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L2</div><span class="text-xs text-muted">Week 3</span></div>
+          <h4 class="font-bold text-navy mt-1">Test pyramid that catches AI bugs</h4>
+          <p class="text-xs text-muted mt-2">Unit / contract / integration / E2E. Snapshot tests for AI-generated output. Why: <code>hmnd_wholebody</code> (4 tests / 60k LoC) and <code>hmnd_firmware</code> (0 tests) need a floor.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> hmnd_robot owner · <strong>Demo:</strong> 401-test layout</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-blue">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L3</div><span class="text-xs text-muted">Week 4</span></div>
+          <h4 class="font-bold text-navy mt-1">AGENTS.md craft</h4>
+          <p class="text-xs text-muted mt-2">Anatomy of <code>hmnd/AGENTS.md</code>: TL;DR, architecture rule, language-specific anti-patterns, build/test commands. Why: 9/14 hmnd modules + all of hmnd-cloud have no AGENTS.md.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Atindra · <strong>Take-home:</strong> AGENTS.md for one module</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-blue">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L4</div><span class="text-xs text-muted">Week 5</span></div>
+          <h4 class="font-bold text-navy mt-1">Prompt-regression evals</h4>
+          <p class="text-xs text-muted mt-2">5–10 canonical tasks run quarterly against current AGENTS.md / .cursor/rules. Why: single biggest cross-cutting gap; AGENTS edits silently break AI behaviour today.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> write 2 eval tasks</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-green-600">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold" style="color:#15803d">L5</div><span class="text-xs text-muted">Week 6</span></div>
+          <h4 class="font-bold text-navy mt-1">Safe Terraform with AI</h4>
+          <p class="text-xs text-muted mt-2">Plan, never apply from AI. Per-domain blast-radius matrix. tflint / tfsec / checkov as PR gate. Why: hmnd-cloud is highest-blast-radius repo in scope.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> matakan · <strong>Demo:</strong> PR-validation workflow</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-green-600">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold" style="color:#15803d">L6</div><span class="text-xs text-muted">Week 7</span></div>
+          <h4 class="font-bold text-navy mt-1">Agent workflows that ship code</h4>
+          <p class="text-xs text-muted mt-2">Claude Code multi-file refactors, Cursor Agent for boilerplate, when to drop to Tab. Why: Eugene's pattern (Claude $2.3k + 1.6k commits) is the gold standard.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eugene · <strong>Demo:</strong> one Claude Code session end-to-end</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-amber-500">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-amber-700">L7</div><span class="text-xs text-muted">Week 8</span></div>
+          <h4 class="font-bold text-navy mt-1">Cost discipline &amp; routing</h4>
+          <p class="text-xs text-muted mt-2">$0.001 → $0.37/req is a 370× spread. When o-series is right, when it's habit. Why: 3 users burn $1k/mo on o-series for routine queries.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eng Manager · <strong>Demo:</strong> routing policy in action</p>
+        </div>
+        <div class="det-card p-4 border-t-4 border-t-amber-500">
+          <div class="flex justify-between items-baseline"><div class="mono font-bold text-amber-700">L8</div><span class="text-xs text-muted">Week 9</span></div>
+          <h4 class="font-bold text-navy mt-1">Governance &amp; review rules</h4>
+          <p class="text-xs text-muted mt-2">CODEOWNERS · branch protection · AI-assist PR template · audit policy for 21+-file commits (15% of total). Why: the line between "AI-accelerated" and "AI-incident" team is process.</p>
+          <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> CTO + Eng Manager</p>
+        </div>
+      </div>
+      <div class="conclusion mt-4 mb-3">
+        <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
+        <p class="text-navy">8 lectures × 8 weeks = the full AI-Native curriculum. Weeks 2–5 are foundational (Spec, Test, AGENTS, Evals). Weeks 6–7 deepen technique (IaC + agent workflows). Weeks 8–9 close on governance + cost discipline. Total cost: ~12 prep-hours + 12 attendee-hours × 87 engineers.</p>
+      </div>
+    </div>
+
     <!-- TOOL TRACK -->
     <div class="mb-10">
-      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.4</span> Tool stack · running in parallel</h3>
+      <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.5</span> Tool stack · running in parallel</h3>
       <div class="grid md:grid-cols-3 gap-4">
         <div class="det-card p-5">
           <div class="flex items-center gap-3 mb-3">
@@ -1032,13 +1119,13 @@
             <tr><td class="req-id">R-015</td><td>Tooltips for jargon</td><td>.tip + flip-on-mobile</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-016</td><td>Week-1 Jira plan</td><td>HMND-AI-1 … HMND-AI-7</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-017</td><td>4-week monthly cycle</td><td>Spec / Test+Dev / Refactor / Env+Monitor</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-018</td><td>Gantt roadmap (13 weeks)</td><td>gantt-head + 13 weeks</td><td class="check">✓</td></tr>
+            <tr><td class="req-id">R-018</td><td>Gantt roadmap · 13 weeks · 2 directions (Env rollout + Education L1–L8)</td><td>gantt-head + W13 + L1…L8</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-019</td><td>ROI metrics defined (Week 1)</td><td>$/closed-Jira · $/merged-PR · $/passing-test</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-020</td><td>Cohort reconciliation 140 vs 206</td><td>math block</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-021</td><td>Requirements catalog + tests</td><td>this table + tests/test_ceo_brief.sh</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-022</td><td>Bus factor (4 single-person)</td><td>services / agents / update / infra</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-023</td><td>Repo scores</td><td>4.0 / 2.0 / DEPRECATED</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-024</td><td>17 Priority Actions table</td><td>collapsed in §2.10</td><td class="check">✓</td></tr>
+            <tr><td class="req-id">R-024</td><td>16 Priority Actions table</td><td>collapsed in §2.10</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-025</td><td>Cost optimisation $3-5k/mo</td><td>4-lever table</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-026</td><td>Model routing policy</td><td>8-row table</td><td class="check">✓</td></tr>
             <tr><td class="req-id">R-027</td><td>Test coverage disparity</td><td>401 / 4 / 0 tests</td><td class="check">✓</td></tr>
