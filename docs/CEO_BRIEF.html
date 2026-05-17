@@ -1084,63 +1084,6 @@
 </section>
 
 
-<!-- REQUIREMENTS (collapsed appendix) -->
-<section id="requirements" class="anchor bg-soft border-t border-line py-12 px-4 sm:px-6">
-  <div class="max-w-7xl mx-auto">
-    <details class="det-card">
-      <summary><span class="font-semibold text-navy"><span class="section-num">§A</span> Requirements traceability — R-001 … R-040 with tests</span><span class="chev text-muted">▶</span></summary>
-      <div class="body">
-        <div class="scroll-x"><table class="dt">
-          <thead><tr><th>R-ID</th><th>Requirement</th><th>Test</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="req-id">R-001</td><td>Single self-contained HTML, mobile-first</td><td>file + tailwind + viewport meta</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-002</td><td>100% English</td><td>0 Cyrillic characters</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-003</td><td>Nav: Business / Technical / Roadmap</td><td>3 nav links present</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-004</td><td>2×2 Champion Matrix with names</td><td>Q1–Q4 + Eugene/Oleg/Sam/Atindra</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-005</td><td>Q2 workflow-review names</td><td>Richard / Cody / Matt</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-006</td><td>Q3 coaching names</td><td>Anubhav / Bao / Dmitriy</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-007</td><td>Per-module bug-rate bar chart</td><td>14 modules · 35.3% present</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-008</td><td>Bot vs Human bug rate</td><td>24.8% + 18.8%</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-009</td><td>Cross-reference table</td><td>spender × module × bug × bus</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-010</td><td>Numerical depth</td><td>$0.001, $0.37, $23/msg, $0.93/commit</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-011</td><td>Visuals / infographics</td><td>≥ 20 bars · quadrant · Gantt</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-012</td><td>Numbers verified vs Reports I + II</td><td>$23,353 / 140 / 44.7% / 63.2% / 35.3% / 4.0 / 2.0</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-013</td><td>Mobile-responsive</td><td>md: / sm: / lg: / scroll-x</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-014</td><td>Collapsible details</td><td>≥ 3 &lt;details&gt;</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-015</td><td>Tooltips for jargon</td><td>.tip + flip-on-mobile</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-016</td><td>Week-1 Jira plan</td><td>HMND-AI-1 … HMND-AI-7</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-017</td><td>4-week monthly cycle</td><td>Spec / Test+Dev / Refactor / Env+Monitor</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-018</td><td>Gantt roadmap · 13 weeks · 2 directions (Env rollout + Education L1–L8)</td><td>gantt-head + W13 + L1…L8</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-019</td><td>ROI metrics defined (Week 1)</td><td>$/closed-Jira · $/merged-PR · $/passing-test</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-020</td><td>Cohort reconciliation 140 vs 206</td><td>math block</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-021</td><td>Requirements catalog + tests</td><td>this table + tests/test_ceo_brief.sh</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-022</td><td>Bus factor (4 single-person)</td><td>services / agents / update / infra</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-023</td><td>Repo scores</td><td>4.0 / 2.0 / DEPRECATED</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-024</td><td>16 Priority Actions table</td><td>collapsed in §2.10</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-025</td><td>Cost optimisation $3-5k/mo</td><td>4-lever table</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-026</td><td>Model routing policy</td><td>8-row table</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-027</td><td>Test coverage disparity</td><td>401 / 4 / 0 tests</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-028</td><td>AGENTS guardrails table</td><td>9-row guardrail table</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-029</td><td>Adoption segments</td><td>7 rows summing to 206</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-030</td><td>Anomalies (6)</td><td>Amir / n8n_artem / 6 dupes</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-031</td><td>Vendor lock-in (CC 83% of Anthropic)</td><td>83.4% + R4 risk</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-032</td><td>Cursor seat sunset (18 dormant)</td><td>"18 dormant"</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-033</td><td>Display-name dupes (6)</td><td>"6 display-name dupes"</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-034</td><td>Cost projection (~$284k/yr)</td><td>"~$284k" + "+30–100%"</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-035</td><td>Top-5 risk register</td><td>R1–R5 rows</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-036</td><td>Open Harness in tool stack</td><td>"Open Harness" + "OpenCode" + "ClawCode"</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-037</td><td>Dashboard button</td><td>https://hmnd.34.62.139.101.nip.io/</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-038</td><td>Tooltips (?) instead of inline caveats</td><td>≥ 5 .tip elements</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-039</td><td>Single biggest gap surfaced</td><td>"prompt-regression eval" ≥ 2×</td><td class="check">✓</td></tr>
-            <tr><td class="req-id">R-040</td><td>Identity merge documented</td><td>"20" + "dual-domain" + "11,378"</td><td class="check">✓</td></tr>
-          </tbody>
-        </table></div>
-      </div>
-    </details>
-  </div>
-</section>
-
-
 <!-- FOOTER (clean) -->
 <footer class="py-6 text-center bg-white border-t border-line">
   <div class="text-xs text-muted font-medium uppercase tracking-widest">© Humanoid · AI Transformation</div>
