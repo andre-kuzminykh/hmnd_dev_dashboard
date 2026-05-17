@@ -817,7 +817,7 @@
     <!-- GANTT CHART -->
     <div class="mb-10">
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.2</span> Months 1–3 · two parallel directions</h3>
-      <p class="text-sm text-muted mb-4">Week 1 sets up the data source (Jira). From week 2 two streams run side-by-side for 12 weeks: <strong>(A) Environment rollout</strong> in a 4-week cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor, repeated 3×) and <strong>(B) Education</strong> — 8 weekly lectures L1 … L8.</p>
+      <p class="text-sm text-muted mb-4">13 weeks total. <strong>W1</strong> connects Jira. <strong>W2–W5</strong> run Direction A · Environment Rollout (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor). <strong>W6–W13</strong> run Direction B · Education — 8 weekly lectures L1 … L8.</p>
       <div class="det-card p-4 sm:p-6 scroll-x">
         <!-- Header: 13 weeks -->
         <div class="gantt-head" style="min-width:920px">
@@ -837,69 +837,60 @@
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
 
-        <!-- DIRECTION A · ENVIRONMENT ROLLOUT -->
+        <!-- DIRECTION A · ENVIRONMENT ROLLOUT (weeks 2-5) -->
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl text-xs text-blue font-bold uppercase tracking-widest pt-3" style="border-top:1px solid var(--line)">A · Environment Rollout</div>
           <div class="col-span-13" style="border-top:1px solid var(--line)"></div>
         </div>
 
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">W1 of month · Spec<small>Feature → FR/NFR → Tests</small></div>
+          <div class="lbl">W2 · Spec<small>Feature → FR/NFR → Tests</small></div>
           <div class="gantt-cell"></div>
           <div class="gantt-cell gc-blue">SPEC</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-blue">SPEC</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-blue">SPEC</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">W2 · Test &amp; Dev<small>TDD per layer</small></div>
+          <div class="lbl">W3 · Test &amp; Dev<small>TDD per layer</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell gc-green">TEST+DEV</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-green">TEST+DEV</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-green">TEST+DEV</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">W3 · Refactor<small>code review · debt paydown</small></div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-amber">REFACTOR</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-amber">REFACTOR</div>
+          <div class="lbl">W4 · Refactor<small>code review · debt paydown</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell gc-amber">REFACTOR</div>
           <div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">W4 · Env &amp; Monitor<small>CI · dashboards · analytics</small></div>
+          <div class="lbl">W5 · Env &amp; Monitor<small>CI · dashboards · analytics</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell gc-navy">ENV+MON</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-navy">ENV+MON</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-navy">ENV+MON</div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
 
-        <!-- DIRECTION B · EDUCATION (8 weekly lectures) -->
+        <!-- DIRECTION B · EDUCATION (weeks 6-13, 8 weekly lectures) -->
         <div class="gantt-row" style="min-width:920px">
           <div class="lbl text-xs font-bold uppercase tracking-widest pt-3" style="border-top:1px solid var(--line); color:#15803d">B · Education</div>
           <div class="col-span-13" style="border-top:1px solid var(--line)"></div>
         </div>
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">Lectures L1–L8<small>one per week, weeks 2–9</small></div>
-          <div class="gantt-cell"></div>
-          <div class="gantt-cell gc-green-l">L1</div>
-          <div class="gantt-cell gc-green-l">L2</div>
-          <div class="gantt-cell gc-green-l">L3</div>
-          <div class="gantt-cell gc-green-l">L4</div>
-          <div class="gantt-cell gc-green-l">L5</div>
-          <div class="gantt-cell gc-green-l">L6</div>
-          <div class="gantt-cell gc-green-l">L7</div>
-          <div class="gantt-cell gc-green-l">L8</div>
-          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="lbl">Lectures L1–L8<small>one per week, weeks 6–13</small></div>
+          <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
+          <div class="gantt-cell gc-green-l">L1 Specs</div>
+          <div class="gantt-cell gc-green-l">L2 Tests</div>
+          <div class="gantt-cell gc-green-l">L3 AGENTS</div>
+          <div class="gantt-cell gc-green-l">L4 Evals</div>
+          <div class="gantt-cell gc-green-l">L5 IaC</div>
+          <div class="gantt-cell gc-green-l">L6 Agents</div>
+          <div class="gantt-cell gc-green-l">L7 Cost</div>
+          <div class="gantt-cell gc-green-l">L8 Gov</div>
         </div>
 
       </div>
@@ -914,7 +905,7 @@
       </div>
       <div class="conclusion mt-4 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Week 1 is dedicated to <strong>connecting Jira</strong> — the data source that unlocks ROI measurement. From week 2, two streams run side-by-side for 12 weeks: <strong>(A)</strong> the 4-week <em>Environment Rollout</em> cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor, repeated 3×); <strong>(B)</strong> the <em>Education</em> stream — 8 weekly lectures L1–L8 (weeks 2–9). The tool stack (Cursor · Claude Code · Open Harness — see §3.4) runs in parallel across all 13 weeks.</p>
+        <p class="text-navy"><strong>W1</strong> is dedicated to connecting Jira — the data source that unlocks ROI measurement. <strong>W2–W5</strong> run a single 4-week <em>Environment Rollout</em> cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor). <strong>W6–W13</strong> are the <em>Education</em> stream — 8 weekly lectures L1–L8. The tool stack (Cursor · Claude Code · Open Harness — see §3.5) runs in parallel across all 13 weeks.</p>
       </div>
     </div>
 
@@ -923,7 +914,7 @@
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§3.3</span> Direction A · Environment rollout · what happens each week of the month</h3>
       <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="det-card p-5 border-t-4 border-t-blue">
-          <div class="text-xs font-bold text-blue uppercase tracking-widest">Week 1 · Spec</div>
+          <div class="text-xs font-bold text-blue uppercase tracking-widest">Week 2 · Spec</div>
           <h4 class="font-bold text-navy mt-1">Specification</h4>
           <ul class="mt-3 text-xs space-y-1.5 text-muted">
             <li>• Feature → User Flow → Use Case</li>
@@ -934,7 +925,7 @@
           </ul>
         </div>
         <div class="det-card p-5 border-t-4 border-t-green-600">
-          <div class="text-xs font-bold text-green-700 uppercase tracking-widest">Week 2 · Test &amp; Dev</div>
+          <div class="text-xs font-bold text-green-700 uppercase tracking-widest">Week 3 · Test &amp; Dev</div>
           <h4 class="font-bold text-navy mt-1">TDD per layer</h4>
           <ul class="mt-3 text-xs space-y-1.5 text-muted">
             <li>• Write tests first (red)</li>
@@ -945,7 +936,7 @@
           </ul>
         </div>
         <div class="det-card p-5 border-t-4 border-t-amber-500">
-          <div class="text-xs font-bold text-amber-700 uppercase tracking-widest">Week 3 · Refactor</div>
+          <div class="text-xs font-bold text-amber-700 uppercase tracking-widest">Week 4 · Refactor</div>
           <h4 class="font-bold text-navy mt-1">Debt paydown</h4>
           <ul class="mt-3 text-xs space-y-1.5 text-muted">
             <li>• Code review of recent merges</li>
@@ -956,7 +947,7 @@
           </ul>
         </div>
         <div class="det-card p-5 border-t-4 border-t-navy">
-          <div class="text-xs font-bold text-navy uppercase tracking-widest">Week 4 · Env &amp; Monitor</div>
+          <div class="text-xs font-bold text-navy uppercase tracking-widest">Week 5 · Env &amp; Monitor</div>
           <h4 class="font-bold text-navy mt-1">Environment &amp; analytics</h4>
           <ul class="mt-3 text-xs space-y-1.5 text-muted">
             <li>• CI workflow updates</li>
@@ -975,57 +966,57 @@
       <p class="text-sm text-muted mb-4">One lecture per week (60-min recorded session + 30-min Q&amp;A + 1 take-home exercise reviewed in the next session). Champion-led — named in each card. Target audience: all 87 active engineers.</p>
       <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L1</div><span class="text-xs text-muted">Week 2</span></div>
-          <h4 class="font-bold text-navy mt-1">Spec discipline</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L1</div><span class="pill pill-blue">Specs</span></div><span class="text-xs text-muted">Week 6</span></div>
+          <h4 class="font-bold text-navy mt-2">Spec discipline</h4>
           <p class="text-xs text-muted mt-2">Feature → User Flow → Use Case → FR/NFR → Tests-by-4-layers (Infra · Data · Service · AI). The F-17 template, applied.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> rewrite one feature spec</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L2</div><span class="text-xs text-muted">Week 3</span></div>
-          <h4 class="font-bold text-navy mt-1">Test pyramid that catches AI bugs</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L2</div><span class="pill pill-blue">Tests</span></div><span class="text-xs text-muted">Week 7</span></div>
+          <h4 class="font-bold text-navy mt-2">Test pyramid that catches AI bugs</h4>
           <p class="text-xs text-muted mt-2">Unit / contract / integration / E2E. Snapshot tests for AI-generated output. Why: <code>hmnd_wholebody</code> (4 tests / 60k LoC) and <code>hmnd_firmware</code> (0 tests) need a floor.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> hmnd_robot owner · <strong>Demo:</strong> 401-test layout</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L3</div><span class="text-xs text-muted">Week 4</span></div>
-          <h4 class="font-bold text-navy mt-1">AGENTS.md craft</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L3</div><span class="pill pill-blue">AGENTS</span></div><span class="text-xs text-muted">Week 8</span></div>
+          <h4 class="font-bold text-navy mt-2">AGENTS.md craft</h4>
           <p class="text-xs text-muted mt-2">Anatomy of <code>hmnd/AGENTS.md</code>: TL;DR, architecture rule, language-specific anti-patterns, build/test commands. Why: 9/14 hmnd modules + all of hmnd-cloud have no AGENTS.md.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Atindra · <strong>Take-home:</strong> AGENTS.md for one module</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-blue">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-blue">L4</div><span class="text-xs text-muted">Week 5</span></div>
-          <h4 class="font-bold text-navy mt-1">Prompt-regression evals</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-blue">L4</div><span class="pill pill-blue">Evals</span></div><span class="text-xs text-muted">Week 9</span></div>
+          <h4 class="font-bold text-navy mt-2">Prompt-regression evals</h4>
           <p class="text-xs text-muted mt-2">5–10 canonical tasks run quarterly against current AGENTS.md / .cursor/rules. Why: single biggest cross-cutting gap; AGENTS edits silently break AI behaviour today.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> AI lead · <strong>Take-home:</strong> write 2 eval tasks</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-green-600">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold" style="color:#15803d">L5</div><span class="text-xs text-muted">Week 6</span></div>
-          <h4 class="font-bold text-navy mt-1">Safe Terraform with AI</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L5</div><span class="pill pill-ok">IaC</span></div><span class="text-xs text-muted">Week 10</span></div>
+          <h4 class="font-bold text-navy mt-2">Safe Terraform with AI</h4>
           <p class="text-xs text-muted mt-2">Plan, never apply from AI. Per-domain blast-radius matrix. tflint / tfsec / checkov as PR gate. Why: hmnd-cloud is highest-blast-radius repo in scope.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> matakan · <strong>Demo:</strong> PR-validation workflow</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-green-600">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold" style="color:#15803d">L6</div><span class="text-xs text-muted">Week 7</span></div>
-          <h4 class="font-bold text-navy mt-1">Agent workflows that ship code</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold" style="color:#15803d">L6</div><span class="pill pill-ok">Agents</span></div><span class="text-xs text-muted">Week 11</span></div>
+          <h4 class="font-bold text-navy mt-2">Agent workflows that ship code</h4>
           <p class="text-xs text-muted mt-2">Claude Code multi-file refactors, Cursor Agent for boilerplate, when to drop to Tab. Why: Eugene's pattern (Claude $2.3k + 1.6k commits) is the gold standard.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eugene · <strong>Demo:</strong> one Claude Code session end-to-end</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-amber-500">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-amber-700">L7</div><span class="text-xs text-muted">Week 8</span></div>
-          <h4 class="font-bold text-navy mt-1">Cost discipline &amp; routing</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L7</div><span class="pill pill-warn">Cost</span></div><span class="text-xs text-muted">Week 12</span></div>
+          <h4 class="font-bold text-navy mt-2">Cost discipline &amp; routing</h4>
           <p class="text-xs text-muted mt-2">$0.001 → $0.37/req is a 370× spread. When o-series is right, when it's habit. Why: 3 users burn $1k/mo on o-series for routine queries.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> Eng Manager · <strong>Demo:</strong> routing policy in action</p>
         </div>
         <div class="det-card p-4 border-t-4 border-t-amber-500">
-          <div class="flex justify-between items-baseline"><div class="mono font-bold text-amber-700">L8</div><span class="text-xs text-muted">Week 9</span></div>
-          <h4 class="font-bold text-navy mt-1">Governance &amp; review rules</h4>
+          <div class="flex justify-between items-baseline gap-2"><div class="flex items-baseline gap-2"><div class="mono font-bold text-amber-700">L8</div><span class="pill pill-warn">Gov</span></div><span class="text-xs text-muted">Week 13</span></div>
+          <h4 class="font-bold text-navy mt-2">Governance &amp; review rules</h4>
           <p class="text-xs text-muted mt-2">CODEOWNERS · branch protection · AI-assist PR template · audit policy for 21+-file commits (15% of total). Why: the line between "AI-accelerated" and "AI-incident" team is process.</p>
           <p class="text-[11px] text-muted mt-2"><strong>Lead:</strong> CTO + Eng Manager</p>
         </div>
       </div>
       <div class="conclusion mt-4 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">8 lectures × 8 weeks = the full AI-Native curriculum. Weeks 2–5 are foundational (Spec, Test, AGENTS, Evals). Weeks 6–7 deepen technique (IaC + agent workflows). Weeks 8–9 close on governance + cost discipline. Total cost: ~12 prep-hours + 12 attendee-hours × 87 engineers.</p>
+        <p class="text-navy">8 lectures × 8 weeks (W6–W13) = the full AI-Native curriculum. <strong>W6–W9</strong> are foundational (L1 Specs · L2 Tests · L3 AGENTS · L4 Evals). <strong>W10–W11</strong> deepen technique (L5 IaC · L6 Agents). <strong>W12–W13</strong> close on cost discipline + governance (L7 Cost · L8 Gov). Total cost: ~12 prep-hours + 12 attendee-hours × 87 engineers.</p>
       </div>
     </div>
 
