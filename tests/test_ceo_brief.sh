@@ -39,7 +39,7 @@ check R-019 "ROI metrics defined"                                    'has "close
 check R-020 "Cohort reconciliation 140 vs 206"                       'has "140" && has "206" && has "53 humans not in 30d"'
 check R-021 "R-ID catalog visible + tests"                           'has "Requirements traceability" && has "R-001" && has "R-040" && [[ -f tests/test_ceo_brief.sh ]]'
 check R-022 "Bus factor (4 single-person)"                           'has "hmnd_services" && has "hmnd_agents" && has "hmnd_update" && has "hmnd_infra" && has "Cody Griffin alone"'
-check R-023 "Repo scores"                                            'has "4.0 / 5" && has "2.0 / 5" && has "DEPRECATED"'
+check R-023 "Repo scores"                                            'has "4.0 / 5" && has "2.0 / 5" && has "MOSTLY READY" && has "PAUSE AI"'
 check R-024 "17 Priority Actions (collapsed in §2.10)"               'has "17 priority actions"'
 check R-025 "Cost optimisation \$3-5k/mo"                            'has "\$3–5k"'
 check R-026 "Model routing policy"                                   'has "Model-routing policy" && has "Cursor Tab" && has "gpt-4.1-mini"'
@@ -56,7 +56,7 @@ check R-036 "Open Harness in tool stack"                             'has "Open 
 check R-037 "Dashboard button"                                       'has "https://hmnd.34.62.139.101.nip.io/" && has "Open HMND Dashboard"'
 check R-038 "Tooltips replace inline caveats"                        '[[ $(gc "class=\"tip\"") -ge 5 ]]'
 check R-039 "Single biggest gap (prompt-regression eval)"            '[[ $(gc "prompt-regression eval") -ge 2 ]]'
-check R-040 "Identity merge documented (20 dual-domain)"             'has "20" && has "dual-domain" && has "11,378"'
+check R-040 "Identity merge documented (tooltip + table notes)"      'has "20 dual-domain" && has "11,378" && has "identity-merge"'
 
 echo
 printf '%s\n' "${RESULTS[@]}"
