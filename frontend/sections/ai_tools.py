@@ -249,19 +249,39 @@ with tab_overview:
     # Top spenders all tools + Usage summary
     col_top, col_summary = st.columns(2)
     with col_top:
+        # F-19 / FR-19.5 — Top Spenders now follows Source + Date + key + org
+        # filters (was hard-coded cross-tool before). Title and caption adapt
+        # to the active scope.
+        _title_suffix = {
+            "all":       "— All Tools",
+            "anthropic": "— Claude",
+            "openai":    "— ChatGPT",
+            "cursor":    "— Cursor",
+        }.get(_scope, "")
         section(
-            "Top Spenders — All Tools",
-            help="Top 10 people by spend this period, summed across all "
-                 "3 tools (Claude + ChatGPT + Cursor). Bar colour = risk "
-                 "level: red ≥ $1k, orange $500-1k, yellow < $500.",
+            f"Top Spenders {_title_suffix}".strip(),
+            help="Top 10 people by spend in the active Source + Date filter. "
+                 "Bar colour = risk level: red ≥ $1k, orange $500-1k, "
+                 "yellow < $500.",
         )
-        if _scope != "all":
-            st.caption(
-                "ℹ️ Cross-tool ranking — ignores Source filter by design "
-                "(ranks people across OpenAI + Anthropic + Cursor together)."
-            )
-        spenders = get_high_spenders(period_days=f.period_days, threshold_usd=0,
-                                     api_key_id=None)
+        if _scope == "all":
+            st.caption("ℹ️ Ranks across all tools — adjust the Source filter "
+                       "to narrow to one provider.")
+        else:
+            _label = {"anthropic": "Anthropic (Claude)",
+                      "openai":    "OpenAI (ChatGPT)",
+                      "cursor":    "Cursor"}.get(_scope, _scope.title())
+            st.caption(f"ℹ️ Filtered to **{_label}** "
+                       f"({f.period_days}-day window).")
+        spenders = get_high_spenders(
+            period_days=f.period_days,
+            threshold_usd=0,
+            api_key_id=f.api_key_id,
+            provider=_scope,
+            organization=(f.organization or "all"),
+            date_from=f.date_from,
+            date_to=f.date_to,
+        )
         top10 = spenders[:10]
         if top10:
             max_spend = max(r["spend"] for r in top10) or 1

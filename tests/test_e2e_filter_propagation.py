@@ -210,15 +210,15 @@ def test_period_monotone(tmp_db):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("source", SOURCES)
-def test_cross_tool_top_spenders_present(tmp_db, source):
-    """Top Spenders — All Tools is intentionally cross-tool. It must show
-    the same ranking regardless of Source filter (with a caption when
-    filter is active).
+def test_top_spenders_panel_renders_under_any_source(tmp_db, source):
+    """F-19 — Top Spenders now follows the Source filter (used to be
+    hard-coded cross-tool). What we still guarantee is the panel renders
+    without exception for any source, and the title is present (the
+    title suffix adapts: "All Tools" / "Claude" / "ChatGPT" / "Cursor").
     """
     app = _run(source)
     assert not app.exception, str(app.exception)
     body = _markdown_text(app)
-    # Section title should always render
     assert "Top Spenders" in body or "no spend recorded" in body.lower(), (
         f"source={source}: 'Top Spenders' missing"
     )

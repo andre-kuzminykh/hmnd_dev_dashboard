@@ -1179,3 +1179,69 @@ exports already carry day-level data; the v1 loaders ignore it and emit
 - `data/sources/cursor_json.py:_compute_user_daily_weights(usage_data) -> dict[(uid, date), float]` — same pattern.
 - Each loader keeps the existing fallback-to-uniform path when weights are absent — this makes the change strictly additive and keeps the v1 fixtures green.
 
+---
+
+## F-19 — Top Spenders &amp; Usage Summary respect Source + Date filters
+
+### Feature
+On the **AI Tools → Overview** tab the "Top Spenders — All Tools" panel
+and the "Usage Summary" table must follow the global Source filter
+(provider scope) and Date filter (period). Previously Top Spenders was
+hard-coded cross-tool ("ignores Source filter by design") which made
+the panel confusing when the rest of the page was narrowed to one
+provider.
+
+### User Flow
+1. CEO picks **Source = Anthropic** and **Date = Last 7 days**
+2. Top KPIs, tool cards, and Spend Over Time chart narrow to that scope ✓
+3. **Top Spenders panel** narrows to Anthropic-only spend over the 7-day window
+4. **Usage Summary table** narrows similarly: Claude row reflects 7d Anthropic spend, ChatGPT and Cursor rows zero out (because filter excludes them)
+5. The "ℹ️ Cross-tool ranking — ignores Source filter by design" banner is removed when the filter is non-`all`; a neutral banner names the active scope instead.
+
+### Use Cases
+- **UC-19.1** Source=`all`, Period=30d → Top Spenders shows cross-tool ranking (existing behaviour, unchanged).
+- **UC-19.2** Source=`anthropic`, Period=30d → Top Spenders shows Anthropic-only spend per user; rows where Anthropic spend is 0 are excluded.
+- **UC-19.3** Source=`openai`, Organization=`Artem`, Period=30d → ranking narrows to OpenAI + Artem org.
+- **UC-19.4** Date range custom (e.g. 7 days) → ranking uses that exact window via `Filters.date_range()`, not the old `period_days` offset from `utcnow()`.
+- **UC-19.5** Source filter narrowed + api-key drill-down active → both filters compose (provider + key).
+
+### Functional Requirements
+
+| ID | Requirement |
+|---|---|
+| FR-19.1 | `backend/services/ai_tools.get_high_spenders` MUST accept optional `provider`, `organization`, `date_from`, `date_to` parameters. |
+| FR-19.2 | When `provider != 'all'`, the SQL MUST add `JOIN providers p ON p.id = ue.provider_id WHERE p.name = ?` and pass `provider` as a parameter. |
+| FR-19.3 | When `organization != 'all'`, the SQL MUST add `AND ue.organization_id IN (SELECT id FROM organizations WHERE label = ?)`. |
+| FR-19.4 | When `date_from` AND `date_to` are provided, the SQL window MUST use them verbatim; otherwise fall back to `now − period_days … now`. |
+| FR-19.5 | Frontend (`frontend/sections/ai_tools.py`) MUST pass `filters.provider`, `filters.organization`, `filters.date_from`, `filters.date_to`, `filters.api_key_id` into `get_high_spenders`. |
+| FR-19.6 | The "ℹ️ Cross-tool ranking — ignores Source filter by design" caption MUST be replaced. When `filters.provider == 'all'` show a neutral "ranks across all tools" line; otherwise show "filtered to &lt;Provider&gt;". |
+| FR-19.7 | The "Usage Summary" rows are already source-filtered through `_show_anthropic / _show_openai / _show_cursor` zeroing — keep that behaviour; add a date-range check (no change needed if `date_range()` is already used). |
+| FR-19.8 | Per-provider tool cards above the panel remain consistent with the table (existing behaviour). |
+
+### NFR
+
+- **NFR-19.1** No new SQL N+1 — single grouped query per panel call.
+- **NFR-19.2** `get_high_spenders()` default call (no kwargs) MUST stay back-compat for callers in `backend/services/alerts.py`, `scripts/snapshot_dashboard.py`, etc.
+- **NFR-19.3** The previous "cross-tool" e2e test (`test_cross_tool_top_spenders_present`) gets re-purposed to "panel renders under any source"; the strict cross-tool invariant is removed because it's now configurable.
+
+### Tests — by 4 layers
+
+**T-INFRA-19.\* (smoke)**
+- T-INFRA-19.1 — Frontend overview renders without exception for every `(provider, organization)` combination (existing e2e covers this).
+
+**T-DATA-19.\* (data)** — none (no schema change).
+
+**T-SVC-19.\* (service)**
+- T-SVC-19.1 — `get_high_spenders(provider='all')` returns rows whose `spend` matches `SUM(cost_usd)` per user across all providers (regression).
+- T-SVC-19.2 — `get_high_spenders(provider='anthropic')` returns rows whose `spend` matches `SUM(cost_usd)` per user joined to the anthropic provider only. Users with zero anthropic spend MUST NOT appear.
+- T-SVC-19.3 — `get_high_spenders(provider='openai', organization='Artem')` adds the org filter.
+- T-SVC-19.4 — `get_high_spenders(date_from=t1, date_to=t2)` uses the verbatim window instead of `period_days`-from-utcnow.
+- T-SVC-19.5 — Back-compat: `get_high_spenders(period_days=30)` still works (no provider/org kwargs) and returns cross-tool ranking.
+
+**T-AI-19.\*** — none.
+
+### Implementation notes
+- `backend/services/ai_tools.py`: add kwargs to `get_high_spenders` and assemble the WHERE clause incrementally.
+- `frontend/sections/ai_tools.py:263` — replace the `get_high_spenders(...)` call with the full filter set; update the caption text per FR-19.6.
+- `tests/test_e2e_filter_propagation.py:212-224` — relax the cross-tool invariant to "panel still renders".
+

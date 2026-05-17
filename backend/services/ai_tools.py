@@ -151,25 +151,63 @@ def get_users_for_provider(provider: str, period_days: int = 30,
 # ---- High Spenders (FR-12.1.5.*) ----
 
 def get_high_spenders(period_days: int = 30, threshold_usd: float = 200,
-                      api_key_id: int | None = None) -> list[dict[str, Any]]:
-    end = datetime.utcnow()
-    start = end - timedelta(days=period_days)
+                      api_key_id: int | None = None,
+                      provider: str = "all",
+                      organization: str = "all",
+                      date_from: datetime | None = None,
+                      date_to: datetime | None = None) -> list[dict[str, Any]]:
+    """Top spenders, with optional provider / organization / explicit-date narrowing.
+
+    F-19 / FR-19.1–4:
+      - provider='all' (default) → cross-tool ranking (back-compat)
+      - provider='anthropic' | 'openai' | 'cursor' → JOIN providers + WHERE p.name=?
+      - organization='Artem' (etc.) → adds organization_id filter (OpenAI sub-orgs)
+      - date_from + date_to set → use that window verbatim (overrides period_days)
+    """
+    # FR-19.4 — explicit dates win over period_days offset.
+    if date_from is not None and date_to is not None:
+        start, end = date_from, date_to
+    else:
+        end = datetime.utcnow()
+        start = end - timedelta(days=period_days)
     s = start.strftime("%Y-%m-%d %H:%M:%S")
     e = end.strftime("%Y-%m-%d %H:%M:%S")
+
     k_clause, k_params = api_key_clause(api_key_id, "ue")
+
+    # FR-19.2 — provider join + filter
+    prov_join = ""
+    prov_clause = ""
+    prov_params: list = []
+    if provider and provider != "all":
+        prov_join = "JOIN providers p ON p.id = ue.provider_id"
+        prov_clause = "AND p.name = ?"
+        prov_params = [provider]
+
+    # FR-19.3 — organization filter
+    org_clause = ""
+    org_params: list = []
+    if organization and organization != "all":
+        org_clause = ("AND ue.organization_id IN "
+                      "(SELECT id FROM organizations WHERE label = ?)")
+        org_params = [organization]
+
     sql = f"""
         SELECT u.id, u.full_name AS user_name,
                COUNT(*)                       AS messages,
                ROUND(SUM(ue.cost_usd), 2)     AS spend
         FROM usage_events ue
         JOIN users u ON u.id = ue.user_id
+        {prov_join}
         WHERE ue.occurred_at BETWEEN ? AND ?
+        {prov_clause}
+        {org_clause}
         {k_clause}
         GROUP BY u.id
-        HAVING spend >= ?
+        HAVING spend >= ? AND spend > 0
         ORDER BY spend DESC
     """
-    params = [s, e] + k_params + [threshold_usd]
+    params = [s, e] + prov_params + org_params + k_params + [threshold_usd]
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
     out = []
