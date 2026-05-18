@@ -1575,12 +1575,12 @@ with tab_people:
                     </div>
                 </div>
             """
-        c1, c2, c3 = st.columns(3, gap="medium")
+        c1, c2, c3 = st.columns(3, gap="large")
         with c1: st.markdown(_sub_card("#6366f1", "Claude",  "anthropic"), unsafe_allow_html=True)
         with c2: st.markdown(_sub_card("#10a37f", "ChatGPT", "openai"),    unsafe_allow_html=True)
         with c3: st.markdown(_sub_card("#f59e0b", "Cursor",  "cursor"),    unsafe_allow_html=True)
-        # vertical gap between sub-cards and the next section
-        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+        # vertical breathing room between sub-cards and the next section
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
         # ── 4. Charts ─────────────────────────────────────────────────────
         section(
