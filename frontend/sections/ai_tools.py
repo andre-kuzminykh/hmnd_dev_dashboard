@@ -1419,22 +1419,36 @@ with tab_people:
     s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
     e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
 
-    # ── 1. Dropdown (every user, ordered by spend IN THE ACTIVE PERIOD) ────
-    # Period-aware so the dollar value in the label matches the "Period spend"
-    # on the profile card after selection.
+    # ── 1. Dropdown — GROUP BY full_name to MERGE duplicate user records ───
+    # F-24: when the same person has multiple `users` rows (Anthropic JSON
+    # email vs Cursor JSON email vs OpenAI API email), GROUP BY u.id makes
+    # the dropdown show each duplicate separately — and one of them might
+    # have $0 because events landed on the OTHER user_id. Group by name
+    # instead so the label aggregates ALL user_ids for that person and the
+    # subsequent profile queries use `user_id IN (…)`.
     with _gc_p() as _conn_p:
         people_rows = _conn_p.execute(
-            """SELECT u.id, u.full_name, u.email,
+            """SELECT u.full_name AS full_name,
+                      GROUP_CONCAT(DISTINCT u.id)    AS ids,
+                      GROUP_CONCAT(DISTINCT u.email) AS emails,
                       COALESCE(ROUND(SUM(
                           CASE WHEN ue.occurred_at BETWEEN ? AND ?
                                THEN ue.cost_usd ELSE 0 END), 2), 0) AS total_spend
                FROM users u
                LEFT JOIN usage_events ue ON ue.user_id = u.id
-               GROUP BY u.id
+               GROUP BY u.full_name
                ORDER BY total_spend DESC, u.full_name""",
             (s_iso, e_iso),
         ).fetchall()
-    people = [dict(r) for r in people_rows]
+    people = [
+        {
+            "full_name": r["full_name"],
+            "ids":   [int(x) for x in (r["ids"] or "").split(",") if x],
+            "emails": [e for e in (r["emails"] or "").split(",") if e],
+            "total_spend": float(r["total_spend"] or 0),
+        }
+        for r in people_rows
+    ]
 
     if not people:
         st.info("No users in the database yet. Run sync to populate.")
@@ -1443,85 +1457,96 @@ with tab_people:
             ts = float(p["total_spend"] or 0)
             return f"{p['full_name']} — {fmt_money(ts)}" if ts > 0 else p["full_name"]
 
-        selected_id = st.selectbox(
+        selected_name = st.selectbox(
             "Person",
-            options=[p["id"] for p in people],
-            format_func=lambda uid: _label(next(p for p in people if p["id"] == uid)),
-            key="people_user_id",
+            options=[p["full_name"] for p in people],
+            format_func=lambda nm: _label(next(p for p in people if p["full_name"] == nm)),
+            key="people_user_name",
         )
-        person = next(p for p in people if p["id"] == selected_id)
+        person = next(p for p in people if p["full_name"] == selected_name)
+        selected_ids = person["ids"]  # list of user_id duplicates for this person
+
+        # Build IN-list placeholders for SQL
+        _ids_ph = ",".join(["?"] * len(selected_ids))
+        _ids_params = selected_ids
 
         # ── 2. Period-scoped queries for this person (Source filter ignored) ─
         with _gc_p() as _conn_p:
             # per-tool split
             tool_rows = _conn_p.execute(
-                """SELECT p.name AS provider,
-                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
-                          COUNT(*)                                 AS reqs,
-                          COALESCE(SUM(ue.tokens_in), 0)           AS tokens_in,
-                          COALESCE(SUM(ue.tokens_out), 0)          AS tokens_out
-                   FROM usage_events ue
-                   JOIN providers p ON p.id = ue.provider_id
-                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
-                     AND (? IS NULL OR ue.api_key_id = ?)
-                   GROUP BY p.name
-                   ORDER BY spend DESC""",
-                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+                f"""SELECT p.name AS provider,
+                           COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
+                           COUNT(*)                                 AS reqs,
+                           COALESCE(SUM(ue.tokens_in), 0)           AS tokens_in,
+                           COALESCE(SUM(ue.tokens_out), 0)          AS tokens_out
+                    FROM usage_events ue
+                    JOIN providers p ON p.id = ue.provider_id
+                    WHERE ue.user_id IN ({_ids_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      AND (? IS NULL OR ue.api_key_id = ?)
+                    GROUP BY p.name
+                    ORDER BY spend DESC""",
+                _ids_params + [s_iso, e_iso, f.api_key_id, f.api_key_id],
             ).fetchall()
             top_models = _conn_p.execute(
-                """SELECT m.name AS model, p.name AS provider,
-                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
-                          COUNT(*) AS reqs
-                   FROM usage_events ue
-                   JOIN models m   ON m.id = ue.model_id
-                   JOIN providers p ON p.id = ue.provider_id
-                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
-                     AND (? IS NULL OR ue.api_key_id = ?)
-                   GROUP BY m.id
-                   ORDER BY spend DESC
-                   LIMIT 10""",
-                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+                f"""SELECT m.name AS model, p.name AS provider,
+                           COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
+                           COUNT(*) AS reqs
+                    FROM usage_events ue
+                    JOIN models m    ON m.id = ue.model_id
+                    JOIN providers p ON p.id = ue.provider_id
+                    WHERE ue.user_id IN ({_ids_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      AND (? IS NULL OR ue.api_key_id = ?)
+                    GROUP BY m.id
+                    ORDER BY spend DESC
+                    LIMIT 10""",
+                _ids_params + [s_iso, e_iso, f.api_key_id, f.api_key_id],
             ).fetchall()
             daily_rows = _conn_p.execute(
-                """SELECT date(ue.occurred_at) AS day, p.name AS provider,
-                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS cost,
-                          COUNT(*)                                 AS reqs
-                   FROM usage_events ue
-                   JOIN providers p ON p.id = ue.provider_id
-                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
-                     AND (? IS NULL OR ue.api_key_id = ?)
-                   GROUP BY day, provider
-                   ORDER BY day""",
-                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+                f"""SELECT date(ue.occurred_at) AS day, p.name AS provider,
+                           COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS cost,
+                           COUNT(*)                                 AS reqs
+                    FROM usage_events ue
+                    JOIN providers p ON p.id = ue.provider_id
+                    WHERE ue.user_id IN ({_ids_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      AND (? IS NULL OR ue.api_key_id = ?)
+                    GROUP BY day, provider
+                    ORDER BY day""",
+                _ids_params + [s_iso, e_iso, f.api_key_id, f.api_key_id],
             ).fetchall()
             purpose_rows = _conn_p.execute(
-                """SELECT COALESCE(ue.purpose, '—') AS purpose,
-                          COUNT(*) AS reqs,
-                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend
-                   FROM usage_events ue
-                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
-                     AND (? IS NULL OR ue.api_key_id = ?)
-                   GROUP BY purpose
-                   ORDER BY reqs DESC""",
-                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+                f"""SELECT COALESCE(ue.purpose, '—') AS purpose,
+                           COUNT(*) AS reqs,
+                           COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend
+                    FROM usage_events ue
+                    WHERE ue.user_id IN ({_ids_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      AND (? IS NULL OR ue.api_key_id = ?)
+                    GROUP BY purpose
+                    ORDER BY reqs DESC""",
+                _ids_params + [s_iso, e_iso, f.api_key_id, f.api_key_id],
             ).fetchall()
             events_rows = _conn_p.execute(
-                """SELECT ue.occurred_at, p.name AS provider, m.name AS model,
-                          ue.purpose, ue.tokens_in, ue.tokens_out,
-                          ROUND(ue.cost_usd, 4) AS cost
-                   FROM usage_events ue
-                   JOIN providers p ON p.id = ue.provider_id
-                   JOIN models m    ON m.id = ue.model_id
-                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
-                     AND (? IS NULL OR ue.api_key_id = ?)
-                   ORDER BY ue.occurred_at DESC
-                   LIMIT 100""",
-                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+                f"""SELECT ue.occurred_at, p.name AS provider, m.name AS model,
+                           ue.purpose, ue.tokens_in, ue.tokens_out,
+                           ROUND(ue.cost_usd, 4) AS cost
+                    FROM usage_events ue
+                    JOIN providers p ON p.id = ue.provider_id
+                    JOIN models m    ON m.id = ue.model_id
+                    WHERE ue.user_id IN ({_ids_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      AND (? IS NULL OR ue.api_key_id = ?)
+                    ORDER BY ue.occurred_at DESC
+                    LIMIT 100""",
+                _ids_params + [s_iso, e_iso, f.api_key_id, f.api_key_id],
             ).fetchall()
             team_row = _conn_p.execute(
-                "SELECT t.name AS team FROM users u "
-                "LEFT JOIN teams t ON t.id = u.team_id WHERE u.id = ?",
-                (selected_id,),
+                f"""SELECT t.name AS team FROM users u
+                    LEFT JOIN teams t ON t.id = u.team_id
+                    WHERE u.id IN ({_ids_ph}) AND t.name IS NOT NULL LIMIT 1""",
+                _ids_params,
             ).fetchone()
 
         # ── 3. Top-of-page profile card ───────────────────────────────────
@@ -1532,13 +1557,14 @@ with tab_people:
         top_tool_name = max(per_tool.values(), key=lambda r: r["spend"], default={}).get("provider", "—")
         team_name = team_row["team"] if team_row and team_row["team"] else "—"
 
+        emails_html = ", ".join(person.get("emails") or []) or "—"
         st.markdown(
             f"""
             <div style="border:1px solid #e8edf3;border-radius:18px;padding:22px 26px;
                         background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);margin-bottom:14px;">
                 <div style="font-size:24px;font-weight:500;color:#06091c;">{person['full_name']}</div>
                 <div style="color:#64748b;font-size:13px;margin-top:4px;">
-                    {person['email']} · team <b style="color:#06091c">{team_name}</b>
+                    {emails_html} · team <b style="color:#06091c">{team_name}</b>
                 </div>
             </div>
             """,
@@ -1676,9 +1702,10 @@ with tab_people:
 
         with st.expander("Cursor leaderboard row (lifetime, from CSV/JSON)", expanded=False):
             from backend.services.cursor_analytics import load_user_leaderboard as _llb_p
+            person_emails = {(e or "").lower() for e in (person.get("emails") or [])}
             ld = next(
-                (r for r in _llb_p() if (r.get("email") or "").lower()
-                 == (person["email"] or "").lower()),
+                (r for r in _llb_p()
+                 if (r.get("email") or "").lower() in person_emails),
                 None,
             )
             if ld:
