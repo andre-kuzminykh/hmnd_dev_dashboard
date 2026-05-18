@@ -1061,11 +1061,8 @@ with tab_engineering:
             f"AI-generated lines: <b>{fmt_int(share['ai_lines_total'])}</b> of "
             f"<b>{fmt_int(share['total_additions'])}</b> total git additions. "
             f"Bots ({fmt_int(share['bot_additions'])} lines, 100% AI) + Cursor-reported "
-            f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines). "
-            f'<span style="color:#94a3b8;font-style:italic">'
-            f"Caveat: human ai_lines is a lifetime total from Cursor "
-            f"(not period-filtered); git additions ARE period-filtered."
-            f"</span></div>",
+            f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines)."
+            f"</div>",
             unsafe_allow_html=True,
         )
 
@@ -1302,21 +1299,79 @@ with tab_engineering:
                     unsafe_allow_html=True,
                 )
 
-            # Per-author bug-fix breakdown (table → expander)
-            with st.expander("Per-author bug-fix breakdown", expanded=False):
-                quality_rows = get_quality_per_author(
-                    period_days=filters.period_days, repos=repo_arg, limit=50,
-                )
-                if not quality_rows:
-                    st.caption("No commits in the selected window / repos.")
-                else:
-                    qdf = pd.DataFrame(quality_rows)
+            # Per-author bug-fix — charts ON TOP, table inside expander.
+            quality_rows = get_quality_per_author(
+                period_days=filters.period_days, repos=repo_arg, limit=50,
+            )
+            if quality_rows:
+                qdf = pd.DataFrame(quality_rows)
 
-                    def _qpct(v):
-                        if v is None or (isinstance(v, float) and v != v):
-                            return "—"
-                        return f"{v:.1f}%"
+                def _qpct(v):
+                    if v is None or (isinstance(v, float) and v != v):
+                        return "—"
+                    return f"{v:.1f}%"
 
+                # Chart 1 — Top 15 by bug-rate (horizontal bars, red gradient)
+                section("Top authors by bug-fix rate")
+                top_buggy = qdf.dropna(subset=["bug_rate_pct"]).copy()
+                top_buggy = top_buggy[top_buggy["commits"] >= 5]  # noise floor
+                top_buggy = top_buggy.sort_values("bug_rate_pct", ascending=False).head(15)
+                if not top_buggy.empty:
+                    fig_br = px.bar(
+                        top_buggy,
+                        x="bug_rate_pct", y="canonical_name",
+                        orientation="h",
+                        color="bug_rate_pct",
+                        color_continuous_scale=[[0, "#22c55e"], [0.5, "#f59e0b"],
+                                                [1, "#ef4444"]],
+                        labels={"bug_rate_pct": "Bug-fix rate %",
+                                "canonical_name": ""},
+                        hover_data={"commits": True, "fixes": True,
+                                    "is_bot": True, "bug_rate_pct": ":.1f"},
+                    )
+                    fig_br.update_layout(
+                        height=max(300, 30 * len(top_buggy)),
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        margin=dict(l=10, r=10, t=10, b=10),
+                        font=dict(family="Inter", color=NAVY),
+                        yaxis=dict(autorange="reversed"),
+                        coloraxis_showscale=False,
+                    )
+                    st.plotly_chart(fig_br, use_container_width=True)
+
+                # Chart 2 — Commit-mix bar (stacked) per top 10 authors
+                section("Commit-mix per top author")
+                mix_top = qdf.sort_values("commits", ascending=False).head(10)
+                if not mix_top.empty:
+                    mix_long = mix_top.melt(
+                        id_vars=["canonical_name"],
+                        value_vars=["fixes", "reverts", "features", "refactors", "tests"],
+                        var_name="kind", value_name="n",
+                    )
+                    color_map = {
+                        "fixes":     "#ef4444",
+                        "reverts":   "#a855f7",
+                        "features":  "#22c55e",
+                        "refactors": "#3b82f6",
+                        "tests":     "#f59e0b",
+                    }
+                    fig_mix = px.bar(
+                        mix_long, x="canonical_name", y="n", color="kind",
+                        color_discrete_map=color_map, barmode="stack",
+                        labels={"n": "Commits", "canonical_name": ""},
+                    )
+                    fig_mix.update_layout(
+                        plot_bgcolor="white", paper_bgcolor="white",
+                        margin=dict(l=10, r=10, t=10, b=10),
+                        font=dict(family="Inter", color=NAVY),
+                        xaxis=dict(showgrid=False),
+                        yaxis=dict(gridcolor="#e8edf3"),
+                        legend_title_text="",
+                    )
+                    st.plotly_chart(fig_mix, use_container_width=True)
+
+                # Full table inside the expander
+                with st.expander("Per-author bug-fix breakdown — full table", expanded=False):
                     view_q = pd.DataFrame({
                         "Name":         qdf["canonical_name"],
                         "Kind":         qdf["is_bot"].map(
@@ -1349,15 +1404,60 @@ with tab_engineering:
         seg_options = [s for s, _, _ in SEGMENT_META if counts.get(s, 0) > 0]
         seg_labels_map = {s: lbl for s, lbl, _ in SEGMENT_META}
         seg_colors_map = {s: c for s, _, c in SEGMENT_META}
+        # Coloured dot prefix in the multiselect labels.
+        _dot_emoji_for = {
+            "#10b981": "🟢",  # green   — High AI · High output
+            "#3b82f6": "🔵",  # blue    — Low AI · High output
+            "#f59e0b": "🟡",  # amber   — Lots of AI lines, few commits
+            "#ef4444": "🔴",  # red     — High AI · Low output
+            "#a855f7": "🟣",  # purple  — Bots
+            "#94a3b8": "⚪",  # gray    — AI no git
+            "#cbd5e1": "⚪",  # light gray — Git no AI
+            "#e2e8f0": "⚪",  # near white — Normal
+        }
         picked_segments = st.multiselect(
             "Show tables for:",
             options=seg_options,
             default=seg_options,
-            format_func=lambda s: f"{seg_labels_map[s]}  ({counts.get(s, 0)})",
+            format_func=lambda s: (
+                f"{_dot_emoji_for.get(seg_colors_map[s], '⚪')} "
+                f"{seg_labels_map[s]}  ({counts.get(s, 0)})"
+            ),
             key="devs_segments_filter",
             help="Pick one or more segments to render their developers as "
                  "individual tables.",
         )
+
+        # Pie chart of the picked-segments distribution (between the
+        # multiselect and the per-segment tables below).
+        if picked_segments:
+            pie_data = []
+            for seg_id in picked_segments:
+                n = counts.get(seg_id, 0)
+                if n > 0:
+                    pie_data.append({
+                        "segment": seg_labels_map[seg_id],
+                        "devs": n,
+                        "color": seg_colors_map[seg_id],
+                    })
+            if pie_data:
+                df_seg_pie = pd.DataFrame(pie_data)
+                fig_seg = px.pie(
+                    df_seg_pie, values="devs", names="segment", hole=0.45,
+                    color="segment",
+                    color_discrete_map={r["segment"]: r["color"] for r in pie_data},
+                )
+                fig_seg.update_traces(
+                    textposition="inside", textinfo="percent+label",
+                    hovertemplate="%{label}<br>%{value} devs · %{percent}<extra></extra>",
+                )
+                fig_seg.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    font=dict(family="Inter", color=NAVY),
+                    legend=dict(orientation="v", x=1.02, y=0.5),
+                    paper_bgcolor="white",
+                )
+                st.plotly_chart(fig_seg, use_container_width=True)
 
         def _money(v):
             if v is None or (isinstance(v, float) and v != v):
