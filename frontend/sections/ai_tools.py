@@ -1,28 +1,40 @@
-"""F-12 AI Tools Dashboard — tool-centric tabs."""
+"""F-12 / F-20 AI Tools — unified Overview + Engineering tabs.
+
+Two-tab page: every chart and table reacts to the single filter bar already
+rendered ABOVE this file by overview.py (the `filters` variable is in scope
+because main.py exec()s both files into the same globals dict).
+
+Scope rules (driven by filters.provider):
+  - 'all'        → cross-tool KPIs (Claude + ChatGPT + Cursor)
+  - 'anthropic'  → Claude-only KPIs + Claude Products Breakdown
+  - 'openai'     → ChatGPT-only KPIs + Top OpenAI Models
+  - 'cursor'     → Cursor-only KPIs + DAU + completions
+"""
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from backend.services.ai_tools import (
     chatgpt_flag,
     classify_risk,
-    get_ai_tools_overview,
     get_anthropic_model_spend_from_json,
     get_anthropic_spend_by_purpose,
     get_cursor_completion_split,
     get_high_spenders,
     get_high_spenders_per_provider,
     get_openai_top_models,
-    get_provider_freshness,
     get_spend_by_model,
     get_users_for_provider,
 )
-from frontend.components import badge, filters_bar, fmt_int, fmt_money, hero, kpi_row, section
+from frontend.components import badge, fmt_int, fmt_money, kpi_row, section
 from frontend.theme import NAVY
 
+
+# ----------------- shared helpers (verbatim from old file) -----------------
 
 def _fmt_int(v) -> str:
     if v is None:
@@ -36,40 +48,7 @@ def _fmt_dash(v, formatter=str) -> str:
     return "—" if v is None else formatter(v)
 
 
-def _freshness_header() -> None:
-    f = get_provider_freshness()
-    parts = []
-    for prov, css in (("anthropic", "claude"), ("openai", "chatgpt"), ("cursor", "cursor")):
-        info = f.get(prov, {})
-        label = {"anthropic": "Claude", "openai": "ChatGPT", "cursor": "Cursor"}[prov]
-        if info.get("source") == "absent":
-            text = '<span class="source-absent">not connected</span>'
-        else:
-            start = info.get("start_date") or "?"
-            end = info.get("end_date") or "?"
-            window = f"{start} – {end}" if start != end else start
-            klass = "source-real" if info["source"] == "real" else "source-mock"
-            text = f"{window} · <span class=\"{klass}\">{info['source'].title()}</span>"
-        parts.append(
-            f'<span class="item {css}"><span class="dot"></span><span class="label">{label}:</span> {text}</span>'
-        )
-    st.markdown(f'<div class="hmnd-fresh">{" | ".join(parts)}</div>', unsafe_allow_html=True)
-
-
-def _provider_chips() -> None:
-    st.markdown(
-        """
-        <div class="hmnd-providers">
-            <span class="chip claude"><span class="dot"></span>Claude</span>
-            <span class="chip chatgpt"><span class="dot"></span>ChatGPT</span>
-            <span class="chip cursor"><span class="dot"></span>Cursor</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class: str,
+def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class,
               max_value: float | None = None, value_formatter=str) -> None:
     if not rows:
         st.caption("No data.")
@@ -91,40 +70,83 @@ def _bar_list(rows: list[dict], label_key: str, value_key: str, css_class: str,
     st.markdown("\n".join(html), unsafe_allow_html=True)
 
 
+def _hs_note(s: dict[str, Any]) -> str:
+    """Heuristic one-liner describing the spend pattern."""
+    spend = s["spend"] or 0
+    msgs = s["messages"] or 0
+    dpm = (spend / msgs) if msgs > 0 else None
+    if dpm is not None and dpm >= 100:
+        return f"anomalous: ~${dpm:,.0f} per message — possible API/automation"
+    if dpm is not None and dpm >= 20:
+        return f"high cost/message (${dpm:,.1f}/msg) — likely reasoning model"
+    if msgs >= 1000:
+        return "high volume, proportionate spend"
+    return f"avg ${dpm:,.2f}/msg" if dpm is not None else "non-message billing"
+
+
+def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
+    """Generate up to 4 narrative bullets for the analysis card."""
+    bullets: list[str] = []
+    if not high:
+        return bullets
+    top = high[0]
+    bullets.append(
+        f"<b>{top['user_name']}</b> — {fmt_money(top['spend'])} on "
+        f"{top['messages']:,} messages, top single spender."
+    )
+    anomalies = [s for s in high
+                 if s["messages"] and (s["spend"] / s["messages"]) >= 100]
+    if anomalies:
+        a = anomalies[0]
+        dpm = a["spend"] / a["messages"]
+        bullets.append(
+            f"<b>{a['user_name']}</b> — {fmt_money(a['spend'])} on {a['messages']} messages "
+            f"(~${dpm:,.0f}/msg). Likely API/automation, not chat usage."
+        )
+    volume = sorted(high, key=lambda r: r["messages"] or 0, reverse=True)
+    if volume and volume[0]["messages"] >= 1000 and volume[0] != top:
+        v = volume[0]
+        bullets.append(
+            f"<b>{v['user_name']}</b> — {v['messages']:,} messages at "
+            f"{fmt_money(v['spend'])}. High volume, normal $/msg."
+        )
+    if len(high) >= 3:
+        top3 = sum(s["spend"] for s in high[:3])
+        total = sum(s["spend"] for s in high)
+        share = (top3 / total * 100) if total else 0
+        bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
+    return bullets[:4]
+
+
 # ----------------- main render -----------------
-# This file is now sourced into overview.py's globals via main.py — hero,
-# freshness chips and the filters bar are rendered by Overview ABOVE this
-# tabbed section, so we don't re-render them. The `filters` variable below
-# is the Filters object already set by overview.py.
-section("AI Tools")
+# main.py sources this file into overview.py's globals so `filters` is in
+# scope already (filters bar lives above, on Overview).
+# F-20 — three tabs, no "AI Tools" caption.
 
-(tab_overview, tab_claude, tab_cc, tab_gpt, tab_cursor,
- tab_models, tab_devs, tab_high) = st.tabs([
-    "Overview", "Claude Users", "Claude Code", "ChatGPT",
-    "Cursor", "Models", "Devs (Git × AI)", "⚠ High Spenders",
-])
+tab_overview, tab_engineering, tab_people = st.tabs(
+    ["Overview", "Engineering", "People"]
+)
 
 
+# =============================================================================
+# OVERVIEW TAB
+# =============================================================================
 with tab_overview:
-    # Spend breakdown across the three tools — respects the Source filter.
-    # When Source is narrowed (e.g. 'OpenAI · Artem'), zero out the
-    # other-provider stats so the user sees ONLY the scope they picked.
     from data.db import get_conn as _gc
-    f = filters
+    f = filters  # noqa: F821 — provided by main.py exec scope
     s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
     e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
     _scope = (f.provider or "all").lower()
     _show_anthropic = _scope in ("all", "anthropic")
     _show_openai    = _scope in ("all", "openai")
     _show_cursor    = _scope in ("all", "cursor")
-    # Apply org filter to OpenAI as well (scope = 'openai' + organization='Artem')
+
+    # Organization narrowing for OpenAI sub-orgs (Artem vs Humanoid).
     _org_clause = ""
     _org_params: list = []
     if f.organization and f.organization != "all":
         _org_clause = " AND ue.organization_id IN (SELECT id FROM organizations WHERE label = ?) "
         _org_params = [f.organization]
-    # Also honour the API-key narrowing so 'ceo_brain_prod' on Source=Artem
-    # narrows the AI Tools Overview tab to that key, just like the top KPIs.
     _key_clause = ""
     _key_params: list = []
     if f.api_key_id:
@@ -154,9 +176,7 @@ with tab_overview:
         else:
             _gpt_spend = _empty
 
-    # Cursor: real spend comes from usage_events (cursor JSON loader writes
-    # spendCents + includedSpendCents). Leaderboard is used only for the
-    # completion / AI lines counters that don't have an events-equivalent.
+    # Cursor: real spend from usage_events; CSV/JSON leaderboard for activity.
     from backend.services.cursor_analytics import load_user_leaderboard as _llb
     _leaders = _llb() if _show_cursor else []
     _cursor_devs = len(_leaders)
@@ -184,6 +204,7 @@ with tab_overview:
     gp = (gpt_v / total_v * 100) if total_v else 0
     crp = (cursor_v / total_v * 100) if total_v else 0
 
+    # -------- 1. Spend Breakdown bar --------
     if total_v > 0:
         st.markdown(
             f"""
@@ -195,17 +216,11 @@ with tab_overview:
                 </div>
                 <div style="display:flex;height:36px;border-radius:8px;overflow:hidden;background:#f1f5f9;">
                     <div style="background:#6366f1;width:{cp:.2f}%;display:flex;align-items:center;justify-content:center;
-                                color:white;font-weight:600;font-size:13px;">
-                        {cp:.1f}%
-                    </div>
+                                color:white;font-weight:600;font-size:13px;">{cp:.1f}%</div>
                     <div style="background:#10a37f;width:{gp:.2f}%;display:flex;align-items:center;justify-content:center;
-                                color:white;font-weight:600;font-size:13px;">
-                        {gp:.1f}%
-                    </div>
+                                color:white;font-weight:600;font-size:13px;">{gp:.1f}%</div>
                     <div style="background:#f59e0b;width:{crp:.2f}%;display:flex;align-items:center;justify-content:center;
-                                color:white;font-weight:600;font-size:13px;">
-                        {crp:.1f}%
-                    </div>
+                                color:white;font-weight:600;font-size:13px;">{crp:.1f}%</div>
                 </div>
                 <div style="display:flex;gap:24px;margin-top:10px;font-size:13px;color:#475569;">
                     <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6366f1;margin-right:6px;"></span>Claude <b style="color:#06091c">{fmt_money(claude_v)}</b></span>
@@ -217,7 +232,7 @@ with tab_overview:
             unsafe_allow_html=True,
         )
 
-    # Tool cards with coloured top borders
+    # -------- 2. Three tool cards (Claude / ChatGPT / Cursor) --------
     def _tool_card(color: str, label: str, value: str, note: str) -> str:
         return f"""
             <div style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
@@ -246,148 +261,55 @@ with tab_overview:
             f"{_cursor_devs} devs · {_cursor_completions:,} completions · {fmt_int(_cursor_ai_lines)} AI lines",
         ), unsafe_allow_html=True)
 
-    # Top spenders all tools + Usage summary
-    col_top, col_summary = st.columns(2)
-    with col_top:
-        # F-19 / FR-19.5 — Top Spenders now follows Source + Date + key + org
-        # filters (was hard-coded cross-tool before). Title and caption adapt
-        # to the active scope.
-        _title_suffix = {
-            "all":       "— All Tools",
-            "anthropic": "— Claude",
-            "openai":    "— ChatGPT",
-            "cursor":    "— Cursor",
-        }.get(_scope, "")
-        section(
-            f"Top Spenders {_title_suffix}".strip(),
-            help="Top 10 people by spend in the active Source + Date filter. "
-                 "Bar colour = risk level: red ≥ $1k, orange $500-1k, "
-                 "yellow < $500.",
-        )
-        if _scope == "all":
-            st.caption("ℹ️ Ranks across all tools — adjust the Source filter "
-                       "to narrow to one provider.")
-        else:
-            _label = {"anthropic": "Anthropic (Claude)",
-                      "openai":    "OpenAI (ChatGPT)",
-                      "cursor":    "Cursor"}.get(_scope, _scope.title())
-            st.caption(f"ℹ️ Filtered to **{_label}** "
-                       f"({f.period_days}-day window).")
-        spenders = get_high_spenders(
-            period_days=f.period_days,
-            threshold_usd=0,
-            api_key_id=f.api_key_id,
-            provider=_scope,
-            organization=(f.organization or "all"),
-            date_from=f.date_from,
-            date_to=f.date_to,
-        )
-        top10 = spenders[:10]
-        if top10:
-            max_spend = max(r["spend"] for r in top10) or 1
-            _bar_list(
-                top10, label_key="user_name", value_key="spend",
-                css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
-                max_value=max_spend, value_formatter=fmt_money,
-            )
-        else:
-            st.caption("No spend recorded yet — run sync from VM.")
-
-    with col_summary:
-        section(
-            "Usage Summary",
-            help="Side-by-side comparison of the 3 AI tools: users, "
-                 "activity (requests / messages / completions) and total "
-                 "spend. Useful for judging ROI of each tool.",
-        )
-        usage_rows = [
-            {"tool": "Claude (all products)",
-             "users": _claude_spend["u"],
-             "activity": f"{_claude_spend['c']:,} reqs",
-             "spend": fmt_money(claude_v)},
-            {"tool": "ChatGPT",
-             "users": _gpt_spend["u"],
-             "activity": f"{_gpt_spend['c']:,} msgs",
-             "spend": fmt_money(gpt_v)},
-            {"tool": "Cursor",
-             "users": _cursor_devs,
-             "activity": f"{_cursor_completions:,} completions",
-             "spend": fmt_money(cursor_v)},
-        ]
-        df = pd.DataFrame(usage_rows)
-        view = df.rename(columns={
-            "tool": "Tool", "users": "Users",
-            "activity": "Activity", "spend": "Spend"
-        })
-        st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"),
-                    unsafe_allow_html=True)
-
-
-with tab_claude:
-    if filters.provider not in ("all", "anthropic", "cursor"):
-        st.info(
-            f"Claude Users tab is sourced from Cursor leaderboard (favorite_model "
-            f"contains 'claude'). Source filter '{filters.provider}' doesn't apply "
-            f"here — switch to 'All sources' or 'Anthropic' / 'Cursor'."
-        )
-    # F-12.1.2 — Claude data comes from the Cursor team CSV exports the user
-    # drops into the repo (see backend.services.cursor_analytics). Anthropic's
-    # Admin API stays untouched; this tab is purely Cursor-derived so the
-    # leaderboard reflects every dev whose Cursor 'favorite model' is Claude.
-    from backend.services.cursor_analytics import (
-        claude_users as _claude_users,
-        load_user_leaderboard as _all_leaders,
+    # -------- 3. Top Spenders horizontal bars --------
+    _title_suffix = {
+        "all":       "— All Tools",
+        "anthropic": "— Claude",
+        "openai":    "— ChatGPT",
+        "cursor":    "— Cursor",
+    }.get(_scope, "")
+    section(
+        f"Top Spenders {_title_suffix}".strip(),
+        help="Top 10 people by spend in the active Source + Date filter. "
+             "Bar colour = risk level: red >= $1k, orange $500-1k, "
+             "yellow < $500.",
     )
-    claude_rows = _claude_users()
-    all_rows = _all_leaders()
-
-    if not claude_rows:
-        st.info(
-            "No Claude users in the latest Cursor export. Drop a "
-            "User_Leaderboard_*.csv with users whose Favorite Model contains "
-            "'claude' to populate this tab."
+    if _scope == "all":
+        st.caption("Ranks across all tools — adjust the Source filter "
+                   "to narrow to one provider.")
+    else:
+        _label = {"anthropic": "Anthropic (Claude)",
+                  "openai":    "OpenAI (ChatGPT)",
+                  "cursor":    "Cursor"}.get(_scope, _scope.title())
+        st.caption(f"Filtered to **{_label}** "
+                   f"({f.period_days}-day window).")
+    spenders = get_high_spenders(
+        period_days=f.period_days,
+        threshold_usd=0,
+        api_key_id=f.api_key_id,
+        provider=_scope,
+        organization=(f.organization or "all"),
+        date_from=f.date_from,
+        date_to=f.date_to,
+    )
+    top10 = spenders[:10]
+    if top10:
+        max_spend = max(r["spend"] for r in top10) or 1
+        _bar_list(
+            top10, label_key="user_name", value_key="spend",
+            css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
+            max_value=max_spend, value_formatter=fmt_money,
         )
     else:
-        total_ai_lines = sum(r["ai_lines"] for r in claude_rows)
-        total_completions = sum(r["agent_completions"] + r["tab_completions"] for r in claude_rows)
-        share_pct = (
-            len(claude_rows) / max(len(all_rows), 1) * 100 if all_rows else 0.0
-        )
-        kpi_row([
-            {"label": "Claude users",       "value": str(len(claude_rows)),
-             "help": "Devs who picked Claude as their favorite model in "
-                     "Cursor. Compare with ChatGPT-preferring devs in the "
-                     "Cursor tab to read team preferences."},
-            {"label": "Total AI lines",     "value": fmt_int(total_ai_lines),
-             "help": "Lines of code Claude generated for these devs via "
-                     "Cursor (Agent + Tab completions). A proxy for the "
-                     "volume of AI help in the codebase."},
-            {"label": "Total completions",  "value": fmt_int(total_completions),
-             "help": "How many Claude completions were accepted (Agent + "
-                     "Tab). Each one is a single 'AI helped me' moment."},
-        ])
+        st.caption("No spend recorded yet for the active filter.")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            section("Top 10 by AI Lines")
-            top_lines = sorted(claude_rows, key=lambda r: r["ai_lines"], reverse=True)[:10]
-            _bar_list(top_lines, label_key="name", value_key="ai_lines",
-                      css_class="claude", value_formatter=fmt_int)
-        with c2:
-            section("Top 10 by Agent Completions")
-            top_compl = sorted(claude_rows, key=lambda r: r["agent_completions"], reverse=True)[:10]
-            _bar_list(top_compl, label_key="name", value_key="agent_completions",
-                      css_class="claude", value_formatter=lambda v: f"{int(v):,}")
-
-        # Claude Products Breakdown — split Anthropic spend across Chat /
-        # Claude Code (Agent) / Cowork+Other.
-        purposes = get_anthropic_spend_by_purpose(period_days=filters.period_days)
+    # -------- 4. Claude Products Breakdown — only when Anthropic in scope --
+    if _show_anthropic:
+        purposes = get_anthropic_spend_by_purpose(period_days=f.period_days)
         if purposes:
-            section("Claude Products Breakdown")
-            # Group into 3 buckets to match the design:
-            #   Chat            -> "Chat"
-            #   Agent           -> "Claude Code"
-            #   the rest        -> "Cowork + Other"
+            section("Claude Products Breakdown",
+                    help="Split of Anthropic spend across Chat / Claude Code "
+                         "(Agent) / Cowork + Other.")
             grouped: dict[str, dict] = {"Chat": {}, "Claude Code": {}, "Cowork + Other": {}}
             for p in purposes:
                 key = {"Chat": "Chat", "Agent": "Claude Code"}.get(
@@ -397,9 +319,10 @@ with tab_claude:
                 g["spend"] = (g.get("spend") or 0) + (p["spend"] or 0)
                 g["requests"] = (g.get("requests") or 0) + (p["requests"] or 0)
                 g["users"] = max(g.get("users") or 0, p["users"] or 0)
-            colors = {"Chat": "#a5b4fc", "Claude Code": "#6366f1", "Cowork + Other": "#c7d2fe"}
-            cols = st.columns(3)
-            for col, (label, g) in zip(cols, grouped.items()):
+            colors = {"Chat": "#a5b4fc", "Claude Code": "#6366f1",
+                      "Cowork + Other": "#c7d2fe"}
+            pc1, pc2, pc3 = st.columns(3)
+            for col, (label, g) in zip((pc1, pc2, pc3), grouped.items()):
                 with col:
                     st.markdown(
                         f"""
@@ -418,699 +341,656 @@ with tab_claude:
                         unsafe_allow_html=True,
                     )
 
-        section("All Claude Users")
-        # Drop zero-activity rows — Cursor leaderboard surfaces members who
-        # picked Claude as favorite but generated no actual lines/completions
-        # this period. Showing them as 0/0/0/0/0 looks like a bug.
-        active_claude_rows = [
-            r for r in claude_rows
-            if (int(r.get("ai_lines") or 0) > 0
-                or int(r.get("agent_completions") or 0) > 0
-                or int(r.get("tab_completions") or 0) > 0)
-        ]
-        df = pd.DataFrame(active_claude_rows)
-        view = df[[
-            "name", "favorite_model", "agent_completions", "agent_lines",
-            "tab_completions", "tab_lines", "ai_lines",
-        ]].rename(columns={
-            "name": "Name",
-            "favorite_model": "Favorite model",
-            "agent_completions": "Agent completions",
-            "agent_lines": "Agent lines",
-            "tab_completions": "Tab completions",
-            "tab_lines": "Tab lines",
-            "ai_lines": "AI lines",
-        })
-        st.markdown(
-            view.to_html(escape=False, index=False, classes="hmnd-table"),
-            unsafe_allow_html=True,
+    # -------- 5. OpenAI Top Models — only when OpenAI in scope --
+    if _show_openai:
+        openai_models = get_openai_top_models(period_days=f.period_days)
+        if openai_models:
+            section("OpenAI Top Models",
+                    help="Per-model ChatGPT usage by request count.")
+            _bar_list(openai_models[:8], label_key="model",
+                      value_key="requests", css_class="chatgpt",
+                      value_formatter=fmt_int)
+
+    # -------- 6. Cursor DAU — only when Cursor in scope --
+    if _show_cursor:
+        from backend.services.cursor_analytics import load_team_dau
+        dau = load_team_dau()
+        if dau:
+            section("Cursor — Daily Active Users",
+                    help="Cursor team DAU over the data window. Source: "
+                         "Team_DAU_Analytics_*.csv exports.")
+            df_dau = pd.DataFrame(dau)
+            df_dau["date"] = pd.to_datetime(df_dau["date"])
+            fig_dau = px.bar(
+                df_dau, x="date", y="dau",
+                color_discrete_sequence=["#f59e0b"],
+            )
+            fig_dau.update_layout(
+                plot_bgcolor="white", paper_bgcolor="white",
+                margin=dict(l=10, r=10, t=10, b=10),
+                font=dict(family="Inter", color=NAVY),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(gridcolor="#e8edf3"),
+            )
+            st.plotly_chart(fig_dau, use_container_width=True)
+
+        # Cursor completion split — small bonus KPI strip
+        compl = get_cursor_completion_split(period_days=f.period_days)
+        if compl["total"] > 0:
+            st.caption(
+                f"Cursor completions in scope: "
+                f"**{fmt_int(compl['agent'])}** Agent + "
+                f"**{fmt_int(compl['tab'])}** Tab = "
+                f"**{fmt_int(compl['total'])}** total."
+            )
+
+    # ================ Expanders (tables, collapsed by default) ================
+
+    # ---- All Users — cross-tool ----
+    with st.expander("All Users — cross-tool", expanded=False):
+        per_provider = get_high_spenders_per_provider(period_days=f.period_days)
+        if not per_provider:
+            st.caption("No cross-tool user spend in the active window.")
+        else:
+            # Scope filter — drop rows that have $0 in the active scope.
+            def _in_scope(r: dict) -> bool:
+                if _scope == "all":
+                    return True
+                if _scope == "anthropic":
+                    return (r.get("cost_anthropic") or 0) > 0
+                if _scope == "openai":
+                    return (r.get("cost_openai") or 0) > 0
+                if _scope == "cursor":
+                    return (r.get("cost_cursor") or 0) > 0
+                return True
+            scoped = [r for r in per_provider if _in_scope(r)]
+            if not scoped:
+                st.caption(f"No users with spend in scope '{_scope}'.")
+            else:
+                df_au = pd.DataFrame(scoped)
+                df_au = df_au[["user_name", "messages",
+                               "cost_openai", "cost_anthropic",
+                               "cost_cursor", "cost_total"]].copy()
+                for c in ("cost_openai", "cost_anthropic", "cost_cursor", "cost_total"):
+                    df_au[c] = df_au[c].apply(
+                        lambda v: fmt_money(v) if v else "—"
+                    )
+                df_au["messages"] = df_au["messages"].apply(
+                    lambda v: fmt_int(int(v)) if v else "0"
+                )
+                view_au = df_au.rename(columns={
+                    "user_name": "Name",
+                    "messages": "Messages",
+                    "cost_openai": "OpenAI",
+                    "cost_anthropic": "Anthropic",
+                    "cost_cursor": "Cursor",
+                    "cost_total": "Total",
+                })
+                st.markdown(
+                    view_au.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- Claude Users (Cursor leaderboard) ----
+    if _show_anthropic or _show_cursor:
+        with st.expander("Claude Users (Cursor leaderboard)", expanded=False):
+            from backend.services.cursor_analytics import claude_users as _claude_users
+            claude_rows = _claude_users()
+            if not claude_rows:
+                st.caption(
+                    "No Claude users in the latest Cursor export. Drop a "
+                    "User_Leaderboard_*.csv with users whose Favorite Model "
+                    "contains 'claude' to populate this view."
+                )
+            else:
+                active = [
+                    r for r in claude_rows
+                    if (int(r.get("ai_lines") or 0) > 0
+                        or int(r.get("agent_completions") or 0) > 0
+                        or int(r.get("tab_completions") or 0) > 0)
+                ]
+                if not active:
+                    st.caption("Claude users found but zero activity in this period.")
+                else:
+                    df_cu = pd.DataFrame(active)
+                    view_cu = df_cu[[
+                        "name", "favorite_model", "agent_completions",
+                        "agent_lines", "tab_completions", "tab_lines",
+                        "ai_lines",
+                    ]].rename(columns={
+                        "name": "Name",
+                        "favorite_model": "Favorite model",
+                        "agent_completions": "Agent completions",
+                        "agent_lines": "Agent lines",
+                        "tab_completions": "Tab completions",
+                        "tab_lines": "Tab lines",
+                        "ai_lines": "AI lines",
+                    })
+                    st.markdown(
+                        view_cu.to_html(escape=False, index=False, classes="hmnd-table"),
+                        unsafe_allow_html=True,
+                    )
+
+    # ---- Claude Code Users ----
+    if _show_anthropic:
+        with st.expander("Claude Code Users", expanded=False):
+            from data.db import get_conn
+            from backend.analytics import api_key_clause as _api_key_clause
+            s_dt, e_dt = f.date_range()
+            k_clause, k_params = _api_key_clause(f.api_key_id, "ue")
+            sql_cc = f"""
+                SELECT u.full_name AS name,
+                       u.email      AS email,
+                       COUNT(*)     AS requests,
+                       ROUND(SUM(ue.cost_usd), 2) AS spend,
+                       SUM(ue.tokens_in)  AS tokens_in,
+                       SUM(ue.tokens_out) AS tokens_out
+                FROM usage_events ue
+                JOIN users u ON u.id = ue.user_id
+                JOIN providers p ON p.id = ue.provider_id
+                WHERE p.name = 'anthropic'
+                  AND ue.purpose = 'Agent'
+                  AND ue.occurred_at BETWEEN ? AND ?
+                  {k_clause}
+                GROUP BY u.id
+                ORDER BY spend DESC
+            """
+            with get_conn() as conn:
+                cc_rows = [dict(r) for r in conn.execute(
+                    sql_cc,
+                    [s_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                     e_dt.strftime("%Y-%m-%d %H:%M:%S")] + k_params,
+                ).fetchall()]
+            if not cc_rows:
+                st.caption(
+                    "No Claude Code (purpose='Agent') events in this window."
+                )
+            else:
+                total_reqs = sum(r["requests"] for r in cc_rows)
+                total_spend = sum(r["spend"] or 0 for r in cc_rows)
+                kpi_row([
+                    {"label": "CC Requests", "value": _fmt_int(total_reqs)},
+                    {"label": "CC Spend",    "value": fmt_money(total_spend)},
+                    {"label": "Top spender",
+                     "value": fmt_money(cc_rows[0]['spend']) if cc_rows else "—"},
+                    {"label": "Avg / user",
+                     "value": fmt_money(total_spend / max(len(cc_rows), 1))},
+                ])
+                df_cc = pd.DataFrame(cc_rows)
+                view_cc = df_cc[[
+                    "name", "email", "requests", "spend",
+                    "tokens_in", "tokens_out",
+                ]].copy()
+                view_cc["spend"] = view_cc["spend"].apply(
+                    lambda v: fmt_money(v) if v else "—"
+                )
+                view_cc["requests"] = view_cc["requests"].apply(
+                    lambda v: fmt_int(int(v)) if v else "0"
+                )
+                view_cc["tokens_in"] = view_cc["tokens_in"].apply(
+                    lambda v: fmt_int(int(v or 0))
+                )
+                view_cc["tokens_out"] = view_cc["tokens_out"].apply(
+                    lambda v: fmt_int(int(v or 0))
+                )
+                view_cc = view_cc.rename(columns={
+                    "name": "Name", "email": "Email",
+                    "requests": "Requests", "spend": "Spend",
+                    "tokens_in": "Tokens in", "tokens_out": "Tokens out",
+                })
+                st.markdown(
+                    view_cc.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- ChatGPT Users ----
+    if _show_openai:
+        with st.expander("ChatGPT Users", expanded=False):
+            rows = get_users_for_provider("openai", period_days=f.period_days,
+                                          api_key_id=f.api_key_id)
+            # Honor organization filter (Artem vs Humanoid) — keep the same
+            # rebuild logic the old tab_gpt used so message/cost counts are
+            # org-scoped, not just user-list filtered.
+            if f.organization and f.organization != "all":
+                from data.db import get_conn as _gc_gpt
+                with _gc_gpt() as _conn_gpt:
+                    org_rows = _conn_gpt.execute(
+                        """SELECT u.full_name AS user_name,
+                                  COUNT(*)                          AS messages,
+                                  ROUND(SUM(ue.cost_usd), 2)        AS cost,
+                                  SUM(ue.tokens_in)                 AS tokens_in,
+                                  SUM(ue.tokens_out)                AS tokens_out
+                           FROM usage_events ue
+                           JOIN users u ON u.id = ue.user_id
+                           JOIN providers p ON p.id = ue.provider_id
+                           JOIN organizations o ON o.id = ue.organization_id
+                           WHERE p.name='openai' AND o.label = ?
+                             AND ue.occurred_at >= datetime('now', ?)
+                           GROUP BY u.id
+                           ORDER BY messages DESC""",
+                        (f.organization, f"-{f.period_days} days"),
+                    ).fetchall()
+                rows = [
+                    dict(r) | {
+                        "sessions": None, "lines_added": None, "commits": None,
+                        "tokens_in": int(r["tokens_in"] or 0),
+                        "tokens_out": int(r["tokens_out"] or 0),
+                        "cost": float(r["cost"] or 0),
+                        "messages": int(r["messages"]),
+                    }
+                    for r in org_rows
+                ]
+            if not rows:
+                st.caption("No OpenAI activity in the active window.")
+            else:
+                total_msgs = sum(r["messages"] for r in rows)
+                total_spend = sum(r["cost"] for r in rows)
+                high = [r for r in rows if r["cost"] >= 200]
+                kpi_row([
+                    {"label": "Active users",   "value": str(len(rows))},
+                    {"label": "Total messages", "value": _fmt_int(total_msgs)},
+                    {"label": "Total spend",    "value": fmt_money(total_spend)},
+                    {"label": "High (>= $200)", "value": str(len(high))},
+                ])
+                df_gpt = pd.DataFrame(rows).sort_values("messages", ascending=False)
+                df_gpt["spend_str"] = df_gpt["cost"].apply(
+                    lambda v: fmt_money(v) if v else "—"
+                )
+                df_gpt["flag_str"] = df_gpt["cost"].apply(
+                    lambda v: badge(
+                        chatgpt_flag(v),
+                        {"High": "high", "Medium": "medium",
+                         "Watch": "review"}.get(chatgpt_flag(v), "low"),
+                    ) if chatgpt_flag(v) else ""
+                )
+                view_gpt = df_gpt[["user_name", "messages", "spend_str", "flag_str"]].rename(
+                    columns={
+                        "user_name": "Name", "messages": "Messages",
+                        "spend_str": "Spend", "flag_str": "Flag",
+                    }
+                )
+                st.markdown(
+                    view_gpt.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- Cursor Users (full leaderboard) ----
+    if _show_cursor:
+        with st.expander("Cursor Users (full leaderboard)", expanded=False):
+            from backend.services.cursor_analytics import load_user_leaderboard
+            leaders = load_user_leaderboard()
+            if not leaders:
+                st.caption(
+                    "No Cursor leaderboard data. Drop User_Leaderboard_*.csv "
+                    "into sources/ to populate."
+                )
+            else:
+                df_lb = pd.DataFrame(leaders)
+                view_lb = df_lb[[
+                    "name", "email", "favorite_model",
+                    "agent_completions", "agent_lines",
+                    "tab_completions", "tab_lines", "ai_lines",
+                ]].rename(columns={
+                    "name": "Name",
+                    "email": "Email",
+                    "favorite_model": "Favorite model",
+                    "agent_completions": "Agent completions",
+                    "agent_lines": "Agent lines",
+                    "tab_completions": "Tab completions",
+                    "tab_lines": "Tab lines",
+                    "ai_lines": "AI lines",
+                })
+                st.markdown(
+                    view_lb.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- High Spenders detail (cards) ----
+    with st.expander("High Spenders detail (cards)", expanded=False):
+        # Cross-tool view by design — ignore scope so we can rank everyone.
+        threshold = st.slider(
+            "High-spender threshold ($)", 200, 5000, 1000, 100,
+            key="hs_threshold",
         )
-
-
-with tab_cc:
-    if filters.provider not in ("all", "anthropic"):
-        st.info(
-            f"Claude Code tab shows Anthropic events (purpose='Agent'). "
-            f"Source filter '{filters.provider}' has no Claude Code data — "
-            f"switch to 'All sources' or 'Anthropic'."
+        all_spenders = get_high_spenders(
+            period_days=f.period_days,
+            threshold_usd=0,
+            api_key_id=None,
         )
-    # Claude Code = Anthropic events with purpose 'Agent' (synthesised from
-    # Cursor leaderboard's agent_completions) — see data/cursor_to_anthropic.
-    from data.db import get_conn
-    from backend.analytics import api_key_clause as _api_key_clause
-    f = filters
-    s, e = f.date_range()
-    k_clause, k_params = _api_key_clause(f.api_key_id, "ue")
-    sql = f"""
-        SELECT u.full_name AS name,
-               u.email      AS email,
-               COUNT(*)     AS requests,
-               ROUND(SUM(ue.cost_usd), 2) AS spend,
-               SUM(ue.tokens_in)  AS tokens_in,
-               SUM(ue.tokens_out) AS tokens_out
-        FROM usage_events ue
-        JOIN users u ON u.id = ue.user_id
-        JOIN providers p ON p.id = ue.provider_id
-        WHERE p.name = 'anthropic'
-          AND ue.purpose = 'Agent'
-          AND ue.occurred_at BETWEEN ? AND ?
-          {k_clause}
-        GROUP BY u.id
-        ORDER BY spend DESC
-    """
-    with get_conn() as conn:
-        cc_rows = [dict(r) for r in conn.execute(
-            sql,
-            [s.strftime("%Y-%m-%d %H:%M:%S"), e.strftime("%Y-%m-%d %H:%M:%S")] + k_params,
-        ).fetchall()]
+        high = [r for r in all_spenders if r["spend"] >= threshold]
+        combined = sum(r["spend"] for r in high)
+        top = high[0] if high else None
+        total_users = len(all_spenders)
+        share_high = (len(high) / total_users * 100) if total_users else 0
 
-    total_reqs = sum(r["requests"] for r in cc_rows)
-    total_spend = sum(r["spend"] or 0 for r in cc_rows)
-    top_spender = cc_rows[0] if cc_rows else None
-    # CC share of Anthropic
-    with get_conn() as conn:
-        all_anthropic_spend = conn.execute(
-            """SELECT ROUND(SUM(ue.cost_usd), 2) AS s
-               FROM usage_events ue
-               JOIN providers p ON p.id = ue.provider_id
-               WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
-            (s.strftime("%Y-%m-%d %H:%M:%S"), e.strftime("%Y-%m-%d %H:%M:%S")),
-        ).fetchone()["s"] or 0
-    cc_share = (total_spend / all_anthropic_spend * 100) if all_anthropic_spend > 0 else 0.0
+        kpi_row([
+            {"label": "High spenders",  "value": f"{len(high)} / {total_users}"},
+            {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—"},
+            {"label": "Combined spend", "value": fmt_money(combined)},
+            {"label": "Share of users", "value": f"{share_high:.0f}%"},
+        ])
 
-    kpi_row([
-        {"label": "CC Requests", "value": _fmt_int(total_reqs),
-         "help": "Requests to Claude Code (Anthropic's agentic CLI). "
-                 "1 request = 1 agent action (write a function, read a "
-                 "file, run bash). One session is tens-to-hundreds of these."},
-        {"label": "CC Spend", "value": fmt_money(total_spend),
-         "help": "Claude Code spend this period. A subset of total "
-                 "Anthropic spend — only events with purpose='Agent'."},
-        {"label": "Top Spender",
-         "value": fmt_money(top_spender['spend']) if top_spender else "—",
-         "help": "Heaviest Claude Code user. Usually a developer who "
-                 "moved to a fully agentic workflow."},
-        {"label": "Avg / user",
-         "value": fmt_money(total_spend / max(len(cc_rows), 1)) if cc_rows else "—",
-         "help": "Mean Claude Code spend per active user this period. "
-                 "Useful for forecasting as the team grows."},
-    ])
+        if not high:
+            st.info(
+                f"No users at or above {fmt_money(threshold)} in the period."
+            )
+        else:
+            per_provider_full = get_high_spenders_per_provider(
+                period_days=f.period_days
+            )
+            split_by_user = {r["user_name"]: r for r in per_provider_full}
 
-    if cc_rows:
-        section("Top Claude Code Users by spend")
-        _bar_list(cc_rows[:15], label_key="name", value_key="spend",
-                  css_class="claude", value_formatter=fmt_money)
-        # 80/20 footer
-        top5_spend = sum(r["spend"] or 0 for r in cc_rows[:5])
-        share = (top5_spend / total_spend * 100) if total_spend > 0 else 0.0
-        st.markdown(
-            f"<div style='margin-top:8px;color:#475569;font-size:13px'>"
-            f"Top 5 account for <b style='color:#06091c'>{fmt_money(top5_spend)}</b> "
-            f"of {fmt_money(total_spend)} CC spend — <b style='color:#6366f1'>"
-            f"{share:.1f}%</b>.</div>",
-            unsafe_allow_html=True,
-        )
+            section(
+                "Notable high spend",
+                help="Top 15 high-spenders with per-tool split (GPT + CC + "
+                     "Cursor). Border colour = risk level.",
+            )
+            cards_html = []
+            for s in high[:15]:
+                spend_v = s["spend"] or 0
+                risk = classify_risk(spend_v) or "low"
+                border_color = {"high": "#ef4444", "medium": "#f59e0b",
+                                "low": "#eab308"}.get(risk, "#94a3b8")
+                note = _hs_note(s)
+                split = split_by_user.get(s["user_name"])
+                split_parts: list[str] = []
+                if split:
+                    if split.get("cost_openai", 0) > 0:
+                        split_parts.append(f"GPT {fmt_money(split['cost_openai'])}")
+                    if split.get("cost_anthropic", 0) > 0:
+                        split_parts.append(f"CC {fmt_money(split['cost_anthropic'])}")
+                    if split.get("cost_cursor", 0) > 0:
+                        split_parts.append(f"Cursor {fmt_money(split['cost_cursor'])}")
+                split_inline = (
+                    f'<div style="color:#94a3b8;font-size:11px;margin-top:4px;">'
+                    f'{" + ".join(split_parts)}</div>'
+                    if len(split_parts) > 1 else ""
+                )
+                cards_html.append(
+                    f'<div style="border-left:3px solid {border_color};padding:14px 18px;'
+                    f'margin-bottom:8px;background:#fcfdff;border-radius:0 12px 12px 0;'
+                    f'display:flex;align-items:center;justify-content:space-between;gap:18px;">'
+                    f'<div style="min-width:0;">'
+                    f'<div style="font-weight:600;color:#06091c;font-size:14px;">{s["user_name"]}</div>'
+                    f'<div style="color:#64748b;font-size:12px;margin-top:2px;">'
+                    f'{s["messages"]:,} messages · {note}</div>'
+                    f'{split_inline}'
+                    f'</div>'
+                    f'<div style="font-size:18px;font-weight:600;color:{border_color};white-space:nowrap;">'
+                    f'{fmt_money(spend_v)}</div>'
+                    f'</div>'
+                )
+            st.markdown("".join(cards_html), unsafe_allow_html=True)
 
-        # Spend by Model — pulled DIRECTLY from rollups.modelSpend in the
-        # source JSON. usage_events stores Anthropic events under a
-        # 'claude-generic' placeholder because the JSON's userCostByProduct
-        # rows have model=null; the rollup is the authoritative per-model
-        # number. Caveat: rollup is across all Claude products (Chat + CC +
-        # Cowork etc.), not CC-only.
-        model_spend = get_anthropic_model_spend_from_json()
-        if model_spend:
-            # Surface the JSON's actual rangeStart/End so the user doesn't
-            # think these $-values are filtered by the page's Period picker.
-            from data.sources.anthropic_json import latest_anthropic_file as _laf
-            _af = _laf()
-            _window_note = ""
-            if _af:
+            col_anal, col_rank = st.columns(2)
+            with col_anal:
+                section("High spend analysis")
+                findings = _hs_findings(high)
+                if findings:
+                    st.markdown(
+                        "<ul style='margin:0; padding-left:18px; color:#475569; "
+                        "font-size:13px; line-height:1.7'>"
+                        + "".join(f"<li>{fnd}</li>" for fnd in findings)
+                        + "</ul>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.caption("No notable anomalies detected.")
+            with col_rank:
+                section("Cross-tool spend ranking")
+                ranked = sorted(
+                    all_spenders, key=lambda r: r["spend"] or 0, reverse=True
+                )[:10]
+                if ranked:
+                    max_spend_r = max((r["spend"] or 0) for r in ranked) or 1
+                    _bar_list(
+                        ranked, label_key="user_name", value_key="spend",
+                        css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
+                        max_value=max_spend_r,
+                        value_formatter=fmt_money,
+                    )
+
+    # ---- Anthropic models — JSON rollup ----
+    if _show_anthropic:
+        with st.expander("Anthropic models — JSON rollup", expanded=False):
+            model_spend = get_anthropic_model_spend_from_json()
+            if not model_spend:
+                st.caption(
+                    "No Anthropic JSON dump on disk — drop a "
+                    "sources/Anthropic_*.json file."
+                )
+            else:
+                # Surface the JSON's actual rangeStart/End so users don't
+                # think these $-values are filtered by the Period picker.
+                _window_note = ""
                 try:
-                    import json as _json
-                    _meta = _json.loads(_af.path.read_text(encoding="utf-8")).get("_meta") or {}
-                    _start = (_meta.get("rangeStart") or "")[:10]
-                    _end = (_meta.get("rangeEnd") or "")[:10]
-                    if _start and _end:
-                        _window_note = f" Window: {_start} → {_end}."
+                    from data.sources.anthropic_json import latest_anthropic_file as _laf
+                    _af = _laf()
+                    if _af:
+                        import json as _json
+                        _meta = _json.loads(
+                            _af.path.read_text(encoding="utf-8")
+                        ).get("_meta") or {}
+                        _start = (_meta.get("rangeStart") or "")[:10]
+                        _end = (_meta.get("rangeEnd") or "")[:10]
+                        if _start and _end:
+                            _window_note = f" Window: {_start} → {_end}."
                 except Exception:
                     pass
-            st.caption(
-                "Sourced from `rollups.modelSpend` (all Claude products combined — "
-                "per-product per-model split isn't in the JSON dump)."
-                + _window_note
-            )
-            cc1, cc2 = st.columns(2)
-            with cc1:
-                section("Spend by Model")
-                _bar_list(model_spend[:10], label_key="model", value_key="spend",
-                          css_class="claude", value_formatter=fmt_money)
-            with cc2:
-                section("Model Share of Spend")
-                shares_html = []
-                for m in model_spend[:6]:
-                    pct = m["share"]
-                    shares_html.append(
-                        f'<div style="margin-bottom:8px;">'
-                        f'<div style="display:flex;justify-content:space-between;'
-                        f'font-size:13px;color:#475569;margin-bottom:3px;">'
-                        f'<code>{m["model"]}</code><b>{pct:.1f}%</b></div>'
-                        f'<div style="background:#f1f5f9;height:6px;border-radius:3px;'
-                        f'overflow:hidden;">'
-                        f'<div style="background:#6366f1;height:100%;width:{pct:.2f}%;"></div>'
-                        f'</div></div>'
-                    )
-                st.markdown("".join(shares_html), unsafe_allow_html=True)
-    else:
-        st.info(
-            "No Claude Code events yet. Once Anthropic admin API or Cursor "
-            "leaderboard exports are loaded, Claude Code traffic shows up here."
-        )
-
-
-with tab_gpt:
-    if filters.provider not in ("all", "openai"):
-        st.info(
-            f"ChatGPT tab shows OpenAI API events. Source filter "
-            f"'{filters.provider}' has no OpenAI data — switch to 'All sources' "
-            f"or one of 'OpenAI · Artem' / 'OpenAI · Humanoid'."
-        )
-    rows = get_users_for_provider("openai", period_days=filters.period_days,
-                                   api_key_id=filters.api_key_id)
-    # Honor the organization filter (Artem vs Humanoid) — get_users_for_provider
-    # itself doesn't take it, so post-filter by joining each row to the org.
-    if filters.organization and filters.organization != "all":
-        from data.db import get_conn as _gc_gpt
-        with _gc_gpt() as _conn_gpt:
-            _allowed_uids = {
-                r[0] for r in _conn_gpt.execute(
-                    """SELECT DISTINCT ue.user_id
-                       FROM usage_events ue
-                       JOIN providers p ON p.id = ue.provider_id
-                       JOIN organizations o ON o.id = ue.organization_id
-                       WHERE p.name='openai' AND o.label = ?
-                         AND ue.occurred_at >= datetime('now', ?)""",
-                    (filters.organization, f"-{filters.period_days} days"),
-                ).fetchall()
-            }
-        # Rebuild rows from scratch via SQL filtered by org so message/cost
-        # counts are also org-scoped (not just user-list filtering).
-        with _gc_gpt() as _conn_gpt:
-            org_rows = _conn_gpt.execute(
-                """SELECT u.full_name AS user_name,
-                          COUNT(*)                          AS messages,
-                          ROUND(SUM(ue.cost_usd), 2)        AS cost,
-                          SUM(ue.tokens_in)                 AS tokens_in,
-                          SUM(ue.tokens_out)                AS tokens_out
-                   FROM usage_events ue
-                   JOIN users u ON u.id = ue.user_id
-                   JOIN providers p ON p.id = ue.provider_id
-                   JOIN organizations o ON o.id = ue.organization_id
-                   WHERE p.name='openai' AND o.label = ?
-                     AND ue.occurred_at >= datetime('now', ?)
-                   GROUP BY u.id
-                   ORDER BY messages DESC""",
-                (filters.organization, f"-{filters.period_days} days"),
-            ).fetchall()
-        rows = [dict(r) | {"sessions": None, "lines_added": None, "commits": None,
-                            "tokens_in": int(r["tokens_in"] or 0),
-                            "tokens_out": int(r["tokens_out"] or 0),
-                            "cost": float(r["cost"] or 0),
-                            "messages": int(r["messages"])}
-                for r in org_rows]
-    total_msgs = sum(r["messages"] for r in rows)
-    total_spend = sum(r["cost"] for r in rows)
-    high = [r for r in rows if r["cost"] >= 200]
-    kpi_row([
-        {"label": "Active Users",   "value": str(len(rows)),
-         "help": "Unique users who hit the OpenAI API (ChatGPT / GPT-4 / "
-                 "o-series) at least once this period."},
-        {"label": "Total Messages", "value": _fmt_int(total_msgs),
-         "help": "All messages / API requests sent to OpenAI. Includes "
-                 "every API call type (chat, embeddings, fine-tune, etc.)."},
-        {"label": "Total Spend",    "value": fmt_money(total_spend),
-         "help": "OpenAI API spend this period. May drift slightly from "
-                 "the Platform UI due to batch / cached pricing — usually "
-                 "within 5%."},
-        {"label": "High Spenders",  "value": str(len(high)),
-         "help": "Users with spend ≥ $200 this period. A good trigger to "
-                 "check what they're doing and whether they need a cap."},
-    ])
-
-    if rows:
-        # Top 5 by messages + Spend Metrics — side by side
-        col_top, col_metrics = st.columns(2)
-        with col_top:
-            section("Top Users — by messages")
-            top_by_msgs = sorted(rows, key=lambda r: r["messages"], reverse=True)[:5]
-            _bar_list(top_by_msgs, label_key="user_name", value_key="messages",
-                      css_class="chatgpt", value_formatter=fmt_int)
-        with col_metrics:
-            section("Spend Metrics")
-            avg_per_user = total_spend / max(len(rows), 1) if rows else 0
-            top_single = max((r["cost"] for r in rows), default=0)
-            # Dominant model = OpenAI model with most messages
-            openai_models = get_openai_top_models(period_days=filters.period_days)
-            dom_model = openai_models[0]["model"] if openai_models else "—"
-            dom_share = 0.0
-            if openai_models:
-                tot_reqs = sum(m["requests"] for m in openai_models) or 1
-                dom_share = openai_models[0]["requests"] / tot_reqs * 100
-            metrics_rows = [
-                ("Total spend",     fmt_money(total_spend)),
-                ("Avg per user",    fmt_money(avg_per_user)),
-                ("High spenders (≥ $200)", f"{len(high)} users"),
-                ("Top single spend",fmt_money(top_single)),
-                ("Dominant model",  f"{dom_model} ({dom_share:.0f}%)"),
-            ]
-            st.markdown(
-                "<table class='hmnd-table'><tbody>"
-                + "".join(
-                    f"<tr><td style='color:#475569'>{k}</td>"
-                    f"<td style='text-align:right;font-weight:600'>{v}</td></tr>"
-                    for k, v in metrics_rows
+                st.caption(
+                    "Source: `rollups.modelSpend` (all Claude products combined "
+                    "— per-product per-model split isn't in the JSON dump)."
+                    + _window_note
                 )
-                + "</tbody></table>",
+                df_anm = pd.DataFrame(model_spend)
+                df_anm["spend_str"] = df_anm["spend"].apply(fmt_money)
+                df_anm["share_str"] = df_anm["share"].apply(lambda v: f"{v:.1f}%")
+                view_anm = df_anm[["model", "spend_str", "share_str"]].rename(
+                    columns={
+                        "model": "Model",
+                        "spend_str": "Spend",
+                        "share_str": "Share",
+                    }
+                )
+                st.markdown(
+                    view_anm.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- OpenAI top models — full table ----
+    if _show_openai:
+        with st.expander("OpenAI top models — full table", expanded=False):
+            openai_models_full = get_openai_top_models(period_days=f.period_days)
+            if not openai_models_full:
+                st.caption("No OpenAI events in the window.")
+            else:
+                df_om = pd.DataFrame(openai_models_full)
+                # get_spend_by_model returns {model, spend, requests, users}
+                df_om["spend_str"] = df_om["spend"].apply(
+                    lambda v: fmt_money(v) if v else "—"
+                )
+                df_om["requests"] = df_om["requests"].apply(
+                    lambda v: fmt_int(int(v))
+                )
+                view_om = df_om[["model", "requests", "spend_str", "users"]].rename(
+                    columns={
+                        "model": "Model",
+                        "requests": "Requests",
+                        "spend_str": "Spend",
+                        "users": "Users",
+                    }
+                )
+                st.markdown(
+                    view_om.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- Cursor models ----
+    if _show_cursor:
+        with st.expander("Cursor models", expanded=False):
+            from backend.services.cursor_analytics import model_usage_summary
+            cursor_rows = model_usage_summary()
+            if not cursor_rows:
+                st.caption(
+                    "No Cursor model usage. Drop Analytics_Team_*.csv into "
+                    "sources/ to populate."
+                )
+            else:
+                df_cm = pd.DataFrame(cursor_rows)
+                view_cm = df_cm.rename(columns={
+                    "model": "Model",
+                    "requests": "Requests",
+                    "user_days": "User-days",
+                })
+                st.markdown(
+                    view_cm.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+
+    # ---- Model Landscape (kept at the very bottom by request) ----
+    with st.expander("Model Landscape", expanded=False):
+        from backend.services.models_svc import get_models_breakdown
+        from backend.services.cursor_analytics import model_usage_summary as _mus
+        rows_api = get_models_breakdown(f)
+        if f.provider and f.provider != "all":
+            rows_api = [r for r in rows_api if r["provider"] == f.provider]
+
+        _anth_in_scope = f.provider in ("all", "anthropic")
+        anthropic_rollup = (
+            get_anthropic_model_spend_from_json() if _anth_in_scope else []
+        )
+        if anthropic_rollup:
+            rows_api = [
+                r for r in rows_api
+                if not (r["provider"] == "anthropic"
+                        and r["model"] == "claude-generic")
+            ]
+            anth_total_events = next(
+                (r["spend"] for r in get_spend_by_model(
+                    "anthropic", period_days=f.period_days)
+                 if r["model"] == "claude-generic"),
+                None,
+            )
+            rollup_total = sum(m["spend"] for m in anthropic_rollup) or 1
+            scale = (anth_total_events / rollup_total) if anth_total_events else 1.0
+            for m in anthropic_rollup:
+                rows_api.append({
+                    "provider": "anthropic",
+                    "model": m["model"],
+                    "cost": round(m["spend"] * scale, 2),
+                    "requests": 0,
+                })
+
+        spend_by_provider: dict[str, float] = {}
+        for r in rows_api:
+            p = r["provider"]
+            spend_by_provider[p] = spend_by_provider.get(p, 0) + (r["cost"] or 0)
+
+        _cursor_in_scope = f.provider in ("all", "cursor")
+        cursor_rows_ml = _mus() if _cursor_in_scope else []
+        cursor_total_reqs = sum(m["requests"] for m in cursor_rows_ml)
+
+        st.caption(
+            f"Model landscape — {f.date_range()[0].date()} → "
+            f"{f.date_range()[1].date()}. Statuses: DOMINANT (>= 40% of "
+            "scope), GROWING (20-40%), ACTIVE (else)."
+        )
+
+        items: list[dict[str, Any]] = []
+        for r in rows_api:
+            share = ((r["cost"] or 0) / spend_by_provider[r["provider"]] * 100
+                     if spend_by_provider.get(r["provider"]) else 0)
+            tool_label = {
+                "anthropic": "Chat + CC",
+                "openai":    "ChatGPT",
+                "cursor":    "Cursor",
+                "github":    "GitHub Copilot",
+            }.get(r["provider"], r["provider"].capitalize())
+            color_label = {
+                "anthropic": "claude",
+                "openai":    "chatgpt",
+                "cursor":    "cursor",
+            }.get(r["provider"], "cursor")
+            items.append({
+                "_color": color_label,
+                "model": r["model"],
+                "tool": tool_label,
+                "share": share,
+                "metric": fmt_money(r["cost"] or 0),
+                "metric_note": f"({share:.0f}%)",
+                "raw_value": r["cost"] or 0,
+            })
+        for m in cursor_rows_ml[:10]:
+            share = (m["requests"] / cursor_total_reqs * 100) if cursor_total_reqs else 0
+            is_claude = "claude" in m["model"].lower()
+            items.append({
+                "_color": "claude" if is_claude
+                          else ("chatgpt" if "gpt" in m["model"].lower() else "cursor"),
+                "model": m["model"],
+                "tool": "Cursor",
+                "share": share,
+                "metric": f"{fmt_int(m['requests'])} reqs",
+                "metric_note": f"({share:.0f}%)",
+                "raw_value": m["requests"],
+            })
+
+        def _status(it: dict[str, Any]) -> tuple[str, str]:
+            sh = it["share"]
+            if sh >= 40:
+                return ("DOMINANT", "high")
+            if sh >= 20:
+                return ("GROWING", "review")
+            return ("ACTIVE", "low")
+
+        items.sort(key=lambda x: (-(x["share"] if x["tool"] != "Cursor" else 0),
+                                  -x["raw_value"]))
+
+        if not items:
+            st.caption("No model activity in the scope.")
+        else:
+            html_rows = []
+            for it in items[:20]:
+                status_text, status_kind = _status(it)
+                dot_color = {"claude": "#6366f1", "chatgpt": "#10a37f",
+                             "cursor": "#f59e0b"}.get(it["_color"], "#94a3b8")
+                html_rows.append(
+                    f"<tr>"
+                    f"<td><span style='display:inline-block;width:8px;height:8px;"
+                    f"border-radius:50%;background:{dot_color};margin-right:8px'></span>"
+                    f"<code>{it['model']}</code></td>"
+                    f"<td>{it['tool']}</td>"
+                    f"<td>{badge(status_text, status_kind)}</td>"
+                    f"<td><b>{it['metric']}</b> "
+                    f"<span style='color:#64748b'>{it['metric_note']}</span></td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                f"<table class='hmnd-table'>"
+                f"<thead><tr><th>Model</th><th>Tool</th><th>Status</th>"
+                f"<th>Spend / Volume</th></tr></thead>"
+                f"<tbody>{''.join(html_rows)}</tbody></table>",
                 unsafe_allow_html=True,
             )
 
-        # Top Models Used by message count
-        if openai_models:
-            section("Top Models Used")
-            _bar_list(openai_models[:8], label_key="model", value_key="requests",
-                      css_class="chatgpt", value_formatter=fmt_int)
 
-        section("All ChatGPT Users")
-        df = pd.DataFrame(rows).sort_values("messages", ascending=False)
-        df["spend_str"] = df["cost"].apply(lambda v: fmt_money(v) if v else "—")
-        df["flag_str"] = df["cost"].apply(
-            lambda v: badge(chatgpt_flag(v), {"High": "high", "Medium": "medium", "Watch": "review"}.get(chatgpt_flag(v), "low"))
-            if chatgpt_flag(v) else ""
-        )
-        view = df[["user_name", "messages", "spend_str", "flag_str"]].rename(
-            columns={"user_name": "Name", "messages": "Messages",
-                     "spend_str": "Spend", "flag_str": "Flag"}
-        )
-        st.markdown(
-            view.to_html(escape=False, index=False, classes="hmnd-table"),
-            unsafe_allow_html=True,
-        )
-    else:
-        st.info("No OpenAI activity in the period.")
-
-
-with tab_cursor:
-    if filters.provider not in ("all", "cursor"):
-        st.info(
-            f"Cursor tab shows the Cursor team leaderboard. Source filter "
-            f"'{filters.provider}' has no Cursor data — switch to 'All sources' "
-            f"or 'Cursor'."
-        )
-    from backend.services.cursor_analytics import (
-        load_contribution_daily, load_team_dau, load_user_leaderboard, model_usage_summary,
-    )
-    leaders = load_user_leaderboard()
-    dau = load_team_dau()
-    contrib = load_contribution_daily()
-    models = model_usage_summary()
-
-    if not leaders and not dau:
-        st.markdown(
-            """
-            <div style="
-                border:1px dashed #fcd34d; border-radius:18px; padding:32px; background:#fffdf6;
-                text-align:center; color:#475569;
-            ">
-                <div style="font-size:13px;color:#f59e0b;letter-spacing:.12em;text-transform:uppercase;font-weight:600">
-                    No Cursor exports yet
-                </div>
-                <div style="font-size:22px;color:#06091c;font-weight:300;margin-top:8px">
-                    Drop the CSV exports into the repo
-                </div>
-                <p style="margin-top:8px">
-                    Expected files at repo root (or <code>HMND_CURSOR_EXPORT_DIR</code>):
-                    <code>User_Leaderboard_*.csv</code>,
-                    <code>Team_DAU_Analytics_*.csv</code>,
-                    <code>Contribution_Analytics_*.csv</code>,
-                    <code>Analytics_Team_*.csv</code>.
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        active_devs = len({r["email"] for r in leaders})
-        total_ai_lines = sum(r["ai_lines"] for r in leaders)
-        total_agent = sum(int(r.get("agent_completions") or 0) for r in leaders)
-        total_tab = sum(int(r.get("tab_completions") or 0) for r in leaders)
-        total_completions = total_agent + total_tab
-        prefer_claude = sum(1 for r in leaders if "claude" in r["favorite_model"].lower())
-        prefer_gpt = sum(1 for r in leaders if r["favorite_model"].lower().startswith("gpt"))
-        kpi_row([
-            {"label": "Active developers", "value": str(active_devs),
-             "help": "Devs active in Cursor this period (≥ 1 completion). "
-                     "A solid proxy for 'AI-readiness' across the team."},
-            {"label": "Completions",       "value": fmt_int(total_completions),
-             "help": "Times someone pressed Tab or accepted an Agent "
-                     "completion from Cursor. High = team actually uses AI."},
-            {"label": "AI Lines Written",  "value": fmt_int(total_ai_lines),
-             "help": "Lines of code Cursor wrote on behalf of devs (Tab + "
-                     "Agent). Cursor flags these lines itself."},
-            {"label": "Prefer Claude",     "value": str(prefer_claude),
-             "help": "Devs who picked Claude as their favorite model in "
-                     "Cursor. Compare with Prefer GPT below."},
-        ])
-        # Second row: completion split + GPT-preferring devs
-        kpi_row([
-            {"label": "Prefer GPT",        "value": str(prefer_gpt),
-             "help": "Devs who picked the GPT family as their favorite "
-                     "model in Cursor. Compare with Prefer Claude above."},
-            {"label": "Agent completions", "value": fmt_int(total_agent),
-             "help": "Cursor Agent (Composer / Cmd+I) — 'AI, write whole "
-                     "functions for me'. A high count usually means the "
-                     "most productive devs."},
-            {"label": "Tab completions",   "value": fmt_int(total_tab),
-             "help": "Cursor Tab — inline auto-completion (press Tab to "
-                     "accept). Every time the AI guessed what you were "
-                     "typing = +1 Tab completion."},
-        ])
-
-        c1, c2 = st.columns(2)
-        with c1:
-            section("Top 10 by AI Lines")
-            top10 = leaders[:10]
-            max_lines = max((r["ai_lines"] for r in top10), default=1) or 1
-            def _row_class(r):
-                fm = r["favorite_model"].lower()
-                if "claude" in fm:
-                    return "claude"
-                if fm.startswith("gpt"):
-                    return "chatgpt"
-                return "cursor"
-            _bar_list(
-                top10, label_key="name", value_key="ai_lines",
-                css_class=_row_class, max_value=max_lines,
-                value_formatter=fmt_int,
-            )
-        with c2:
-            section("Top 10 by Completions")
-            by_completions = sorted(
-                leaders,
-                key=lambda r: (int(r.get("agent_completions") or 0)
-                               + int(r.get("tab_completions") or 0)),
-                reverse=True,
-            )[:10]
-            # Synthesize a 'completions' field for the bar
-            for r in by_completions:
-                r["_completions"] = (int(r.get("agent_completions") or 0)
-                                      + int(r.get("tab_completions") or 0))
-            _bar_list(
-                by_completions, label_key="name", value_key="_completions",
-                css_class=_row_class, value_formatter=fmt_int,
-            )
-
-        if dau:
-            section("Daily Active Users")
-            with st.container():
-                df_dau = pd.DataFrame(dau)
-                df_dau["date"] = pd.to_datetime(df_dau["date"])
-                fig = __import__("plotly.express", fromlist=[""]).bar(
-                    df_dau, x="date", y="dau",
-                    color_discrete_sequence=["#f59e0b"],
-                )
-                fig.update_layout(plot_bgcolor="white", paper_bgcolor="white",
-                                  margin=dict(l=10, r=10, t=10, b=10),
-                                  font=dict(family="Inter", color=NAVY),
-                                  xaxis=dict(showgrid=False),
-                                  yaxis=dict(gridcolor="#e8edf3"))
-                st.plotly_chart(fig, use_container_width=True)
-
-        if models:
-            section("Models used by the team")
-            df_models = pd.DataFrame(models[:15])
-            view = df_models.rename(columns={
-                "model": "Model", "requests": "Requests", "user_days": "User-days",
-            })
-            st.markdown(view.to_html(escape=False, index=False, classes="hmnd-table"),
-                        unsafe_allow_html=True)
-
-        if contrib:
-            section("Daily contribution (composer + tabs)")
-            df_c = pd.DataFrame(contrib)
-            df_c["date"] = pd.to_datetime(df_c["date"])
-            df_long = df_c.melt(
-                id_vars=["date"],
-                value_vars=["composer_lines_accepted", "tabs_lines_accepted"],
-                var_name="kind", value_name="lines",
-            )
-            df_long["kind"] = df_long["kind"].map({
-                "composer_lines_accepted": "Composer accepted",
-                "tabs_lines_accepted": "Tabs accepted",
-            })
-            fig = __import__("plotly.express", fromlist=[""]).bar(
-                df_long, x="date", y="lines", color="kind", barmode="stack",
-                color_discrete_map={"Composer accepted": "#6366f1", "Tabs accepted": "#f59e0b"},
-            )
-            fig.update_layout(plot_bgcolor="white", paper_bgcolor="white",
-                              margin=dict(l=10, r=10, t=10, b=10),
-                              font=dict(family="Inter", color=NAVY),
-                              xaxis=dict(showgrid=False),
-                              yaxis=dict(gridcolor="#e8edf3"))
-            st.plotly_chart(fig, use_container_width=True)
-
-
-with tab_models:
-    # Combined model landscape: OpenAI events + Anthropic (cursor-derived)
-    # + Cursor leaderboard model usage. Status badge auto-derived from
-    # share within tool.
-    from backend.services.models_svc import get_models_breakdown
-    from backend.services.cursor_analytics import model_usage_summary
-    f = filters
-    rows_api = get_models_breakdown(f)  # usage_events grouped by model
-
-    # Respect the Source filter — picking a specific provider should narrow
-    # the landscape to that provider's models. Without this, picking
-    # 'Anthropic' still showed gpt-* rows which looked like a bug.
-    if filters.provider and filters.provider != "all":
-        rows_api = [r for r in rows_api if r["provider"] == filters.provider]
-
-    # Replace Anthropic's 'claude-generic' placeholder with real per-model
-    # spend from the JSON rollup. Total Anthropic spend stays the same; we
-    # just attribute it to actual model names so the landscape doesn't
-    # collapse to one row.
-    # Skip the Anthropic-rollup substitution when Source filter is narrowed
-    # to a non-anthropic provider (otherwise picking 'OpenAI · Artem' would
-    # still inject Claude rows from rollup into the landscape).
-    _anth_in_scope = filters.provider in ("all", "anthropic")
-    anthropic_rollup = get_anthropic_model_spend_from_json() if _anth_in_scope else []
-    if anthropic_rollup:
-        rows_api = [r for r in rows_api if not (
-            r["provider"] == "anthropic" and r["model"] == "claude-generic"
-        )]
-        # rescale rollup to the events-window total so percentages match
-        # what the rest of the dashboard shows.
-        # NOTE: get_spend_by_model() returns 'spend' (not 'cost') as the
-        # money column — different name than get_models_breakdown().
-        anth_total_events = next(
-            (r["spend"] for r in get_spend_by_model("anthropic", period_days=f.period_days)
-             if r["model"] == "claude-generic"),
-            None,
-        )
-        rollup_total = sum(m["spend"] for m in anthropic_rollup) or 1
-        scale = (anth_total_events / rollup_total) if anth_total_events else 1.0
-        for m in anthropic_rollup:
-            rows_api.append({
-                "provider": "anthropic",
-                "model": m["model"],
-                "cost": round(m["spend"] * scale, 2),
-                "requests": 0,
-            })
-
-    # Per-provider total spend → share computation
-    spend_by_provider: dict[str, float] = {}
-    for r in rows_api:
-        p = r["provider"]
-        spend_by_provider[p] = spend_by_provider.get(p, 0) + (r["cost"] or 0)
-
-    # Hide Cursor models from the landscape when Source filter is narrowed
-    # to a non-cursor provider (otherwise picking 'OpenAI · Artem' still
-    # listed claude-* and gpt-* Cursor models).
-    _cursor_in_scope = filters.provider in ("all", "cursor")
-    cursor_rows = model_usage_summary() if _cursor_in_scope else []
-    cursor_total_reqs = sum(m["requests"] for m in cursor_rows)
-
-    section(
-        f"Model landscape — {f.date_range()[0].date()} → {f.date_range()[1].date()}",
-        help="Every model the team actually uses, with its share of spend / "
-             "requests. Statuses: DOMINANT (≥ 40% of scope) — the workhorse; "
-             "GROWING (20-40%) — a real alternative; ACTIVE — everything "
-             "else. Surfaces cases where we pay for 8 models but 2 of them "
-             "cover 80% of real work.",
-    )
-
-    items: list[dict[str, Any]] = []
-    # API-side models
-    for r in rows_api:
-        share = ((r["cost"] or 0) / spend_by_provider[r["provider"]] * 100
-                 if spend_by_provider.get(r["provider"]) else 0)
-        # Correct tool attribution from the event's actual provider.
-        tool_label = {
-            "anthropic": "Chat + CC",
-            "openai":    "ChatGPT",
-            "cursor":    "Cursor",
-            "github":    "GitHub Copilot",
-        }.get(r["provider"], r["provider"].capitalize())
-        color_label = {
-            "anthropic": "claude",
-            "openai":    "chatgpt",
-            "cursor":    "cursor",
-        }.get(r["provider"], "cursor")
-        items.append({
-            "_color": color_label,
-            "model": r["model"],
-            "tool": tool_label,
-            "share": share,
-            "metric": fmt_money(r["cost"] or 0),
-            "metric_note": f"({share:.0f}%)",
-            "raw_value": r["cost"] or 0,
-        })
-    # Cursor-side models (requests, not $)
-    for m in cursor_rows[:10]:
-        share = (m["requests"] / cursor_total_reqs * 100) if cursor_total_reqs else 0
-        is_claude = "claude" in m["model"].lower()
-        items.append({
-            "_color": "claude" if is_claude else ("chatgpt" if "gpt" in m["model"].lower() else "cursor"),
-            "model": m["model"],
-            "tool": "Cursor",
-            "share": share,
-            "metric": f"{fmt_int(m['requests'])} reqs",
-            "metric_note": f"({share:.0f}%)",
-            "raw_value": m["requests"],
-        })
-
-    def _status(it: dict[str, Any]) -> tuple[str, str]:
-        s = it["share"]
-        if s >= 40:
-            return ("DOMINANT", "high")
-        if s >= 20:
-            return ("GROWING", "review")
-        if s >= 10:
-            return ("ACTIVE", "low")
-        return ("ACTIVE", "low")
-
-    # Sort: API by $ desc, then Cursor by requests desc
-    items.sort(key=lambda x: (-(x["share"] if x["tool"] != "Cursor" else 0),
-                              -x["raw_value"]))
-
-    html_rows = []
-    for it in items[:20]:
-        status_text, status_kind = _status(it)
-        dot_color = {"claude": "#6366f1", "chatgpt": "#10a37f",
-                     "cursor": "#f59e0b"}.get(it["_color"], "#94a3b8")
-        html_rows.append(
-            f"<tr>"
-            f"<td><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:{dot_color};margin-right:8px'></span>"
-            f"<code>{it['model']}</code></td>"
-            f"<td>{it['tool']}</td>"
-            f"<td>{badge(status_text, status_kind)}</td>"
-            f"<td><b>{it['metric']}</b> <span style='color:#64748b'>{it['metric_note']}</span></td>"
-            f"</tr>"
-        )
-    st.markdown(
-        f"<table class='hmnd-table'>"
-        f"<thead><tr><th>Model</th><th>Tool</th><th>Status</th><th>Spend / Volume</th></tr></thead>"
-        f"<tbody>{''.join(html_rows)}</tbody></table>",
-        unsafe_allow_html=True,
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        section("Claude spend by model")
-        claude_models = [r for r in rows_api if r["provider"] == "anthropic"]
-        if claude_models:
-            _bar_list(claude_models[:10], label_key="model", value_key="cost",
-                      css_class="claude", value_formatter=fmt_money)
-    with c2:
-        section("Cursor top models")
-        if cursor_rows:
-            def _row_class(r):
-                m = r["model"].lower()
-                if "claude" in m: return "claude"
-                if "gpt" in m: return "chatgpt"
-                return "cursor"
-            _bar_list(cursor_rows[:10], label_key="model", value_key="requests",
-                      css_class=_row_class, value_formatter=fmt_int)
-
-
-def _hs_note(s: dict[str, Any]) -> str:
-    """Heuristic one-liner describing the spend pattern."""
-    spend = s["spend"] or 0
-    msgs = s["messages"] or 0
-    dpm = (spend / msgs) if msgs > 0 else None
-    if dpm is not None and dpm >= 100:
-        return f"anomalous: ~${dpm:,.0f} per message — possible API/automation"
-    if dpm is not None and dpm >= 20:
-        return f"high cost/message (${dpm:,.1f}/msg) — likely reasoning model"
-    if msgs >= 1000:
-        return "high volume, proportionate spend"
-    return f"avg ${dpm:,.2f}/msg" if dpm is not None else "non-message billing"
-
-
-def _hs_findings(high: list[dict[str, Any]]) -> list[str]:
-    """Generate up to 4 narrative bullets for the analysis card."""
-    bullets: list[str] = []
-    if not high:
-        return bullets
-    top = high[0]
-    bullets.append(
-        f"<b>{top['user_name']}</b> — {fmt_money(top['spend'])} on "
-        f"{top['messages']:,} messages, top single spender."
-    )
-    # anomalous $/msg
-    anomalies = [s for s in high
-                 if s["messages"] and (s["spend"] / s["messages"]) >= 100]
-    if anomalies:
-        a = anomalies[0]
-        dpm = a["spend"] / a["messages"]
-        bullets.append(
-            f"<b>{a['user_name']}</b> — {fmt_money(a['spend'])} on {a['messages']} messages "
-            f"(~${dpm:,.0f}/msg). Likely API/automation, not chat usage."
-        )
-    # high msg volume
-    volume = sorted(high, key=lambda r: r["messages"] or 0, reverse=True)
-    if volume and volume[0]["messages"] >= 1000 and volume[0] != top:
-        v = volume[0]
-        bullets.append(
-            f"<b>{v['user_name']}</b> — {v['messages']:,} messages at "
-            f"{fmt_money(v['spend'])}. High volume, normal $/msg."
-        )
-    # concentration
-    if len(high) >= 3:
-        top3 = sum(s["spend"] for s in high[:3])
-        total = sum(s["spend"] for s in high)
-        share = (top3 / total * 100) if total else 0
-        bullets.append(f"Top 3 high-spenders = <b>{share:.0f}%</b> of all high spend.")
-    return bullets[:4]
-
-
-with tab_devs:
-    # Cross-source view (git × ai). Ignores Source filter by design — the
-    # whole point of this tab is to join all sources per person.
+# =============================================================================
+# ENGINEERING TAB (= old tab_devs; tables wrapped in collapsed expanders)
+# =============================================================================
+with tab_engineering:
     st.caption(
-        "ℹ️ Cross-source view — joins each person's git activity with their AI "
+        "Cross-source view — joins each person's git activity with their AI "
         "spend / lines / completions. Source filter is ignored by design."
     )
 
-    # Period picker honored — re-uses top filter.
-    # Plus a repo multi-select if the user dropped the granular per-commit
-    # CSV (`git_commit_file_stats.csv`) and we built per-repo rollups.
     from backend.services.git_correlation import (
-        get_git_ai_correlation, get_segment_counts,
+        get_git_ai_correlation, get_team_ai_share,
     )
     from backend.services.git_quality import (
         get_ai_spend_per_fix, get_high_churn_files, get_quality_per_author,
         get_team_quality,
     )
     from data.sources.git_csv import list_known_repos
+
     _known_repos = list_known_repos()
     selected_repos: list[str] = []
     if _known_repos:
@@ -1122,10 +1002,32 @@ with tab_devs:
             help="Narrow git-side stats to specific repos. "
                  "Clear all to see only AI activity.",
         )
+
+    # Bots-from-Engineering side-panel: surface who the bots are in this
+    # view so it's obvious which segments come from automation.
     devs = get_git_ai_correlation(
         period_days=filters.period_days,
         repos=selected_repos if (selected_repos and _known_repos) else None,
     )
+    if devs:
+        bots = [r for r in devs if r.get("is_bot")]
+        if bots:
+            bot_lines = sum(
+                int(r.get("git_additions") or 0) for r in bots
+            )
+            st.markdown(
+                f'<div style="border:1px solid #ede9fe;background:#faf5ff;'
+                f'border-radius:14px;padding:10px 16px;margin-bottom:10px;'
+                f'color:#581c87;font-size:13px;">'
+                f'<b>{len(bots)} bot(s) / agents</b> in scope — '
+                f'{fmt_int(bot_lines)} lines (100% AI). '
+                f'<span style="color:#a78bfa;">'
+                f'{", ".join(b["canonical_name"] for b in bots[:6])}'
+                f'{"…" if len(bots) > 6 else ""}'
+                f'</span></div>',
+                unsafe_allow_html=True,
+            )
+
     if not devs:
         st.info(
             "No git authors loaded yet. Drop a `git_authors_YYYYMMDD.csv` into "
@@ -1134,8 +1036,7 @@ with tab_devs:
             "or run the extraction script described in docs/."
         )
     else:
-        # Top-level KPIs: counts + team-wide AI share (now including bots).
-        from backend.services.git_correlation import get_team_ai_share
+        # Top-level KPIs.
         share = get_team_ai_share(
             period_days=filters.period_days,
             repos=selected_repos if (selected_repos and _known_repos) else None,
@@ -1145,63 +1046,52 @@ with tab_devs:
             counts[r["segment"]] = counts.get(r["segment"], 0) + 1
         n_humans = sum(1 for r in devs if not r.get("is_bot"))
         n_bots = sum(1 for r in devs if r.get("is_bot"))
+
         kpi_row([
             {"label": "Tracked devs",   "value": f"{n_humans} +{n_bots} bots",
              "help": "Unique commit authors found in git this period "
-                     "(humans + bots / CI-agents counted separately). Bots = "
-                     "github-actions, Cursor Agent, Dependabot, etc."},
+                     "(humans + bots / CI-agents counted separately)."},
             {"label": "Team AI share",  "value": f"{share['ai_share_pct']}%",
              "help": "Share of all new code lines generated by AI. Counts "
                      "every bot commit as 100% AI plus ai_lines from humans "
-                     "via Cursor. Healthy AI-first team: 30-60%. "
-                     "CAVEAT: human ai_lines come from Cursor's leaderboard "
-                     "CSV which is a LIFETIME total per user — period "
-                     "filter does not reduce this number, only Total "
-                     "additions on the right does."},
+                     "via Cursor. Healthy AI-first team: 30-60%."},
             {"label": "Bot share",      "value": f"{share['bot_share_pct']}%",
-             "help": "Share of total git output written by bots / agents — "
-                     "github-actions, Renovate, Cursor Agent etc. High % = "
-                     "lots of automation."},
+             "help": "Share of total git output written by bots / agents."},
             {"label": "Human AI share", "value": f"{share['human_ai_share_pct']}%",
              "help": "Among HUMAN-only commits, what share of lines came "
-                     "via Cursor AI completions. The cleanest 'how much do "
-                     "humans actually use AI' signal."},
+                     "via Cursor AI completions."},
         ])
         st.markdown(
             f'<div style="margin:14px 0 4px 0;color:#475569;font-size:13px;">'
-            f"📊 AI-generated lines: <b>{fmt_int(share['ai_lines_total'])}</b> of "
+            f"AI-generated lines: <b>{fmt_int(share['ai_lines_total'])}</b> of "
             f"<b>{fmt_int(share['total_additions'])}</b> total git additions. "
             f"Bots ({fmt_int(share['bot_additions'])} lines, 100% AI) + Cursor-reported "
             f"AI lines by humans ({fmt_int(min(share['human_ai_lines'], share['human_additions']))} lines). "
             f'<span style="color:#94a3b8;font-style:italic">'
             f"Caveat: human ai_lines is a lifetime total from Cursor "
             f"(not period-filtered); git additions ARE period-filtered."
-            f"</span>"
-            f"</div>",
+            f"</span></div>",
             unsafe_allow_html=True,
         )
 
-        # Segment colours + human-readable labels (ordered by "interestingness"
-        # so the bar reads left→right from most-positive to most-passive).
+        # Segment colours + human-readable labels.
         SEGMENT_META = [
-            ("HIGH_AI_SPEND_HIGH_GIT_OUTPUT", "High AI · High Output",   "#10b981"),  # green
-            ("LOW_AI_SPEND_HIGH_GIT_OUTPUT",  "Low AI · High Output",    "#3b82f6"),  # blue
-            ("HIGH_AI_LINES_LOW_COMMITS",     "Lots of AI lines, few commits", "#f59e0b"),  # amber
-            ("HIGH_AI_SPEND_LOW_GIT_OUTPUT",  "High AI · Low Output",    "#ef4444"),  # red
-            ("BOT_AUTOMATION",                "Bots / Agents",           "#a855f7"),  # purple
-            ("AI_ACTIVE_BUT_NO_GIT",          "AI active, no git",       "#94a3b8"),  # gray
-            ("GIT_ACTIVE_BUT_NO_AI",          "Git active, no AI",       "#cbd5e1"),  # light gray
-            ("NORMAL",                        "Normal",                  "#e2e8f0"),  # near white
+            ("HIGH_AI_SPEND_HIGH_GIT_OUTPUT", "High AI · High Output",   "#10b981"),
+            ("LOW_AI_SPEND_HIGH_GIT_OUTPUT",  "Low AI · High Output",    "#3b82f6"),
+            ("HIGH_AI_LINES_LOW_COMMITS",     "Lots of AI lines, few commits", "#f59e0b"),
+            ("HIGH_AI_SPEND_LOW_GIT_OUTPUT",  "High AI · Low Output",    "#ef4444"),
+            ("BOT_AUTOMATION",                "Bots / Agents",           "#a855f7"),
+            ("AI_ACTIVE_BUT_NO_GIT",          "AI active, no git",       "#94a3b8"),
+            ("GIT_ACTIVE_BUT_NO_AI",          "Git active, no AI",       "#cbd5e1"),
+            ("NORMAL",                        "Normal",                  "#e2e8f0"),
         ]
 
-        # 1. Stacked-bar segment distribution (mirrors Spend Breakdown style)
+        # 1. Stacked-bar segment distribution (chart on top).
         section(
             "Segment distribution",
             help="The team split into 8 buckets by AI spend × git output. "
                  "Ideal: most people in green (High AI · High Output) or "
-                 "blue (Low AI · High Output). Red (High AI · Low Output) "
-                 "= we pay a lot for AI but few commits ship — worth a "
-                 "1-on-1 conversation.",
+                 "blue (Low AI · High Output).",
         )
         total_devs = len(devs)
         present = [(s, lbl, c) for s, lbl, c in SEGMENT_META if counts.get(s, 0) > 0]
@@ -1210,8 +1100,6 @@ with tab_devs:
         for seg_id, label, color in present:
             n = counts[seg_id]
             pct = n / total_devs * 100 if total_devs else 0
-            # Show the percentage inside the bar only when there's room for it
-            # (very thin segments would just clip the text).
             inside = f'{pct:.0f}%' if pct >= 5 else ''
             bar_segments_html.append(
                 f'<div title="{label}: {n} ({pct:.1f}%)" '
@@ -1227,8 +1115,7 @@ with tab_devs:
                 f'background:{color};"></span>'
                 f'<span style="color:#06091c;">{label}</span> '
                 f'<b style="color:#06091c;">{n}</b> '
-                f'<span style="color:#94a3b8;">({pct:.1f}%)</span>'
-                f'</span>'
+                f'<span style="color:#94a3b8;">({pct:.1f}%)</span></span>'
             )
         st.markdown(
             f'<div style="border:1px solid #e8edf3;border-radius:18px;'
@@ -1248,25 +1135,13 @@ with tab_devs:
         )
 
         # ---------------- Code Quality (Git × AI) ----------------
-        # Subject-regex classification: bug-fix / revert / feature / refactor.
-        # Honest scope: directional signal — won't catch sneaky bug fixes that
-        # don't say so, no severity. Useful for AI-vs-human comparison and
-        # high-churn problem-area surfacing. Placed BEFORE the segment
-        # drill-down tables because team-level quality summary is more
-        # valuable than per-person details.
         repo_arg = selected_repos if (selected_repos and _known_repos) else None
         tq = get_team_quality(period_days=filters.period_days, repos=repo_arg)
-        # Always render the section header. When the scope returns 0 commits,
-        # explain WHY instead of silently hiding (the segment-distribution
-        # bar above shows lifetime commits via git_author_repo_stats, which
-        # creates a confusing 'where did Code Quality go?' moment).
         section(
             "Code Quality (Git × AI)",
-            help="Code health through an AI lens: what % of commits "
-                 "are bug-fixes, the gap between human and bot bug-"
-                 "rate, and how many AI dollars we spend per bug-fix. "
-                 "Method: regex over commit subjects — a directional "
-                 "signal, not ground truth.",
+            help="Code health through an AI lens: % of commits that are "
+                 "bug-fixes, the gap between human and bot bug-rate, and "
+                 "$ per bug-fix.",
         )
         if tq["commits"] == 0:
             scope_msg = (
@@ -1277,11 +1152,7 @@ with tab_devs:
                 f"No commits in **{scope_msg}** within the last "
                 f"**{filters.period_days} days**. "
                 f"Either widen the period (try 90 or 365 days) or pick "
-                f"different repos.\n\n"
-                f"Note: the per-author segment tables above show *lifetime* "
-                f"commit counts from `git_author_repo_stats` (a snapshot "
-                f"table without dates). Code Quality, by contrast, is "
-                f"strictly period-filtered against `git_commits.author_date`."
+                f"different repos."
             )
         if tq["commits"] > 0:
             st.caption(
@@ -1291,27 +1162,18 @@ with tab_devs:
             )
             kpi_row([
                 {"label": "Commits", "value": fmt_int(tq["commits"]),
-                 "help": "Total commits across selected repos this period "
-                         "(deduped by repo + sha)."},
+                 "help": "Total commits across selected repos this period."},
                 {"label": "Bug-fix rate",
                  "value": f"{tq['bug_rate_pct']:.1f}%" if tq["bug_rate_pct"] is not None else "—",
-                 "help": "Share of commits that are bug-fixes (subject "
-                         "matches fix:, bug, hotfix, patch). Healthy range: "
-                         "15-25%. > 35% = instability, < 10% = either few "
-                         "bugs or sloppy commit messages."},
+                 "help": "Share of commits that are bug-fixes. Healthy: 15-25%."},
                 {"label": "Human bug rate",
                  "value": f"{tq['human_bug_rate_pct']:.1f}%"
                           if tq["human_bug_rate_pct"] is not None else "—",
-                 "help": "Bug-fix rate among human-authored commits "
-                         "(excluding bots). Compare with Bot bug rate — "
-                         "a big gap hints at where bugs originate."},
+                 "help": "Bug-fix rate among human-authored commits."},
                 {"label": "Bot bug rate",
                  "value": f"{tq['bot_bug_rate_pct']:.1f}%"
                           if tq["bot_bug_rate_pct"] is not None else "—",
-                 "help": "Bug-fix rate among bot / CI-agent commits. If "
-                         "this is much HIGHER than the human rate, AI "
-                         "agents are shipping code that later needs "
-                         "fixing."},
+                 "help": "Bug-fix rate among bot / CI-agent commits."},
             ])
 
             # Composition strip: features vs fixes vs refactors vs tests vs docs.
@@ -1347,8 +1209,7 @@ with tab_devs:
                         f'background:{color};"></span>'
                         f'<span style="color:#06091c;">{label}</span> '
                         f'<b style="color:#06091c;">{fmt_int(n)}</b> '
-                        f'<span style="color:#94a3b8;">({pct:.1f}%)</span>'
-                        f'</span>'
+                        f'<span style="color:#94a3b8;">({pct:.1f}%)</span></span>'
                     )
                 st.markdown(
                     f'<div style="border:1px solid #e8edf3;border-radius:18px;'
@@ -1374,17 +1235,9 @@ with tab_devs:
                 section(
                     "AI spend per bug-fix",
                     help="$ of AI rent per bug-fix commit (team-wide AI "
-                         "spend ÷ team-wide bug-fix commit count, both "
-                         "in the same time window). IGNORES the repo "
-                         "filter on purpose — AI usage events have no "
-                         "repo dimension, so a single-repo view would "
-                         "inflate the ratio. Green < $100, orange "
-                         "$100-500, red ≥ $500.",
+                         "spend / team-wide bug-fix commit count). "
+                         "Green < $100, orange $100-500, red >= $500.",
                 )
-                # $/fix is intentionally TEAM-WIDE (ignores repo filter):
-                # usage_events has no repo column, so we can't narrow the
-                # numerator. Mixing team-wide spend with a single-repo
-                # bug-fix count would inflate the figure misleadingly.
                 spf = get_ai_spend_per_fix(
                     period_days=min(filters.period_days, 90),
                 )
@@ -1409,23 +1262,20 @@ with tab_devs:
                     f'{fmt_int(spf["fixes"])} bug-fix commits'
                     f'</div>'
                     f'<div style="color:#94a3b8;font-size:12px;margin-top:6px;'
-                    f'font-style:italic;">High $/fix ⇒ team debugs heavily '
-                    f'with AI <i>or</i> AI-generated code needs many fixes.</div>'
+                    f'font-style:italic;">High $/fix => team debugs heavily '
+                    f'with AI or AI-generated code needs many fixes.</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             with col_breakdown:
                 section(
                     "AI vs human bug rate",
-                    help="Side-by-side bug-rate for bots/agents vs humans. "
-                         "If the Bots bar is clearly longer, AI agents on "
-                         "the team are shipping messy code they later fix "
-                         "themselves. If Humans is longer, people just "
-                         "commit fixes with clearer wording.",
+                    help="Side-by-side bug-rate for bots/agents vs humans.",
                 )
                 hrate = tq["human_bug_rate_pct"]
                 brate = tq["bot_bug_rate_pct"]
                 hmax = max(hrate or 0, brate or 0, 1)
+
                 def _qbar(label: str, val: float | None, color: str, count: int) -> str:
                     if val is None:
                         return (
@@ -1452,6 +1302,7 @@ with tab_devs:
                         f'<div style="color:#94a3b8;font-size:12px;margin-top:2px;">'
                         f'{fmt_int(count)} commits in scope</div></div>'
                     )
+
                 st.markdown(
                     f'<div style="border:1px solid #e8edf3;border-radius:18px;'
                     f'padding:22px;background:#fff;">'
@@ -1461,81 +1312,68 @@ with tab_devs:
                     unsafe_allow_html=True,
                 )
 
-            # Per-author bug-fix breakdown
-            section(
-                "Per-author bug-fix breakdown",
-                help="Top 50 authors by commit count, broken out by "
-                     "commit type and bug rate. Anyone with bug rate "
-                     "> 40% deserves a review / testing conversation. "
-                     "Multiple git aliases for the same person are "
-                     "collapsed into one row.",
-            )
-            quality_rows = get_quality_per_author(
-                period_days=filters.period_days, repos=repo_arg, limit=50,
-            )
-            if quality_rows:
-                qdf = pd.DataFrame(quality_rows)
-                def _qpct(v):
-                    if v is None or (isinstance(v, float) and v != v):
-                        return "—"
-                    return f"{v:.1f}%"
-                view_q = pd.DataFrame({
-                    "Name":         qdf["canonical_name"],
-                    "Kind":         qdf["is_bot"].map(lambda b: "🤖 bot" if b else "👤 human"),
-                    "Commits":      qdf["commits"].map(lambda v: fmt_int(int(v))),
-                    "Bug-fixes":    qdf["fixes"].map(lambda v: fmt_int(int(v))),
-                    "Reverts":      qdf["reverts"].map(lambda v: fmt_int(int(v))),
-                    "Features":     qdf["features"].map(lambda v: fmt_int(int(v))),
-                    "Refactors":    qdf["refactors"].map(lambda v: fmt_int(int(v))),
-                    "Tests":        qdf["tests"].map(lambda v: fmt_int(int(v))),
-                    "Bug rate":     qdf["bug_rate_pct"].map(_qpct),
-                    "Revert rate":  qdf["revert_rate_pct"].map(_qpct),
-                })
-                st.markdown(
-                    view_q.to_html(escape=False, index=False, classes="hmnd-table"),
-                    unsafe_allow_html=True,
+            # Per-author bug-fix breakdown (table → expander)
+            with st.expander("Per-author bug-fix breakdown", expanded=False):
+                quality_rows = get_quality_per_author(
+                    period_days=filters.period_days, repos=repo_arg, limit=50,
                 )
-            else:
-                st.caption("No commits in the selected window / repos.")
+                if not quality_rows:
+                    st.caption("No commits in the selected window / repos.")
+                else:
+                    qdf = pd.DataFrame(quality_rows)
 
-            # High-churn files: built at runtime from the granular CSV
-            # (git_commits collapses per-commit, so file-level rollup lives
-            # outside the DB).
+                    def _qpct(v):
+                        if v is None or (isinstance(v, float) and v != v):
+                            return "—"
+                        return f"{v:.1f}%"
+
+                    view_q = pd.DataFrame({
+                        "Name":         qdf["canonical_name"],
+                        "Kind":         qdf["is_bot"].map(
+                            lambda b: "bot" if b else "human"
+                        ),
+                        "Commits":      qdf["commits"].map(lambda v: fmt_int(int(v))),
+                        "Bug-fixes":    qdf["fixes"].map(lambda v: fmt_int(int(v))),
+                        "Reverts":      qdf["reverts"].map(lambda v: fmt_int(int(v))),
+                        "Features":     qdf["features"].map(lambda v: fmt_int(int(v))),
+                        "Refactors":    qdf["refactors"].map(lambda v: fmt_int(int(v))),
+                        "Tests":        qdf["tests"].map(lambda v: fmt_int(int(v))),
+                        "Bug rate":     qdf["bug_rate_pct"].map(_qpct),
+                        "Revert rate":  qdf["revert_rate_pct"].map(_qpct),
+                    })
+                    st.markdown(
+                        view_q.to_html(escape=False, index=False, classes="hmnd-table"),
+                        unsafe_allow_html=True,
+                    )
+
+            # High-churn files (table → expander)
             churn = get_high_churn_files(
                 period_days=filters.period_days, repos=repo_arg, limit=15,
             )
             if churn:
-                section(
-                    "High-churn files (problem areas)",
-                    help="Files that get touched the most this period. "
-                         "Hot spots — candidates for refactoring, review "
-                         "lockdown, or simply badly-designed files where "
-                         "too many features land in the same place.",
-                )
-                st.caption(
-                    "Files most often touched in the window — proxy for hot "
-                    "spots worth refactor attention or extra review."
-                )
-                cdf = pd.DataFrame(churn)
-                view_c = pd.DataFrame({
-                    "File":      cdf["file"],
-                    "Commits":   cdf["commits"].map(lambda v: fmt_int(int(v))),
-                    "+lines":    cdf["additions"].map(lambda v: fmt_int(int(v))),
-                    "-lines":    cdf["deletions"].map(lambda v: fmt_int(int(v))),
-                    "Repos":     cdf["repos"],
-                })
-                st.markdown(
-                    view_c.to_html(escape=False, index=False, classes="hmnd-table"),
-                    unsafe_allow_html=True,
-                )
+                with st.expander("High-churn files (problem areas)", expanded=False):
+                    st.caption(
+                        "Files most often touched in the window — proxy for "
+                        "hot spots worth refactor attention or extra review."
+                    )
+                    cdf = pd.DataFrame(churn)
+                    view_c = pd.DataFrame({
+                        "File":      cdf["file"],
+                        "Commits":   cdf["commits"].map(lambda v: fmt_int(int(v))),
+                        "+lines":    cdf["additions"].map(lambda v: fmt_int(int(v))),
+                        "-lines":    cdf["deletions"].map(lambda v: fmt_int(int(v))),
+                        "Repos":     cdf["repos"],
+                    })
+                    st.markdown(
+                        view_c.to_html(escape=False, index=False, classes="hmnd-table"),
+                        unsafe_allow_html=True,
+                    )
 
-        # 2. Multi-select: which segment(s) to show as tables below
+        # ------------- Drill into segments -------------
         section(
             "Drill into segments",
-            help="Per-segment detail. Each dev gets a bucket by these "
-                 "rules: high AI spend = ≥ $200, high git output = ≥ team "
-                 "median additions. Pick below which segments to render "
-                 "as tables.",
+            help="Per-segment detail. Pick segments to render below as "
+                 "individual expandable tables.",
         )
         seg_options = [s for s, _, _ in SEGMENT_META if counts.get(s, 0) > 0]
         seg_labels_map = {s: lbl for s, lbl, _ in SEGMENT_META}
@@ -1550,19 +1388,21 @@ with tab_devs:
                  "individual tables.",
         )
 
-        # 3. Format helpers + per-segment tables
         def _money(v):
-            if v is None or (isinstance(v, float) and v != v):  # NaN-safe
+            if v is None or (isinstance(v, float) and v != v):
                 return "—"
             return fmt_money(v) if v > 0 else "—"
+
         def _num(v):
             if v is None or (isinstance(v, float) and v != v):
                 return "0"
             return fmt_int(int(v)) if v else "0"
+
         def _pct(v):
             if v is None or (isinstance(v, float) and v != v):
                 return "—"
             return f"{v:.0f}%"
+
         def _ratio(v):
             if v is None or (isinstance(v, float) and v != v):
                 return "—"
@@ -1578,172 +1418,327 @@ with tab_devs:
                     continue
                 color = seg_colors_map[seg_id]
                 label = seg_labels_map[seg_id]
-                # Colored header
-                st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:10px;'
-                    f'margin:20px 0 8px 0;border-left:4px solid {color};'
-                    f'padding:6px 12px;background:{color}1a;border-radius:0 8px 8px 0;">'
-                    f'<span style="font-weight:600;color:#06091c;font-size:15px;">'
-                    f'{label}</span>'
-                    f'<span style="color:#64748b;font-size:13px;">'
-                    f'{len(seg_devs)} devs · '
-                    f'{len(seg_devs)/total_devs*100:.1f}% of team</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
+                with st.expander(
+                    f"{label} — {len(seg_devs)} devs "
+                    f"({len(seg_devs)/total_devs*100:.1f}% of team)",
+                    expanded=False,
+                ):
+                    # Colored header for context inside the expander.
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:10px;'
+                        f'margin:0 0 8px 0;border-left:4px solid {color};'
+                        f'padding:6px 12px;background:{color}1a;border-radius:0 8px 8px 0;">'
+                        f'<span style="font-weight:600;color:#06091c;font-size:15px;">'
+                        f'{label}</span></div>',
+                        unsafe_allow_html=True,
+                    )
+                    seg_df = pd.DataFrame(seg_devs)
+                    view = pd.DataFrame({
+                        "Name":           seg_df["canonical_name"],
+                        "AI cost":        seg_df["ai_cost_usd"].map(_money),
+                        "AI lines":       seg_df["ai_lines"].map(_num),
+                        "Commits":        seg_df["commits"].map(_num),
+                        "Git +lines":     seg_df["git_additions"].map(_num),
+                        "Git -lines":     seg_df["git_deletions"].map(_num),
+                        "AI share %":     seg_df["ai_share_of_additions"].map(_pct),
+                        "$/commit":       seg_df["cost_per_commit"].map(_money),
+                        "$/1k git adds":  seg_df["cost_per_1000_git_additions"].map(_money),
+                        "ailines/commit": seg_df["ai_lines_per_commit"].map(_ratio),
+                        "Repos":          seg_df["repos"],
+                    })
+                    st.markdown(
+                        view.to_html(escape=False, index=False, classes="hmnd-table"),
+                        unsafe_allow_html=True,
+                    )
+
+
+# =============================================================================
+# PEOPLE TAB — per-person profile (F-20)
+# =============================================================================
+with tab_people:
+    from data.db import get_conn as _gc_p
+    f = filters  # noqa: F821 — provided by main.py exec scope
+    s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
+    e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
+
+    # ── 1. Dropdown (every user, ordered by lifetime total spend) ──────────
+    with _gc_p() as _conn_p:
+        people_rows = _conn_p.execute(
+            """SELECT u.id, u.full_name, u.email,
+                      COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS total_spend
+               FROM users u
+               LEFT JOIN usage_events ue ON ue.user_id = u.id
+               GROUP BY u.id
+               ORDER BY total_spend DESC, u.full_name"""
+        ).fetchall()
+    people = [dict(r) for r in people_rows]
+
+    if not people:
+        st.info("No users in the database yet. Run sync to populate.")
+    else:
+        def _label(p: dict) -> str:
+            ts = float(p["total_spend"] or 0)
+            return f"{p['full_name']} — {fmt_money(ts)}" if ts > 0 else p["full_name"]
+
+        selected_id = st.selectbox(
+            "Person",
+            options=[p["id"] for p in people],
+            format_func=lambda uid: _label(next(p for p in people if p["id"] == uid)),
+            key="people_user_id",
+        )
+        person = next(p for p in people if p["id"] == selected_id)
+
+        # ── 2. Period-scoped queries for this person (Source filter ignored) ─
+        with _gc_p() as _conn_p:
+            # per-tool split
+            tool_rows = _conn_p.execute(
+                """SELECT p.name AS provider,
+                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
+                          COUNT(*)                                 AS reqs,
+                          COALESCE(SUM(ue.tokens_in), 0)           AS tokens_in,
+                          COALESCE(SUM(ue.tokens_out), 0)          AS tokens_out
+                   FROM usage_events ue
+                   JOIN providers p ON p.id = ue.provider_id
+                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
+                     AND (? IS NULL OR ue.api_key_id = ?)
+                   GROUP BY p.name
+                   ORDER BY spend DESC""",
+                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+            ).fetchall()
+            top_models = _conn_p.execute(
+                """SELECT m.name AS model, p.name AS provider,
+                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend,
+                          COUNT(*) AS reqs
+                   FROM usage_events ue
+                   JOIN models m   ON m.id = ue.model_id
+                   JOIN providers p ON p.id = ue.provider_id
+                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
+                     AND (? IS NULL OR ue.api_key_id = ?)
+                   GROUP BY m.id
+                   ORDER BY spend DESC
+                   LIMIT 10""",
+                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+            ).fetchall()
+            daily_rows = _conn_p.execute(
+                """SELECT date(ue.occurred_at) AS day, p.name AS provider,
+                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS cost,
+                          COUNT(*)                                 AS reqs
+                   FROM usage_events ue
+                   JOIN providers p ON p.id = ue.provider_id
+                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
+                     AND (? IS NULL OR ue.api_key_id = ?)
+                   GROUP BY day, provider
+                   ORDER BY day""",
+                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+            ).fetchall()
+            purpose_rows = _conn_p.execute(
+                """SELECT COALESCE(ue.purpose, '—') AS purpose,
+                          COUNT(*) AS reqs,
+                          COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS spend
+                   FROM usage_events ue
+                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
+                     AND (? IS NULL OR ue.api_key_id = ?)
+                   GROUP BY purpose
+                   ORDER BY reqs DESC""",
+                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+            ).fetchall()
+            events_rows = _conn_p.execute(
+                """SELECT ue.occurred_at, p.name AS provider, m.name AS model,
+                          ue.purpose, ue.tokens_in, ue.tokens_out,
+                          ROUND(ue.cost_usd, 4) AS cost
+                   FROM usage_events ue
+                   JOIN providers p ON p.id = ue.provider_id
+                   JOIN models m    ON m.id = ue.model_id
+                   WHERE ue.user_id = ? AND ue.occurred_at BETWEEN ? AND ?
+                     AND (? IS NULL OR ue.api_key_id = ?)
+                   ORDER BY ue.occurred_at DESC
+                   LIMIT 100""",
+                (selected_id, s_iso, e_iso, f.api_key_id, f.api_key_id),
+            ).fetchall()
+            team_row = _conn_p.execute(
+                "SELECT t.name AS team FROM users u "
+                "LEFT JOIN teams t ON t.id = u.team_id WHERE u.id = ?",
+                (selected_id,),
+            ).fetchone()
+
+        # ── 3. Top-of-page profile card ───────────────────────────────────
+        per_tool = {r["provider"]: dict(r) for r in tool_rows}
+        period_spend = sum(float(t.get("spend") or 0) for t in per_tool.values())
+        period_reqs  = sum(int(t.get("reqs") or 0) for t in per_tool.values())
+        days_active  = len({r["day"] for r in daily_rows})
+        top_tool_name = max(per_tool.values(), key=lambda r: r["spend"], default={}).get("provider", "—")
+        team_name = team_row["team"] if team_row and team_row["team"] else "—"
+
+        st.markdown(
+            f"""
+            <div style="border:1px solid #e8edf3;border-radius:18px;padding:22px 26px;
+                        background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);margin-bottom:14px;">
+                <div style="font-size:24px;font-weight:500;color:#06091c;">{person['full_name']}</div>
+                <div style="color:#64748b;font-size:13px;margin-top:4px;">
+                    {person['email']} · team <b style="color:#06091c">{team_name}</b>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        kpi_row([
+            {"label": "Period spend",  "value": fmt_money(period_spend),
+             "help": f"This person's AI spend in the active period "
+                     f"({f.period_days} d window). All tools combined."},
+            {"label": "Period reqs",   "value": _fmt_int(period_reqs),
+             "help": "All messages / API requests / completions."},
+            {"label": "Top tool",      "value": top_tool_name.title() if top_tool_name != "—" else "—",
+             "help": "Provider with the highest spend by this person."},
+            {"label": "Active days",   "value": str(days_active),
+             "help": "Number of distinct calendar days with ≥1 event."},
+        ])
+
+        # 3 sub-cards — Claude / ChatGPT / Cursor share
+        def _sub_card(color: str, label: str, p: str) -> str:
+            v = per_tool.get(p, {"spend": 0, "reqs": 0})
+            share = (v["spend"] / period_spend * 100) if period_spend else 0
+            return f"""
+                <div style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
+                            padding:14px 18px;background:#fff;height:100%;">
+                    <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;">
+                        {label}
+                    </div>
+                    <div style="font-size:22px;line-height:1;font-weight:300;color:#06091c;">
+                        {fmt_money(v["spend"])}
+                    </div>
+                    <div style="font-size:12px;color:#475569;margin-top:8px;">
+                        {v["reqs"]:,} reqs · {share:.1f}% of total
+                    </div>
+                </div>
+            """
+        c1, c2, c3 = st.columns(3)
+        with c1: st.markdown(_sub_card("#6366f1", "Claude",  "anthropic"), unsafe_allow_html=True)
+        with c2: st.markdown(_sub_card("#10a37f", "ChatGPT", "openai"),    unsafe_allow_html=True)
+        with c3: st.markdown(_sub_card("#f59e0b", "Cursor",  "cursor"),    unsafe_allow_html=True)
+
+        # ── 4. Charts ─────────────────────────────────────────────────────
+        section(
+            "Daily spend",
+            help="Per-day spend stacked by provider. Spikes can indicate "
+                 "automation kicked in or a one-off heavy task.",
+        )
+        if daily_rows:
+            df_daily = pd.DataFrame([dict(r) for r in daily_rows])
+            df_daily["day"] = pd.to_datetime(df_daily["day"])
+            color_map = {"anthropic": "#6366f1", "openai": "#10a37f", "cursor": "#f59e0b"}
+            fig = px.bar(
+                df_daily, x="day", y="cost", color="provider",
+                color_discrete_map=color_map, barmode="stack",
+            )
+            fig.update_layout(
+                plot_bgcolor="white", paper_bgcolor="white",
+                margin=dict(l=10, r=10, t=10, b=10),
+                font=dict(family="Inter", color=NAVY),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(gridcolor="#e8edf3", title="$ per day"),
+                legend_title_text="",
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("No events for this person in the active period.")
+
+        col_models, col_purpose = st.columns(2)
+        with col_models:
+            section(
+                "Top models (this person)",
+                help="The models they actually drive — by spend, top 10.",
+            )
+            if top_models:
+                def _model_color(r):
+                    p = (r.get("provider") or "").lower()
+                    return {"anthropic": "claude", "openai": "chatgpt"}.get(p, "cursor")
+                _bar_list(
+                    [dict(r) for r in top_models],
+                    label_key="model", value_key="spend",
+                    css_class=_model_color, value_formatter=fmt_money,
                 )
-                seg_df = pd.DataFrame(seg_devs)
-                view = pd.DataFrame({
-                    "Name":           seg_df["canonical_name"],
-                    "AI cost":        seg_df["ai_cost_usd"].map(_money),
-                    "AI lines":       seg_df["ai_lines"].map(_num),
-                    "Commits":        seg_df["commits"].map(_num),
-                    "Git +lines":     seg_df["git_additions"].map(_num),
-                    "Git -lines":     seg_df["git_deletions"].map(_num),
-                    "AI share %":     seg_df["ai_share_of_additions"].map(_pct),
-                    "$/commit":       seg_df["cost_per_commit"].map(_money),
-                    "$/1k git adds":  seg_df["cost_per_1000_git_additions"].map(_money),
-                    "ailines/commit": seg_df["ai_lines_per_commit"].map(_ratio),
-                    "Repos":          seg_df["repos"],
+            else:
+                st.caption("No model usage in the active period.")
+        with col_purpose:
+            section(
+                "Activity by purpose",
+                help="What KIND of work they're doing with AI: Chat / Agent / "
+                     "API / Tab / etc. Useful for separating chatbox usage "
+                     "from agentic / automated workflows.",
+            )
+            if purpose_rows:
+                _bar_list(
+                    [dict(r) for r in purpose_rows],
+                    label_key="purpose", value_key="reqs",
+                    css_class="cursor", value_formatter=fmt_int,
+                )
+            else:
+                st.caption("No purpose-tagged events in the active period.")
+
+        # ── 5. Expandable tables (collapsed by default) ───────────────────
+        with st.expander("All events (last 100)", expanded=False):
+            if events_rows:
+                df_ev = pd.DataFrame([dict(r) for r in events_rows])
+                df_ev["cost"] = df_ev["cost"].apply(lambda v: fmt_money(float(v) if v else 0))
+                df_ev = df_ev.rename(columns={
+                    "occurred_at": "When", "provider": "Provider",
+                    "model": "Model", "purpose": "Purpose",
+                    "tokens_in": "Tokens in", "tokens_out": "Tokens out",
+                    "cost": "Cost",
                 })
                 st.markdown(
-                    view.to_html(escape=False, index=False, classes="hmnd-table"),
-                    unsafe_allow_html=True,
-                )
-
-
-with tab_high:
-    if filters.provider != "all":
-        st.caption(
-            f"ℹ️ Cross-tool view — ignores Source filter "
-            f"(currently '{filters.provider}') by design. Ranks people across "
-            f"OpenAI + Anthropic + Cursor together."
-        )
-    # Threshold slider — default $1k per the design screenshot.
-    threshold = st.slider("High-spender threshold ($)", 200, 5000, 1000, 100,
-                          key="hs_threshold")
-    # High Spenders is a cross-tool view by design — it ranks people across
-    # OpenAI/Anthropic/Cursor in one list. So we deliberately ignore the
-    # Source filter here (otherwise picking 'OpenAI · Artem' would show only
-    # users with OpenAI spend, defeating the cross-tool purpose).
-    all_spenders = get_high_spenders(period_days=filters.period_days,
-                                      threshold_usd=0,
-                                      api_key_id=None)
-    high = [r for r in all_spenders if r["spend"] >= threshold]
-    combined = sum(r["spend"] for r in high)
-    top = high[0] if high else None
-    total_users = len(all_spenders)
-    share_high = (len(high) / total_users * 100) if total_users else 0
-
-    kpi_row([
-        {"label": "High Spenders", "value": f"{len(high)} / {total_users}",
-         "help": "Users above the threshold (slider above) out of total "
-                 "active users. If 10+ people spend > $1k per period, "
-                 "consider caps or a review."},
-        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—",
-         "help": "Biggest single-user spend. If this person isn't aware "
-                 "of their own spend, it's an anomaly (forgotten cron / "
-                 "API automation)."},
-        {"label": "Combined spend", "value": fmt_money(combined),
-         "help": "Total spend of all high-spenders. This figure is "
-                 "usually 60-80% of the entire company AI budget "
-                 "(Pareto)."},
-        {"label": "Share of users", "value": f"{share_high:.0f}%",
-         "help": "Share of users who are high-spenders. Usually 5-15%. "
-                 "High concentration is normal for AI tools."},
-    ])
-
-    if high:
-        # Cross-tool per-user spend split so we can show 'Andy Park: GPT $9920
-        # + CC $3154 = $13074'. Build a lookup by user_name (since the basic
-        # high_spenders list keys on user_name string).
-        per_provider = get_high_spenders_per_provider(period_days=filters.period_days)
-        split_by_user = {r["user_name"]: r for r in per_provider}
-
-        section(
-            "Notable high spend",
-            help="Top 15 high-spenders split across tools (GPT + CC + "
-                 "Cursor). Border colour = risk level. The line under "
-                 "the name is a heuristic: 'anomalous' = suspiciously "
-                 "high $/message (likely API automation), 'high cost/"
-                 "message' = expensive reasoning model (o1, o3, "
-                 "claude-opus).",
-        )
-        cards_html = []
-        for s in high[:15]:
-            spend_v = s["spend"] or 0
-            risk = classify_risk(spend_v) or "low"
-            border_color = {"high": "#ef4444", "medium": "#f59e0b",
-                            "low": "#eab308"}.get(risk, "#94a3b8")
-            note = _hs_note(s)
-            split = split_by_user.get(s["user_name"])
-            split_parts: list[str] = []
-            if split:
-                if split.get("cost_openai", 0) > 0:
-                    split_parts.append(f"GPT {fmt_money(split['cost_openai'])}")
-                if split.get("cost_anthropic", 0) > 0:
-                    split_parts.append(f"CC {fmt_money(split['cost_anthropic'])}")
-                if split.get("cost_cursor", 0) > 0:
-                    split_parts.append(f"Cursor {fmt_money(split['cost_cursor'])}")
-            # Build inner block as a single line — Streamlit's markdown parser
-            # treats blank lines inside HTML as paragraph breaks, which was
-            # turning subsequent cards into literal text. Keeping it inline
-            # (no embedded newlines) avoids that.
-            split_inline = (
-                f'<div style="color:#94a3b8;font-size:11px;margin-top:4px;">'
-                f'{" + ".join(split_parts)}</div>'
-                if len(split_parts) > 1 else ""
-            )
-            card_html = (
-                f'<div style="border-left:3px solid {border_color};padding:14px 18px;'
-                f'margin-bottom:8px;background:#fcfdff;border-radius:0 12px 12px 0;'
-                f'display:flex;align-items:center;justify-content:space-between;gap:18px;">'
-                f'<div style="min-width:0;">'
-                f'<div style="font-weight:600;color:#06091c;font-size:14px;">{s["user_name"]}</div>'
-                f'<div style="color:#64748b;font-size:12px;margin-top:2px;">'
-                f'{s["messages"]:,} messages · {note}</div>'
-                f'{split_inline}'
-                f'</div>'
-                f'<div style="font-size:18px;font-weight:600;color:{border_color};white-space:nowrap;">'
-                f'{fmt_money(spend_v)}</div>'
-                f'</div>'
-            )
-            cards_html.append(card_html)
-        st.markdown("".join(cards_html), unsafe_allow_html=True)
-
-        # Two-column footer: narrative analysis + cross-tool ranking bars
-        col_anal, col_rank = st.columns(2)
-        with col_anal:
-            section(
-                "High spend analysis",
-                help="Auto-generated narrative on spend patterns: the top "
-                     "spender, clear anomalies ($100+ per message), volume "
-                     "vs $/msg, top-3 concentration. Useful for a weekly "
-                     "CFO review.",
-            )
-            findings = _hs_findings(high)
-            if findings:
-                st.markdown(
-                    "<ul style='margin:0; padding-left:18px; color:#475569; "
-                    "font-size:13px; line-height:1.7'>"
-                    + "".join(f"<li>{f}</li>" for f in findings) + "</ul>",
+                    df_ev.to_html(escape=False, index=False, classes="hmnd-table"),
                     unsafe_allow_html=True,
                 )
             else:
-                st.caption("No notable anomalies detected.")
-        with col_rank:
-            section(
-                "Cross-tool spend ranking",
-                help="Top 10 by combined spend across all 3 tools. Good "
-                     "answer to the question 'who needs a higher cap or, "
-                     "conversely, a cheaper seat'.",
+                st.caption("No events in the active period.")
+
+        with st.expander("Daily activity (per provider)", expanded=False):
+            if daily_rows:
+                df_d = pd.DataFrame([dict(r) for r in daily_rows])
+                df_d["cost"] = df_d["cost"].apply(lambda v: fmt_money(float(v) if v else 0))
+                df_d = df_d.rename(columns={
+                    "day": "Day", "provider": "Provider",
+                    "cost": "Cost", "reqs": "Reqs",
+                })
+                st.markdown(
+                    df_d.to_html(escape=False, index=False, classes="hmnd-table"),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No daily breakdown.")
+
+        with st.expander("Cursor leaderboard row (lifetime, from CSV/JSON)", expanded=False):
+            from backend.services.cursor_analytics import load_user_leaderboard as _llb_p
+            ld = next(
+                (r for r in _llb_p() if (r.get("email") or "").lower()
+                 == (person["email"] or "").lower()),
+                None,
             )
-            ranked = sorted(all_spenders, key=lambda r: r["spend"] or 0, reverse=True)[:10]
-            max_spend = max((r["spend"] or 0) for r in ranked) or 1
-            _bar_list(
-                ranked, label_key="user_name", value_key="spend",
-                css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
-                max_value=max_spend,
-                value_formatter=fmt_money,
-            )
-    else:
-        st.info(f"No users at or above {fmt_money(threshold)} in the period.")
+            if ld:
+                rows_h = [
+                    ("Email",             ld.get("email", "—")),
+                    ("Favorite model",    ld.get("favorite_model", "—")),
+                    ("Agent completions", _fmt_int(ld.get("agent_completions", 0))),
+                    ("Agent lines",       _fmt_int(ld.get("agent_lines", 0))),
+                    ("Tab completions",   _fmt_int(ld.get("tab_completions", 0))),
+                    ("Tab lines",         _fmt_int(ld.get("tab_lines", 0))),
+                    ("AI lines total",    _fmt_int(ld.get("ai_lines", 0))),
+                ]
+                st.markdown(
+                    "<table class='hmnd-table'><tbody>"
+                    + "".join(
+                        f"<tr><td style='color:#475569'>{k}</td>"
+                        f"<td style='text-align:right;font-weight:600'>{v}</td></tr>"
+                        for k, v in rows_h
+                    )
+                    + "</tbody></table>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption(
+                    "This person is not in the latest Cursor leaderboard "
+                    "export. If they use Cursor, drop the latest "
+                    "`Cursor_*.json` into `sources/` and re-sync."
+                )

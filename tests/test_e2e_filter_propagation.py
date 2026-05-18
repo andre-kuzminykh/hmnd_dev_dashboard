@@ -228,35 +228,23 @@ def test_top_spenders_panel_renders_under_any_source(tmp_db, source):
 # 7. Source filter HINT banners on incompatible tabs
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(
+    reason="F-20: ChatGPT-specific tab removed in the unified layout — "
+           "OpenAI content now lives under Overview's `_show_openai` "
+           "gating, which hides the section entirely when Source=Anthropic. "
+           "No mismatch banner needed."
+)
 def test_chatgpt_tab_hint_on_anthropic_source(tmp_db):
-    """When Source=Anthropic but user is on ChatGPT tab, an info banner
-    must explain the mismatch.
-    """
-    app = _run(("anthropic", "all"))
-    body = _markdown_text(app)
-    # Streamlit st.info renders into either markdown or a separate alert
-    # element — capture both.
-    info_blob = body + "\n".join(
-        getattr(e, "body", "") or "" for e in app.info
-    )
-    assert (
-        "no OpenAI data" in info_blob
-        or "ChatGPT tab shows OpenAI" in info_blob
-    ), "expected ChatGPT-tab info banner under Source=Anthropic"
+    pass
 
 
+@pytest.mark.skip(
+    reason="F-20: Claude-Code tab removed in the unified layout — Anthropic "
+           "events live under Overview's `_show_anthropic` gating, which "
+           "hides the section entirely when Source=OpenAI."
+)
 def test_claude_code_tab_hint_on_openai_source(tmp_db):
-    _seed_two_orgs(known_artem=10.0, known_humanoid=20.0)
-    app = _run(("openai", "Artem"))
-    # st.info() banners can land in either .info OR .markdown body depending
-    # on Streamlit version — check both.
-    info_blob = "\n".join(getattr(e, "body", "") or "" for e in app.info)
-    md_blob = _markdown_text(app)
-    blob = info_blob + "\n" + md_blob
-    assert (
-        "no Claude Code data" in blob
-        or "Claude Code tab shows" in blob
-    ), "expected Claude-Code-tab info banner under Source=OpenAI"
+    pass
 
 
 # ---------------------------------------------------------------------------

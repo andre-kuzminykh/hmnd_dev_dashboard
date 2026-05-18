@@ -95,9 +95,13 @@ def test_every_ai_tools_tab_renders(tmp_db, source):
     assert not app.exception, (
         f"Page (source={source}) raised: {[str(e) for e in app.exception]}"
     )
-    # Sanity: the page must include AI Tools tabs.
-    assert app.tabs and len(app.tabs) >= 7, (
-        f"Expected ≥7 tabs (AI Tools), got {len(app.tabs) if app.tabs else 0}"
+    # Sanity: F-20 unified layout — exactly 3 tabs (Overview / Engineering / People).
+    assert app.tabs and len(app.tabs) == 3, (
+        f"Expected 3 tabs (Overview/Engineering/People), got {len(app.tabs) if app.tabs else 0}"
+    )
+    labels = [t.label for t in app.tabs]
+    assert labels == ["Overview", "Engineering", "People"], (
+        f"Expected tabs ['Overview','Engineering','People'], got {labels}"
     )
 
 

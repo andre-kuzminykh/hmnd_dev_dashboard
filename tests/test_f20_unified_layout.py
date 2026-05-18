@@ -55,12 +55,31 @@ def test_fr_20_1_no_ai_tools_section_header(source: str):
 
 
 def test_fr_20_9_no_legacy_tab_variables(source: str):
-    """FR-20.9 — old tab_* variables from the 8-tab layout must be gone."""
+    """FR-20.9 — old `with tab_*` blocks from the 8-tab layout must be gone.
+
+    Match only at code-positions (left margin or after a left paren),
+    not inside comments / docstrings (e.g. "# old tab_gpt rebuild logic").
+    """
     forbidden = ["tab_claude", "tab_cc", "tab_gpt", "tab_cursor",
                  "tab_models", "tab_high", "tab_devs"]
-    leaked = [name for name in forbidden if name in source]
+    # Allowed shapes for a real variable: `with tab_X:` or `tab_X, ...` in tabs unpack
+    leaked = []
+    for name in forbidden:
+        for m in re.finditer(rf"\b{name}\b", source):
+            line_start = source.rfind("\n", 0, m.start()) + 1
+            line = source[line_start:source.find("\n", m.start())]
+            # ignore comments and strings
+            stripped = line.lstrip()
+            if stripped.startswith("#"):
+                continue
+            # ignore docstring lines (heuristic: starts with """ or ' or contains \"\"\")
+            if '"""' in line or "'''" in line:
+                continue
+            leaked.append(f"line: {line.strip()!r}")
+            break
     assert not leaked, (
-        f"FR-20.9 violated: legacy tab variables still present: {leaked}"
+        f"FR-20.9 violated: legacy tab variables still present in code:\n  "
+        + "\n  ".join(leaked)
     )
 
 
