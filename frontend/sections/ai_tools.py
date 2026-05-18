@@ -350,7 +350,7 @@ with tab_overview:
                    help_text: str = "") -> str:
         from frontend.components import _help_icon
         return f"""
-            <div style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
+            <div class="hmnd-tool-card" style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
                         padding:18px 20px;background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);
                         box-shadow:0 14px 32px -24px rgba(6,9,28,.14);height:100%;">
                 <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;">{label}{_help_icon(help_text)}</div>

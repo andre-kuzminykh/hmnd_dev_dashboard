@@ -306,9 +306,20 @@ a {
     /* Tables — keep scrollable */
     table.hmnd-table { display: block; overflow-x: auto; white-space: nowrap; }
     /* st.columns on Streamlit stacks vertically below ~640 px automatically.
-       Add visible vertical breathing room so cards don't visually fuse: */
+       Tight gap between PLAIN KPI cards; extra space BEFORE a coloured tool
+       card so the visual rhythm reads as "group of 4 KPIs · pause · 3 tool
+       cards · pause · next chart". */
     [data-testid="stHorizontalBlock"] > [data-testid="column"] {
-        margin-bottom: 8px;
+        margin-bottom: 2px;
+    }
+    /* Coloured tool cards (Claude / ChatGPT / Cursor) — push them away from
+       the previous KPI row so the colour stripe doesn't feel glued to the
+       last KPI card above. */
+    [data-testid="stHorizontalBlock"]:has(.hmnd-tool-card) {
+        margin-top: 22px;
+    }
+    [data-testid="stHorizontalBlock"] > [data-testid="column"]:has(.hmnd-tool-card) {
+        margin-bottom: 6px;
     }
     /* Plotly charts shrink height slightly */
     .stPlotlyChart > div { height: auto !important; min-height: 220px; }
