@@ -173,16 +173,15 @@
     <div class="mb-8">
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§1.1</span> Spend at a glance</h3>
       <div class="det-card p-5 mb-3">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
           <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">30-day spend</div><div class="kpi-num mt-2">$42,149</div><div class="kpi-sub">all providers combined <span class="tip">?<span class="tt">SUM(usage_events.cost_usd) over the last 30 days across Anthropic + Cursor + OpenAI. Provider-side $ audited byte-for-byte via scripts/audit_etl.</span></span></div></div>
           <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">Annualised</div><div class="kpi-num mt-2">~$506k</div><div class="kpi-sub">linear run-rate <span class="tip">?<span class="tt">$42,149 × 12 ≈ $506k. Assumes flat usage; with growth expect +30–100%. Use as lower bound for budgeting.</span></span></div></div>
           <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">$ / engineer / mo</div><div class="kpi-num mt-2">$279.13</div><div class="kpi-sub">mean — median ~$25 <span class="tip">?<span class="tt">$42,149 ÷ 151 active humans (30d). Inflated by top-10 (=60.8% of spend). Median around $25 is closer to "typical" engineer cost.</span></span></div></div>
-          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">$ / commit</div><div class="kpi-num mt-2">~$1.74</div><div class="kpi-sub">directional <span class="tip">?<span class="tt">($42,149 × 3 months) ÷ ~75,000 commits in the same window. Directional only — many commits are not AI-assisted, and many AI sessions ship no commits.</span></span></div></div>
         </div>
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>$42,149 in 30 days</strong> = ~$506k/yr run-rate. Spend per engineer averages $279.13 but the median is ~$25. At ~$1.74 per commit the dollar-per-output number is fine; the question is <em>which</em> engineers convert spend into shipped code (see §1.5).</p>
+        <p class="text-navy"><strong>$42,149 in 30 days</strong> = ~$506k/yr run-rate. Spend per engineer averages $279.13 but the median is ~$25 — a small group drives most of the cost. The question is <em>which</em> engineers convert spend into shipped code (see §1.5).</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> two levers cut spend fast — (1) ship the model-routing policy and (2) turn on per-user Slack alerts. Estimated saving: $2–4k/mo at low effort.</div>
     </div>
