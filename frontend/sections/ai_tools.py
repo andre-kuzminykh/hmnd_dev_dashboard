@@ -136,6 +136,19 @@ with tab_overview:
     f = filters  # noqa: F821 — provided by main.py exec scope
     s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
     e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
+
+    # F-25 — visible filter-state indicator so user always sees what is
+    # actually narrowing the page.  Helps diagnose stuck session_state.
+    _scope_show   = (f.provider or "all")
+    _org_show     = f.organization if (f.organization and f.organization != "all") else "—"
+    _key_show     = str(f.api_key_id) if f.api_key_id else "—"
+    _period_show  = f"{f.period_days}d" if not (f.date_from and f.date_to) else (
+        f"{f.date_from.date()} → {f.date_to.date()}"
+    )
+    st.caption(
+        f"Filters in use · Source: **{_scope_show}** · Organization: "
+        f"**{_org_show}** · API key: **{_key_show}** · Period: **{_period_show}**"
+    )
     _scope = (f.provider or "all").lower()
     _show_anthropic = _scope in ("all", "anthropic")
     _show_openai    = _scope in ("all", "openai")
