@@ -21,9 +21,9 @@
   .rec-box{background:var(--bg-blue); border:1px solid rgba(73,83,216,.18); border-radius:12px; padding:1rem 1.25rem}
   /* Tooltip pattern */
   .tip{position:relative; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; background:var(--bg-blue); color:var(--blue); border:1px solid rgba(73,83,216,.25); font-size:11px; font-weight:700; cursor:help; vertical-align:middle; margin-left:.25rem; flex-shrink:0}
-  .tip:hover,.tip:focus{background:var(--blue); color:#fff}
+  .tip:hover,.tip:focus,.tip.tip-open{background:var(--blue); color:#fff}
   .tip .tt{position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; border-radius:8px; padding:.6rem .75rem; font-size:.72rem; line-height:1.45; min-width:220px; max-width:300px; opacity:0; pointer-events:none; transition:opacity .15s; z-index:50; font-weight:400; text-align:left; box-shadow:0 12px 32px rgba(6,9,28,.25); white-space:normal}
-  .tip:hover .tt,.tip:focus .tt{opacity:1}
+  .tip:hover .tt,.tip:focus .tt,.tip.tip-open .tt{opacity:1; pointer-events:auto}
   @media (max-width:640px){.tip .tt{position:fixed; left:8px; right:8px; bottom:auto; top:auto; transform:none; max-width:none; min-width:0}}
   /* Details */
   details>summary{cursor:pointer; list-style:none; user-select:none; outline:none}
@@ -117,7 +117,7 @@
   <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
     <a href="#top" class="flex items-center gap-3 shrink-0">
       <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="Humanoid Logo" class="w-8 h-8 object-contain">
-      <span class="font-bold text-navy tracking-widest text-sm sm:text-base">HUMANOID</span>
+      <span class="font-bold text-navy tracking-widest text-sm sm:text-base hidden sm:inline">HUMANOID</span>
     </a>
     <div class="flex items-center gap-1 overflow-x-auto flex-1 justify-end sm:justify-center">
       <a href="#business" class="nav-link">Business Analysis</a>
@@ -142,19 +142,19 @@
 <!-- SNAPSHOT (8 KPIs) -->
 <section class="anchor max-w-7xl mx-auto px-4 sm:px-6 py-12">
   <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-    <div class="det-card p-4"><div class="kpi-label">Total AI Spend / 30d</div><div class="kpi-num-lg mt-2">$23,353</div><div class="kpi-sub">Annualised ~$284k <span class="tip">?<span class="tt">Linear extrapolation. Real growth likely +30–100%; treat as lower bound.</span></span></div></div>
-    <div class="det-card p-4"><div class="kpi-label">Active humans / 30d</div><div class="kpi-num-lg mt-2">140</div><div class="kpi-sub">$167 avg · $20 median</div></div>
-    <div class="det-card p-4"><div class="kpi-label">Top-10 share</div><div class="kpi-num-lg mt-2">63.2%</div><div class="kpi-sub">$14,757 — alert ~10 people</div></div>
-    <div class="det-card p-4"><div class="kpi-label">Tool mix</div><div class="kpi-num-lg mt-2">57 / 30 / 13</div><div class="kpi-sub">Anthropic / Cursor / OpenAI %</div></div>
-    <div class="det-card p-4"><div class="kpi-label">Git commits ingested</div><div class="kpi-num-lg mt-2">23,044</div><div class="kpi-sub">213 humans + 13 bots</div></div>
-    <div class="det-card p-4"><div class="kpi-label">Bug-fix rate / lifetime</div><div class="kpi-num-lg mt-2">19.2%</div><div class="kpi-sub">Bot <span class="warn">24.8%</span> vs Human 18.8%</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Total AI Spend / 30d</div><div class="kpi-num-lg mt-2">$42,149</div><div class="kpi-sub">Annualised ~$506k <span class="tip">?<span class="tt">Linear extrapolation. Real growth likely +30–100%; treat as lower bound.</span></span></div></div>
+    <div class="det-card p-4"><div class="kpi-label">Active humans / 30d</div><div class="kpi-num-lg mt-2">151</div><div class="kpi-sub">$279 avg · $25 median</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Top-10 share</div><div class="kpi-num-lg mt-2">60.8%</div><div class="kpi-sub">$25,646 — alert ~10 people</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Tool mix</div><div class="kpi-num-lg mt-2">75 / 18 / 7</div><div class="kpi-sub">Anthropic / Cursor / OpenAI %</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Git commits ingested</div><div class="kpi-num-lg mt-2">23,044</div><div class="kpi-sub">193 humans + 13 bots</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Bug-fix rate / lifetime</div><div class="kpi-num-lg mt-2">22.3%</div><div class="kpi-sub">Bot <span class="warn">26.8%</span> vs Human 22.0%</div></div>
     <div class="det-card p-4"><div class="kpi-label">Repo AI-readiness</div><div class="kpi-num-lg mt-2"><span class="text-green-700">4.0</span> / <span class="text-amber-600">2.0</span></div><div class="kpi-sub">hmnd / hmnd-cloud</div></div>
-    <div class="det-card p-4"><div class="kpi-label">Optimisation opportunity</div><div class="kpi-num-lg mt-2">$1–2k<span class="text-sm text-muted">/mo</span></div><div class="kpi-sub">routing + alerts</div></div>
+    <div class="det-card p-4"><div class="kpi-label">Optimisation opportunity</div><div class="kpi-num-lg mt-2">$2–4k<span class="text-sm text-muted">/mo</span></div><div class="kpi-sub">routing + alerts</div></div>
   </div>
   <!-- Top-3 takeaways -->
   <div class="grid md:grid-cols-3 gap-3 mt-4">
-    <div class="det-card p-4 border-l-4 border-l-green-600"><div class="kpi-label text-green-700 mb-1">What's working</div><p class="text-sm">~71% of engineers touch AI. <strong>21 engineers</strong> are HIGH-AI × HIGH-Git — the champion cohort. <strong>hmnd</strong> monorepo has best-in-class agent instructions and 864 tests across 13/14 modules.</p></div>
-    <div class="det-card p-4 border-l-4 border-l-amber-500"><div class="kpi-label text-amber-700 mb-1">What needs attention</div><p class="text-sm"><strong>hmnd_fleet</strong> bug rate <strong>35.3%</strong> (2× repo avg) and its top-2 contributors are the top OpenAI reasoning overusers ($17–23/msg). <strong>4 modules</strong> have single-person bus factor.</p></div>
+    <div class="det-card p-4 border-l-4 border-l-green-600"><div class="kpi-label text-green-700 mb-1">What's working</div><p class="text-sm">~71% of engineers touch AI. <strong>19 engineers</strong> are HIGH-AI × HIGH-Git — the champion cohort. <strong>hmnd</strong> monorepo has best-in-class agent instructions and 864 tests across 13/14 modules.</p></div>
+    <div class="det-card p-4 border-l-4 border-l-amber-500"><div class="kpi-label text-amber-700 mb-1">What needs attention</div><p class="text-sm"><strong>hmnd_fleet</strong> bug rate <strong>35.3%</strong> (2× repo avg) and its top-2 contributors are the top OpenAI reasoning overusers ($17–23/msg)</p></div>
     <div class="det-card p-4 border-l-4 border-l-red-500"><div class="kpi-label text-red-700 mb-1">What's dangerous</div><p class="text-sm"><strong>hmnd-cloud</strong> (Terraform IaC) has 0 tests and <strong>No AGENTS.md</strong>. Bring the repo into shape — add specs, tests, and the standard AI guardrails before scaling AI assist there.</p></div>
   </div>
 </section>
@@ -166,25 +166,24 @@
     <div class="mb-10 border-l-4 border-blue pl-4">
       <span class="text-xs font-bold text-blue uppercase tracking-widest">Part 1</span>
       <h2 class="text-3xl sm:text-4xl font-bold text-navy mt-1">Business Analysis</h2>
-      <p class="text-muted mt-2 max-w-3xl">Where the $23k/mo goes, who ships, what to amplify, what to cut.</p>
+      <p class="text-muted mt-2 max-w-3xl">Where the $42k/mo goes, who ships, what to amplify, what to cut.</p>
     </div>
 
     <!-- §1.1 SPEND ───────────────────────────────────────────── -->
     <div class="mb-8">
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§1.1</span> Spend at a glance</h3>
       <div class="det-card p-5 mb-3">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">30-day spend</div><div class="kpi-num mt-2">$23,353</div><div class="kpi-sub">all providers combined <span class="tip">?<span class="tt">SUM(usage_events.cost_usd) over the last 30 days across Anthropic + Cursor + OpenAI. Provider-side $ audited byte-for-byte via scripts/audit_etl.</span></span></div></div>
-          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">Annualised</div><div class="kpi-num mt-2">~$284k</div><div class="kpi-sub">linear run-rate <span class="tip">?<span class="tt">$23,353 × 12 ≈ $280k. Assumes flat usage; with growth expect +30–100%. Use as lower bound for budgeting.</span></span></div></div>
-          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">$ / engineer / mo</div><div class="kpi-num mt-2">$166.81</div><div class="kpi-sub">mean — median ~$20 <span class="tip">?<span class="tt">$23,353 ÷ 140 active humans (30d). Inflated by top-10 (=63% of spend). Median around $20 is closer to "typical" engineer cost.</span></span></div></div>
-          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">$ / commit</div><div class="kpi-num mt-2">~$0.93</div><div class="kpi-sub">directional <span class="tip">?<span class="tt">($23,353 × 3 months) ÷ ~75,000 commits in the same window. Directional only — many commits are not AI-assisted, and many AI sessions ship no commits.</span></span></div></div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">30-day spend</div><div class="kpi-num mt-2">$42,149</div><div class="kpi-sub">all providers combined <span class="tip">?<span class="tt">SUM(usage_events.cost_usd) over the last 30 days across Anthropic + Cursor + OpenAI. Provider-side $ audited byte-for-byte via scripts/audit_etl.</span></span></div></div>
+          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">Annualised</div><div class="kpi-num mt-2">~$506k</div><div class="kpi-sub">linear run-rate <span class="tip">?<span class="tt">$42,149 × 12 ≈ $506k. Assumes flat usage; with growth expect +30–100%. Use as lower bound for budgeting.</span></span></div></div>
+          <div class="p-3 bg-soft rounded-lg border border-line"><div class="kpi-label">$ / engineer / mo</div><div class="kpi-num mt-2">$279.13</div><div class="kpi-sub">mean — median ~$25 <span class="tip">?<span class="tt">$42,149 ÷ 151 active humans (30d). Inflated by top-10 (=60.8% of spend). Median around $25 is closer to "typical" engineer cost.</span></span></div></div>
         </div>
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>$23,353 in 30 days</strong> = ~$284k/yr run-rate. Spend per engineer averages $166.81 but the median is ~$20. At ~$0.93 per commit the dollar-per-output number is fine; the question is <em>which</em> engineers convert spend into shipped code (see §1.5).</p>
+        <p class="text-navy"><strong>$42,149 in 30 days</strong> = ~$506k/yr run-rate. Spend per engineer averages $279.13 but the median is ~$25 — a small group drives most of the cost. The question is <em>which</em> engineers convert spend into shipped code (see §1.5).</p>
       </div>
-      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> two levers cut spend fast — (1) ship the model-routing policy (default mini for routine, reserve o-series and opus for hard work) and (2) turn on per-user Slack alerts at $500 and $1,000/mo. Estimated saving: $1–2k/mo at low effort.</div>
+      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> two levers cut spend fast — (1) ship the model-routing policy and (2) turn on per-user Slack alerts. Estimated saving: $2–4k/mo at low effort.</div>
     </div>
 
     <!-- §1.2 TOOL MIX ───────────────────────────────────────────── -->
@@ -192,31 +191,31 @@
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§1.2</span> Tool mix</h3>
       <div class="det-card p-5 mb-3">
         <div class="flex h-9 rounded-lg overflow-hidden text-[11px] font-bold text-white mb-5">
-          <div style="width:57.2%; background:var(--blue)" class="flex items-center justify-center">Anthropic 57.2%</div>
-          <div style="width:29.9%; background:#0ea5e9" class="flex items-center justify-center">Cursor 29.9%</div>
-          <div style="width:12.9%; background:#16a34a" class="flex items-center justify-center">OpenAI 12.9%</div>
+          <div style="width:74.6%; background:var(--blue)" class="flex items-center justify-center">Anthropic 74.6%</div>
+          <div style="width:18.0%; background:#0ea5e9" class="flex items-center justify-center">Cursor 18.0%</div>
+          <div style="width:7.4%; background:#16a34a" class="flex items-center justify-center">OpenAI 7.4%</div>
         </div>
         <div class="grid md:grid-cols-3 gap-3">
           <div class="p-3 bg-soft rounded-lg border border-line">
-            <div class="flex items-center justify-between mb-1"><span class="kpi-label">Anthropic</span><span class="pill pill-blue">$13,779</span></div>
-            <div class="text-xs text-muted">111 users · 6,808 events · $2.02/req</div>
-            <p class="mt-2 text-xs"><strong>Claude Code (Agent) = $11,489 (83.4%).</strong> Chat $1,334 · Cowork $819. <span class="tip">?<span class="tt">Some Agent events are synthesised from Cursor's agent_completions (uniform 56-event signature per user) — real Claude Code is the lower bound of $11.5k.</span></span></p>
+            <div class="flex items-center justify-between mb-1"><span class="kpi-label">Anthropic</span><span class="pill pill-blue">$31,444</span></div>
+            <div class="text-xs text-muted">125 users · 9,445 events · $3.33/req</div>
+            <p class="mt-2 text-xs"><strong>Claude Code (Agent) = $25,810 (82.1%).</strong> Chat $3,197 · Cowork+Other $2,437. <span class="tip">?<span class="tt">Some Agent events are synthesised from Cursor's agent_completions (uniform 56-event signature per user) — real Claude Code is the lower bound of $25.8k.</span></span></p>
           </div>
           <div class="p-3 bg-soft rounded-lg border border-line">
-            <div class="flex items-center justify-between mb-1"><span class="kpi-label">Cursor</span><span class="pill pill-blue">$7,214</span></div>
-            <div class="text-xs text-muted">67 active / 81 seats · 1,876 events · $3.84/event</div>
-            <p class="mt-2 text-xs">Claude family 27 devs · GPT family 20 · default 16. <strong>18 zero-activity seats</strong> = sunset opportunity ($540–1,080/mo). <span class="tip">?<span class="tt">"AI lines" is Cursor's lifetime counter, not period-filtered. Oleg's 10.9M is months of work, not 30 days.</span></span></p>
+            <div class="flex items-center justify-between mb-1"><span class="kpi-label">Cursor</span><span class="pill pill-blue">$7,593</span></div>
+            <div class="text-xs text-muted">59 active / 81 seats · 626 events · $12.13/event</div>
+            <p class="mt-2 text-xs">Claude family 27 devs · GPT family 20 · default 16. <strong>~22 zero-activity seats</strong> = sunset opportunity ($660–1,320/mo). <span class="tip">?<span class="tt">81 seats − 59 active in 30d = 22 dormant. "AI lines" is Cursor's lifetime counter, not period-filtered (Oleg's 10.9M is months of work, not 30 days).</span></span></p>
           </div>
           <div class="p-3 bg-soft rounded-lg border border-line">
-            <div class="flex items-center justify-between mb-1"><span class="kpi-label">OpenAI</span><span class="pill pill-blue">$3,112</span></div>
-            <div class="text-xs text-muted">7 humans + 1 bot · 57,392 events</div>
+            <div class="flex items-center justify-between mb-1"><span class="kpi-label">OpenAI</span><span class="pill pill-blue">$3,111</span></div>
+            <div class="text-xs text-muted">7 humans + 1 bot · 60,501 events</div>
             <p class="mt-2 text-xs"><strong>370× cost spread</strong>: gpt-4.1-mini $0.001/req → gpt-5.4 $0.37/req. 3 users default to reasoning models on routine work. <span class="tip">?<span class="tt">Per-user OpenAI $ is estimated (their API returns user_id: null). Ranks are correct; absolute $ ±20% per person.</span></span></p>
           </div>
         </div>
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>Anthropic 57.2% · Cursor 29.9% · OpenAI 12.9%.</strong> Inside Anthropic, <strong>Claude Code is 83.4%</strong> ($11,489) — agentic coding is the dominant workflow. OpenAI is concentrated in 3 reasoning-model overusers <span class="tip">?<span class="tt">Cody Griffin $23.11/msg · Matt Klingensmith $23.25/msg · Sam Pfeiffer $17.85/msg. Default o-series for routine questions where gpt-4.1-mini ($0.001/req) would do.</span></span>.</p>
+        <p class="text-navy"><strong>Anthropic 74.6% · Cursor 18.0% · OpenAI 7.4%.</strong> Inside Anthropic, <strong>Claude Code is 82.1%</strong> ($25,810) — agentic coding is the dominant workflow. OpenAI is concentrated in 3 reasoning-model overusers <span class="tip">?<span class="tt">Cody Griffin $23.11/msg · Matt Klingensmith $23.25/msg · Sam Pfeiffer $17.85/msg. Default o-series for routine questions where gpt-4.1-mini ($0.001/req) would do.</span></span>.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> publish a model-routing policy (see §1.7) — default mini for routine queries, reserve o-series and claude-opus for hard work. Saves $1–1.5k/mo on OpenAI alone.</div>
     </div>
@@ -226,17 +225,17 @@
       <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§1.3</span> Spend concentration</h3>
       <div class="det-card p-5 mb-3">
         <div class="space-y-3">
-          <div class="progress-row"><span>Top 5 spenders</span><div class="bar-track"><div class="bar-red" style="width:44.7%"></div></div><span class="mono text-right text-sm">44.7%</span></div>
-          <div class="progress-row"><span>Top 10</span><div class="bar-track"><div class="bar-amber" style="width:63.2%"></div></div><span class="mono text-right text-sm">63.2%</span></div>
-          <div class="progress-row"><span>Top 25</span><div class="bar-track"><div class="bar" style="width:84%"></div></div><span class="mono text-right text-sm">~84%</span></div>
-          <div class="progress-row"><span>≥ $1k/mo (6)</span><div class="bar-track"><div class="bar bar-green" style="width:42%"></div></div><span class="mono text-right text-sm">~42%</span></div>
-          <div class="progress-row"><span>≥ $500/mo (10)</span><div class="bar-track"><div class="bar bar-green" style="width:63%"></div></div><span class="mono text-right text-sm">~63%</span></div>
-          <div class="progress-row"><span>≥ $200/mo (~14)</span><div class="bar-track"><div class="bar bar-green" style="width:74%"></div></div><span class="mono text-right text-sm">~74%</span></div>
+          <div class="progress-row"><span>Top 5 spenders</span><div class="bar-track"><div class="bar-red" style="width:45.1%"></div></div><span class="mono text-right text-sm">45.1%</span></div>
+          <div class="progress-row"><span>Top 10</span><div class="bar-track"><div class="bar-amber" style="width:60.8%"></div></div><span class="mono text-right text-sm">60.8%</span></div>
+          <div class="progress-row"><span>Top 25</span><div class="bar-track"><div class="bar" style="width:80.5%"></div></div><span class="mono text-right text-sm">~80%</span></div>
+          <div class="progress-row"><span>≥ $1k/mo (9)</span><div class="bar-track"><div class="bar bar-green" style="width:59%"></div></div><span class="mono text-right text-sm">~59%</span></div>
+          <div class="progress-row"><span>≥ $500/mo (18)</span><div class="bar-track"><div class="bar bar-green" style="width:67%"></div></div><span class="mono text-right text-sm">~67%</span></div>
+          <div class="progress-row"><span>≥ $200/mo (37)</span><div class="bar-track"><div class="bar bar-green" style="width:80%"></div></div><span class="mono text-right text-sm">~80%</span></div>
         </div>
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Top 5 spenders = <strong>44.7%</strong>. Top 10 = <strong>63.2%</strong>. Top 25 ≈ 84%. Six users spend ≥ $1,000/mo. Budget governance on ~10 people catches the vast majority of any drift.</p>
+        <p class="text-navy">Top 5 spenders = <strong>45.1%</strong>. Top 10 = <strong>60.8%</strong>. Top 25 ≈ 80%. Nine users spend ≥ $1,000/mo. Budget governance on ~10 people catches the vast majority of any drift.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> Slack budget alerts at $500 and $1,000/mo per user.</div>
     </div>
@@ -249,30 +248,30 @@
         <div class="body scroll-x"><table class="dt">
           <thead><tr><th>#</th><th>Name</th><th class="num">Total</th><th class="num">Claude</th><th class="num">GPT</th><th class="num">Cursor</th><th class="num">Events</th><th>Pattern</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td><strong>Oleg Sinavski</strong></td><td class="num">$2,936</td><td class="num">$58</td><td class="num">$0</td><td class="num">$2,878</td><td class="num">108</td><td>Cursor-dominant; 10.9M AI lines lifetime</td></tr>
-            <tr><td>2</td><td><strong>Atindra Nair</strong> (atin)</td><td class="num">$2,340</td><td class="num">$2,339</td><td class="num">$0</td><td class="num">$2</td><td class="num">135</td><td>Claude Code; owns AGENTS.md memory pattern</td></tr>
-            <tr><td>3</td><td><strong>Eugene Lyapustin</strong></td><td class="num">$2,319</td><td class="num">$2,319</td><td class="num">$0</td><td class="num">$0</td><td class="num">108</td><td>Claude Code + 1.6k Git commits — AI-Native</td></tr>
-            <tr><td>4</td><td>Richard</td><td class="num">$1,558</td><td class="num">$1,558</td><td class="num">$0</td><td class="num">$0</td><td class="num">54</td><td>Pure Claude Code, no Git → exec/research</td></tr>
-            <tr><td>5</td><td><strong>Sam Pfeiffer</strong></td><td class="num">$1,289</td><td class="num">$822</td><td class="num">$464</td><td class="num">$3</td><td class="num">134</td><td>Multi-tool · top hmnd_fleet contributor (35% bug rate)</td></tr>
-            <tr><td>6</td><td><strong>Cody Griffin</strong></td><td class="num">$1,240</td><td class="num">$52</td><td class="num">$1,178</td><td class="num">$9</td><td class="num">213</td><td><span class="warn">ChatGPT $23.11/msg</span> — reasoning overuse</td></tr>
-            <tr><td>7</td><td>Andy Park</td><td class="num">$987</td><td class="num">$954</td><td class="num">$3</td><td class="num">$29</td><td class="num">144</td><td>Claude-dominant; light Cursor + OpenAI</td></tr>
-            <tr><td>8</td><td><strong>Matt Klingensmith</strong></td><td class="num">$791</td><td class="num">$0</td><td class="num">$791</td><td class="num">$0</td><td class="num">34</td><td><span class="warn">ChatGPT $23.25/msg</span> · #2 hmnd_fleet</td></tr>
-            <tr><td>9</td><td>Artem (n8n_artem)</td><td class="num">$687</td><td class="num">$146</td><td class="num">$541</td><td class="num">$0</td><td class="num">57,391</td><td>Automation account · validate budget intent</td></tr>
-            <tr><td>10</td><td>Saeid Samadi</td><td class="num">$610</td><td class="num">$0</td><td class="num">$0</td><td class="num">$610</td><td class="num">27</td><td>Cursor power user · balanced Tab+Agent</td></tr>
-            <tr><td>11</td><td>Daksh Dhingra</td><td class="num">$494</td><td class="num">$491</td><td class="num">$0</td><td class="num">$4</td><td class="num">81</td><td>Claude Code-heavy engineer</td></tr>
-            <tr><td>12</td><td>Richard Osterloh</td><td class="num">$433</td><td class="num">$433</td><td class="num">$0</td><td class="num">$0</td><td class="num">135</td><td>Pure Claude Code</td></tr>
-            <tr><td>13</td><td>ber131</td><td class="num">$355</td><td class="num">$355</td><td class="num">$0</td><td class="num">$0</td><td class="num">54</td><td>Pure Claude Code</td></tr>
-            <tr><td>14</td><td>Vaibhav Mehta</td><td class="num">$354</td><td class="num">$0</td><td class="num">$0</td><td class="num">$354</td><td class="num">27</td><td>Cursor only · 444k AI lines</td></tr>
-            <tr><td>15</td><td>cfil</td><td class="num">$344</td><td class="num">$0</td><td class="num">$0</td><td class="num">$344</td><td class="num">27</td><td>Cursor only</td></tr>
-            <tr class="font-bold border-t-2 border-blue"><td></td><td>Top-15 sum</td><td class="num">$16,737</td><td colspan="3"></td><td colspan="2" class="text-muted">71.7% of $23,353</td></tr>
+            <tr><td>1</td><td><strong>Atindra Nair</strong> (atin)</td><td class="num">$5,432</td><td class="num">$5,431</td><td class="num">$0</td><td class="num">$1</td><td class="num">183</td><td>Claude Code; owns AGENTS.md memory pattern</td></tr>
+            <tr><td>2</td><td><strong>Eugene Lyapustin</strong></td><td class="num">$5,378</td><td class="num">$5,378</td><td class="num">$0</td><td class="num">$0</td><td class="num">163</td><td>Claude Code + 1.6k Git commits — AI-Native</td></tr>
+            <tr><td>3</td><td>Richard</td><td class="num">$3,625</td><td class="num">$3,625</td><td class="num">$0</td><td class="num">$0</td><td class="num">120</td><td>Pure Claude Code, no Git → exec/research</td></tr>
+            <tr><td>4</td><td><strong>Sam Pfeiffer</strong></td><td class="num">$2,367</td><td class="num">$1,914</td><td class="num">$453</td><td class="num">$0</td><td class="num">153</td><td>Multi-tool · top hmnd_fleet contributor (35% bug rate)</td></tr>
+            <tr><td>5</td><td><strong>Oleg Sinavski</strong></td><td class="num">$2,229</td><td class="num">$147</td><td class="num">$0</td><td class="num">$2,082</td><td class="num">163</td><td>Cursor-dominant; 10.9M AI lines lifetime</td></tr>
+            <tr><td>6</td><td>Andy Park</td><td class="num">$2,227</td><td class="num">$2,224</td><td class="num">$3</td><td class="num">$1</td><td class="num">168</td><td>Claude-dominant; light Cursor + OpenAI</td></tr>
+            <tr><td>7</td><td><strong>Cody Griffin</strong></td><td class="num">$1,319</td><td class="num">$136</td><td class="num">$1,177</td><td class="num">$7</td><td class="num">219</td><td><span class="warn">ChatGPT $23.11/msg</span> — reasoning overuse</td></tr>
+            <tr><td>8</td><td>Daksh Dhingra</td><td class="num">$1,155</td><td class="num">$1,146</td><td class="num">$0</td><td class="num">$9</td><td class="num">80</td><td>Claude Code-heavy engineer</td></tr>
+            <tr><td>9</td><td>Richard Osterloh</td><td class="num">$1,010</td><td class="num">$1,010</td><td class="num">$0</td><td class="num">$0</td><td class="num">125</td><td>Pure Claude Code</td></tr>
+            <tr><td>10</td><td>Artem (n8n_artem)</td><td class="num">$904</td><td class="num">$344</td><td class="num">$560</td><td class="num">$0</td><td class="num">60,127</td><td>Automation account · validate budget intent</td></tr>
+            <tr><td>11</td><td><strong>Matt Klingensmith</strong></td><td class="num">~$790</td><td class="num">$0</td><td class="num">~$790</td><td class="num">$0</td><td class="num">~40</td><td><span class="warn">ChatGPT $23.25/msg</span> · #2 hmnd_fleet</td></tr>
+            <tr><td>12</td><td>Saeid Samadi</td><td class="num">~$610</td><td class="num">$0</td><td class="num">$0</td><td class="num">~$610</td><td class="num">~30</td><td>Cursor power user · balanced Tab+Agent</td></tr>
+            <tr><td>13</td><td>ber131</td><td class="num">~$510</td><td class="num">~$510</td><td class="num">$0</td><td class="num">$0</td><td class="num">~60</td><td>Pure Claude Code</td></tr>
+            <tr><td>14</td><td>Vaibhav Mehta</td><td class="num">~$430</td><td class="num">$0</td><td class="num">$0</td><td class="num">~$430</td><td class="num">~30</td><td>Cursor only · 444k AI lines</td></tr>
+            <tr><td>15</td><td>cfil</td><td class="num">~$420</td><td class="num">$0</td><td class="num">$0</td><td class="num">~$420</td><td class="num">~30</td><td>Cursor only</td></tr>
+            <tr class="font-bold border-t-2 border-blue"><td></td><td>Top-15 sum</td><td class="num">~$28,400</td><td colspan="3"></td><td colspan="2" class="text-muted">67.4% of $42,149</td></tr>
           </tbody>
         </table></div>
       </details>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Top 5 = $10,443 (Oleg, Atindra, Eugene, Richard, Sam). Top 15 = $16,737 = <strong>71.7% of all spend</strong>. Two patterns: (a) AI-first engineers who also ship Git (Eugene, Oleg, Sam) — these are the champions; (b) Pure Claude Code with no Git output (Richard, atin's Claude side) — likely execs/research, validate intent.</p>
+        <p class="text-navy">Top 5 = $19,031 (Atindra, Eugene, Richard, Sam, Oleg). Top 15 ≈ $28,400 = <strong>67.4% of all spend</strong>. Two patterns: (a) AI-first engineers who also ship Git (Eugene, Oleg, Sam) — these are the champions; (b) Pure Claude Code with no Git output (Richard, atin's Claude side) — likely execs/research, validate intent.</p>
       </div>
-      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> interview the top 5 champions (Eugene, Oleg, Atin, Andy, Sam), publish their workflows as a 1-page team playbook within 30 days.</div>
+      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> interview the top 5 champions (Atindra, Eugene, Oleg, Andy, Sam), publish their workflows as a 1-page team playbook within 30 days.</div>
     </div>
 
     <!-- §1.5 CHAMPION MATRIX ───────────────────────────────────── -->
@@ -285,29 +284,29 @@
         <div class="qaxis" style="grid-row:2; grid-column:1; writing-mode:vertical-rl; transform:rotate(180deg); padding:1rem .5rem">HIGH AI spend</div>
 
         <div class="qcell qhilo" style="grid-row:2; grid-column:2">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q2">Q2 · Workflow review</span><span class="text-xs text-muted">7 people</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q2">Q2 · Workflow review</span><span class="text-xs text-muted">7 engineers</span></div>
           <div class="text-xs text-muted mb-2">High AI bill, near-zero Git commits. Validate one by one.</div>
           <ul class="text-sm space-y-1 text-navy">
-            <li>• <strong>Richard</strong> — $1,558 Claude, 0 commits</li>
-            <li>• <strong>Cody Griffin</strong> — $1,240, $23/msg ChatGPT</li>
-            <li>• <strong>Matt Klingensmith</strong> — $791, $23/msg ChatGPT</li>
+            <li>• <strong>Richard</strong> — $3,625 Claude, 0 commits</li>
+            <li>• <strong>Cody Griffin</strong> — $1,319, $23/msg ChatGPT</li>
+            <li>• <strong>Matt Klingensmith</strong> — ~$790, $23/msg ChatGPT</li>
             <li>• <strong>Andy Park</strong>, <strong>ber131</strong>, <strong>Richard Osterloh</strong> — pure Claude</li>
             <li>• <strong>Atindra Nair</strong> — trending → Q1</li>
           </ul>
-          <div class="mt-2 text-xs text-amber-700 font-semibold">Action: 15-min calls × 7 → $1–1.5k/mo saving.</div>
+          <div class="mt-2 text-xs text-amber-700 font-semibold">Action: 15-min calls × 7 → $2–3k/mo saving.</div>
         </div>
 
         <div class="qcell qhihi" style="grid-row:2; grid-column:3">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q1">Q1 · Champions</span><span class="text-xs text-green-700 font-semibold">21 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q1">Q1 · Champions</span><span class="text-xs text-green-700 font-semibold">19 engineers</span></div>
           <div class="text-xs text-muted mb-2">AI-Native profile: HIGH AI spend AND HIGH Git output. Document and scale.</div>
           <ul class="text-sm space-y-1 text-navy">
-            <li>• <strong>Eugene Lyapustin</strong> — $2,319 + 1.6k commits (cleanest)</li>
-            <li>• <strong>Oleg Sinavski</strong> — $2,936 + 70 commits/90d</li>
+            <li>• <strong>Eugene Lyapustin</strong> — $5,378 + 1.6k commits (cleanest)</li>
+            <li>• <strong>Oleg Sinavski</strong> — $2,229 + 70 commits/90d</li>
             <li>• <strong>Sam Pfeiffer</strong> — multi-tool · 73 commits/90d</li>
             <li>• <strong>Karim Shaban</strong> — lifetime #1 contributor</li>
             <li>• <strong>Atindra Nair</strong> — 44 commits/90d + AGENTS.md owner</li>
             <li>• Daksh · Andy · Saeid · Brian — same profile</li>
-            <li>• Plus ~12 more (+6 surfaced post identity-merge)</li>
+            <li>• Plus ~10 more (+6 surfaced post identity-merge)</li>
           </ul>
           <div class="mt-2 text-xs text-green-700 font-semibold">Action: interview top 5 → publish playbook.</div>
         </div>
@@ -315,10 +314,10 @@
         <div class="qaxis" style="grid-row:3; grid-column:1; writing-mode:vertical-rl; transform:rotate(180deg); padding:1rem .5rem">LOW AI spend</div>
 
         <div class="qcell qlolo" style="grid-row:3; grid-column:2">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q4">Q4 · Mainstream</span><span class="text-xs text-muted">43 people</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q4">Q4 · Mainstream</span><span class="text-xs text-muted">43 engineers</span></div>
           <div class="text-xs text-muted mb-2">Healthy mid-AI mid-output cohort.</div>
           <ul class="text-sm space-y-1 text-navy">
-            <li>• Mid-spend engineers ($20–200/mo)</li>
+            <li>• Mid-spend engineers ($25–200/mo)</li>
             <li>• Proportionate Git output</li>
             <li>• Pulled along by the playbook</li>
           </ul>
@@ -326,7 +325,7 @@
         </div>
 
         <div class="qcell qlohi" style="grid-row:3; grid-column:3">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q3">Q3 · Hidden potential</span><span class="text-xs text-blue font-semibold">42 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q3">Q3 · Hidden potential</span><span class="text-xs text-blue font-semibold">42 engineers</span></div>
           <div class="text-xs text-muted mb-2">Productive engineers <strong>not yet on AI tools</strong>. Largest upside.</div>
           <ul class="text-sm space-y-1 text-navy">
             <li>• <strong>Anubhav Dogra</strong> — 62 commits hmnd_robot/90d, no AI</li>
@@ -341,7 +340,7 @@
 
       <div class="conclusion mt-3 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Four named cohorts. <strong>Q1 (21 engineers)</strong> are the champions — scale their workflow. <strong>Q2 (7 people)</strong> burn AI dollars without Git output — validate intent and coach. <strong>Q3 (42 engineers)</strong> ship Git but ignore AI — the largest untapped opportunity. <strong>Q4 (43)</strong> are mainstream, no intervention needed.</p>
+        <p class="text-navy">Four named cohorts. <strong>Q1 (19 engineers)</strong> are the champions — scale their workflow. <strong>Q2 (7 engineers)</strong> burn AI dollars without Git output — validate intent and coach. <strong>Q3 (42 engineers)</strong> ship Git but ignore AI — the largest untapped opportunity. <strong>Q4 (43 engineers)</strong> are mainstream, no intervention needed.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> three actions in priority order — (1) interview Q1 top-5 and publish playbook; (2) provide seats + pair coaching for Q3 (largest upside); (3) coaching calls × Q2 for routing fixes.</div>
     </div>
@@ -358,14 +357,12 @@
             <tr><td><strong>Cody Griffin</strong></td><td>$23.11/msg ChatGPT × 51 msgs</td><td>o-series default</td><td>15-min coaching call</td></tr>
             <tr><td><strong>Matt Klingensmith</strong></td><td>$23.25/msg ChatGPT × 34 msgs</td><td>Same pattern</td><td>15-min coaching call</td></tr>
             <tr><td><strong>Sam Pfeiffer</strong></td><td>$17.85/msg ChatGPT × 26</td><td>Possibly legit hard tasks</td><td>Confirm intent</td></tr>
-            <tr><td><strong>Artem (n8n_artem)</strong></td><td>57,250 events · $0.01/msg</td><td>n8n cron automation</td><td>Confirm intentional + on budget</td></tr>
-            <tr><td>6 display-name dupes</td><td>'Yoo-Jin Jung', 'Sergei', 'Matt', 'George', 'Dmitry'×2, 'Artem'</td><td>Pre-merge artefact</td><td>Audit + merge if confirmed</td></tr>
           </tbody>
         </table></div>
       </details>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy">Six anomalies worth confirming this week. Three reasoning-model overusers ($17–23/msg) are the highest-leverage coaching targets. One AI-lines outlier (Amir Torabi: 244k lines on 1 commit) likely pollutes the leaderboard. The n8n_artem automation account should be confirmed intentional.</p>
+        <p class="text-navy">Four anomalies worth confirming this week. Three reasoning-model overusers ($17–23/msg) are the highest-leverage coaching targets. One AI-lines outlier (Amir Torabi: 244k lines on 1 commit) likely pollutes the leaderboard.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> 4 short calls + 1 display-name audit this week. Resolves all 6 anomalies and removes them from future reports.</div>
     </div>
@@ -383,9 +380,9 @@
               <tbody>
                 <tr><td>ChatGPT routing → mini default</td><td class="num text-green-700">$1.0–1.5k</td><td>1 day</td></tr>
                 <tr><td>Cap reasoning for top-3 outliers</td><td class="num text-green-700">$0.5–1.0k</td><td>1 wk coaching</td></tr>
-                <tr><td>Sunset 18 dormant Cursor seats</td><td class="num text-green-700">$540–1,080</td><td>trivial</td></tr>
-                <tr><td>Synthesis → cheaper Claude tier</td><td class="num text-green-700">$1.5–2.5k</td><td>2 weeks</td></tr>
-                <tr class="font-bold border-t-2 border-blue"><td>NEAR-TERM TOTAL</td><td class="num text-green-700">$1–2k/mo</td><td>low effort</td></tr>
+                <tr><td>Sunset 22 dormant Cursor seats</td><td class="num text-green-700">$660–1,320</td><td>trivial</td></tr>
+                <tr><td>Claude Code routing → sonnet default</td><td class="num text-green-700">$3.0–5.0k</td><td>2 weeks</td></tr>
+                <tr class="font-bold border-t-2 border-blue"><td>NEAR-TERM TOTAL</td><td class="num text-green-700">$2–4k/mo</td><td>low effort</td></tr>
               </tbody>
             </table>
           </div>
@@ -409,7 +406,7 @@
       </details>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>$1–2k/mo realistic opportunity</strong> <span class="tip">?<span class="tt">Achievable lower bound of the four levers combined. Larger savings (synthesis routing, full sunset of dormant seats) require longer effort and are excluded from this conservative figure.</span></span>. Two near-term levers: ChatGPT routing → mini default and reasoning cap for top-3 outliers.</p>
+        <p class="text-navy"><strong>$2–4k/mo realistic opportunity</strong> <span class="tip">?<span class="tt">Achievable lower bound of the four levers combined. Larger savings (Claude routing, full sunset of dormant seats) require longer effort and are excluded from this conservative figure.</span></span>. Two near-term levers: ChatGPT routing → mini default and reasoning cap for top-3 outliers.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> ship the routing policy as a #engineering announcement + AGENTS.md update in week 1. Sunset Cursor seats after confirming with each holder. Coach the 3 reasoning overusers.</div>
     </div>
@@ -422,8 +419,8 @@
         <div class="grid md:grid-cols-2 gap-3 text-sm">
           <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">1. Connect Jira</strong><p class="text-white/70 mt-1">The missing data source. Closes the loop on ROI ($/closed-Jira) and ties AI spend to real production outcomes — bugs caught, tickets shipped, incidents avoided.</p></div>
           <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">2. Policy &amp; budget alerts</strong><p class="text-white/70 mt-1">Publish the model-routing policy (default mini for routine; reserve o-series and claude-opus for hard work) and turn on Slack pings at $500 / $1,000 per user.</p></div>
-          <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">3. Fix anomalies</strong><p class="text-white/70 mt-1">3 coaching calls with the reasoning-model overusers (Cody, Matt, Sam) + 1 display-name dupe audit. Resolves all 6 anomalies within a week.</p></div>
-          <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">4. Interview champions → AI-Native playbooks</strong><p class="text-white/70 mt-1">Record Eugene, Oleg, Atindra, Andy, Sam. Publish one-page workflow doc per champion + roll their patterns into the L1–L8 AI-Native training programme.</p></div>
+          <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">3. Fix anomalies</strong><p class="text-white/70 mt-1">3 coaching calls with the reasoning-model overusers (Cody, Matt, Sam).</p></div>
+          <div class="bg-white/5 border border-white/10 rounded-xl p-4"><strong class="text-blue">4. Interview champions → AI-Native playbooks</strong><p class="text-white/70 mt-1">Record Atindra, Eugene, Oleg, Andy, Sam. Publish one-page workflow doc per champion + roll their patterns into the L1–L8 AI-Native training programme.</p></div>
         </div>
       </div>
     </div>
@@ -453,14 +450,14 @@
         <div class="det-card p-5 border-t-4 border-t-red-500">
           <div class="flex items-baseline justify-between"><h4 class="text-lg font-bold text-navy">hmnd-cloud</h4><span class="pill pill-warn">NEEDS WORK</span></div>
           <div class="kpi-num-lg mt-2 text-amber-600">2.0 / 5</div>
-          <div class="text-xs text-muted mt-1">Terraform IaC · 124 .tf files <span class="tip">?<span class="tt">0 tests of any kind · No AGENTS.md / CLAUDE.md · No CODEOWNERS. matakan + Daniel = 80% of 90d commits. Has .tflint.hcl + .secrets.baseline but not enforced.</span></span></div>
+          <div class="text-xs text-muted mt-1">Terraform IaC · 124 .tf files <span class="tip">?<span class="tt">0 tests of any kind · No AGENTS.md / CLAUDE.md · No CODEOWNERS. matakan + Daniel = 80% of 90d commits.</span></span></div>
         </div>
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
         <p class="text-navy"><strong>hmnd 4.0/5</strong> — continue AI assist on 13 healthy modules, gate AI-PRs to <code>hmnd_wholebody</code> and <code>hmnd_firmware</code> behind a test floor. <strong>hmnd-cloud 2.0/5</strong> — bring the repo into shape: add specs, tests, and the standard AI guardrails (AGENTS.md, CODEOWNERS, PR-validation) before scaling AI assist there.</p>
       </div>
-      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> for <strong>hmnd-cloud</strong> cover the basics — AGENTS.md (Terraform-specific dos/don'ts), CODEOWNERS per <code>domains/*/</code>, PR-validation workflow (<code>terraform validate</code> + <code>tflint</code> + <code>tfsec</code> + <code>checkov</code>), and a minimum test scaffold. For <strong>hmnd</strong> mandate a test floor on <code>hmnd_wholebody</code> and <code>hmnd_firmware</code> before accepting AI-generated PRs in those two modules.</div>
+      <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> for <strong>hmnd-cloud</strong> cover the basics — AGENTS.md, CODEOWNERS per <code>domains/*/</code>, PR-validation workflow, and a minimum test scaffold. For <strong>hmnd</strong> mandate a test floor on <code>hmnd_wholebody</code> and <code>hmnd_firmware</code> before accepting AI-generated PRs in those two modules.</div>
     </div>
 
     <!-- §2.2 PER-MODULE BUG RATE -->
@@ -472,7 +469,7 @@
           <span><span class="legend-dot" style="background:#d97706"></span>20–30% above avg</span>
           <span><span class="legend-dot" style="background:#4953d8"></span>10–20% typical</span>
           <span><span class="legend-dot" style="background:#16a34a"></span>&lt; 10% clean</span>
-          <span class="ml-auto">repo avg: <strong>~17%</strong></span>
+          <span class="ml-auto">repo avg: <strong>~22%</strong></span>
         </div>
         <div class="space-y-2">
           <div class="progress-row"><span><strong>hmnd_fleet</strong> ⚠</span><div class="bar-track"><div class="bar-red" style="width:100%"></div></div><span class="mono text-right text-red-700 text-sm">35.3%</span></div>
@@ -493,7 +490,7 @@
       </div>
       <div class="conclusion mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>hmnd_fleet at 35.3%</strong> <span class="tip">?<span class="tt">~2× the repo average (~17%). The fleet outlier matters most because its top-2 contributors are also the top OpenAI reasoning-model overusers — the strongest spend↔quality correlation in the audit (see §2.5).</span></span>. <strong>hmnd_update 28.6%</strong> and <strong>hmnd_firmware 26.7%</strong> follow.</p>
+        <p class="text-navy"><strong>hmnd_fleet at 35.3%</strong> <span class="tip">?<span class="tt">~1.6× the repo average (~22%). The fleet outlier matters most because its top-2 contributors are also the top OpenAI reasoning-model overusers — the strongest spend↔quality correlation in the audit (see §2.5).</span></span>. <strong>hmnd_update 28.6%</strong> and <strong>hmnd_firmware 26.7%</strong> follow.</p>
       </div>
       <div class="rec-box text-sm"><strong class="text-blue">Recommendation:</strong> sample the last 10 bug-fix commits in hmnd_fleet (Priority Action #16). One audit answers whether to (a) accept it's intrinsically buggy or (b) tighten guardrails on reasoning-heavy fleet PRs.</div>
     </div>
@@ -504,13 +501,13 @@
         <h3 class="text-lg font-bold text-navy mb-3"><span class="section-num">§2.3</span> Bot vs human bug-fix rate</h3>
         <div class="det-card p-5 mb-3">
           <div class="space-y-4">
-            <div><div class="flex justify-between text-sm mb-1"><span>Bots / agents (13)</span><span class="mono text-amber-700 font-bold">24.8%</span></div><div class="bar-track"><div class="bar-amber" style="width:24.8%"></div></div></div>
-            <div><div class="flex justify-between text-sm mb-1"><span>Humans (213)</span><span class="mono text-green-700 font-bold">18.8%</span></div><div class="bar-track"><div class="bar bar-green" style="width:18.8%"></div></div></div>
+            <div><div class="flex justify-between text-sm mb-1"><span>Bots / agents (13)</span><span class="mono text-amber-700 font-bold">26.8%</span></div><div class="bar-track"><div class="bar-amber" style="width:26.8%"></div></div></div>
+            <div><div class="flex justify-between text-sm mb-1"><span>Humans (193)</span><span class="mono text-green-700 font-bold">22.0%</span></div><div class="bar-track"><div class="bar bar-green" style="width:22.0%"></div></div></div>
           </div>
         </div>
         <div class="conclusion">
           <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-          <p class="text-navy text-sm">Bots ship at <strong>24.8%</strong> bug-fix rate vs humans <strong>18.8%</strong> — a 6 pp gap. Hypothesis (not proven): AI agents ship code they later fix.</p>
+          <p class="text-navy text-sm">Bots ship at <strong>26.8%</strong> bug-fix rate vs humans <strong>22.0%</strong> — a 5 pp gap. Hypothesis (not proven): AI agents ship code they later fix.</p>
         </div>
       </div>
       <div>
@@ -545,14 +542,14 @@
         <div class="body scroll-x"><table class="dt">
           <thead><tr><th>Top spender</th><th class="num">AI $/30d</th><th>Top tool</th><th>Main hmnd module</th><th class="num">Module bug rate</th><th class="num">Bus factor</th><th>Action</th></tr></thead>
           <tbody>
-            <tr style="background:rgba(220,38,38,.05)"><td><strong>Sam Pfeiffer</strong></td><td class="num">$1,289</td><td>Claude + <span class="warn">o-series $17/msg</span></td><td>hmnd_fleet (33% commits)</td><td class="num text-red-700 font-bold">35.3%</td><td class="num">2 (Sam + Matt)</td><td>10-PR audit of fleet bug-fixes</td></tr>
-            <tr style="background:rgba(220,38,38,.05)"><td><strong>Matt Klingensmith</strong></td><td class="num">$791</td><td><span class="warn">o-series $23/msg</span></td><td>hmnd_fleet (26 commits)</td><td class="num text-red-700 font-bold">35.3%</td><td class="num">2 (Sam + Matt)</td><td>Coaching + same audit</td></tr>
-            <tr style="background:rgba(217,119,6,.05)"><td><strong>Cody Griffin</strong></td><td class="num">$1,240</td><td><span class="warn">o-series $23/msg</span></td><td>hmnd_services (100%) + hmnd_infra (80%)</td><td class="num">16.7% / 18.2%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Bus-factor cross-train + coaching</td></tr>
-            <tr style="background:rgba(217,119,6,.05)"><td><strong>Atindra Nair</strong></td><td class="num">$2,340</td><td>Claude Code</td><td>hmnd_agents (100%) · hmnd_flywheel (30)</td><td class="num">16.7%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Document AGENTS.md pattern · cross-train</td></tr>
-            <tr style="background:rgba(217,119,6,.05)"><td><strong>Tobias Jacob</strong></td><td class="num">$134</td><td>ChatGPT</td><td>hmnd_update (83%)</td><td class="num text-amber-700">28.6%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Cross-train backup contributor</td></tr>
-            <tr style="background:rgba(22,163,74,.05)"><td><strong>Oleg Sinavski</strong></td><td class="num">$2,936</td><td>Cursor (10.9M lines)</td><td>hmnd_training (42 commits)</td><td class="num text-green-700">16.3%</td><td class="num">5+</td><td>Healthy — document workflow</td></tr>
-            <tr style="background:rgba(22,163,74,.05)"><td><strong>Eugene Lyapustin</strong></td><td class="num">$2,319</td><td>Claude Code</td><td>cross-module (1.6k lifetime commits)</td><td class="num text-green-700">~17%</td><td class="num">healthy</td><td>Champion — interview &amp; publish</td></tr>
-            <tr style="background:rgba(22,163,74,.05)"><td><strong>Karim Shaban</strong></td><td class="num">$706 lt</td><td>Cursor</td><td>hmnd_robot (44 commits/90d)</td><td class="num text-green-700">22.6%</td><td class="num">broad</td><td>Recognise + retain</td></tr>
+            <tr style="background:rgba(220,38,38,.05)"><td><strong>Sam Pfeiffer</strong></td><td class="num">$2,367</td><td>Claude + <span class="warn">o-series $17/msg</span></td><td>hmnd_fleet (33% commits)</td><td class="num text-red-700 font-bold">35.3%</td><td class="num">2 (Sam + Matt)</td><td>10-PR audit of fleet bug-fixes</td></tr>
+            <tr style="background:rgba(220,38,38,.05)"><td><strong>Matt Klingensmith</strong></td><td class="num">~$790</td><td><span class="warn">o-series $23/msg</span></td><td>hmnd_fleet (26 commits)</td><td class="num text-red-700 font-bold">35.3%</td><td class="num">2 (Sam + Matt)</td><td>Coaching + same audit</td></tr>
+            <tr style="background:rgba(217,119,6,.05)"><td><strong>Cody Griffin</strong></td><td class="num">$1,319</td><td><span class="warn">o-series $23/msg</span></td><td>hmnd_services (100%) + hmnd_infra (80%)</td><td class="num">16.7% / 18.2%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Bus-factor cross-train + coaching</td></tr>
+            <tr style="background:rgba(217,119,6,.05)"><td><strong>Atindra Nair</strong></td><td class="num">$5,432</td><td>Claude Code</td><td>hmnd_agents (100%) · hmnd_flywheel (30)</td><td class="num">16.7%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Document AGENTS.md pattern · cross-train</td></tr>
+            <tr style="background:rgba(217,119,6,.05)"><td><strong>Tobias Jacob</strong></td><td class="num">~$140</td><td>ChatGPT</td><td>hmnd_update (83%)</td><td class="num text-amber-700">28.6%</td><td class="num text-red-700 font-bold">1 ⚠</td><td>Cross-train backup contributor</td></tr>
+            <tr style="background:rgba(22,163,74,.05)"><td><strong>Oleg Sinavski</strong></td><td class="num">$2,229</td><td>Cursor (10.9M lines)</td><td>hmnd_training (42 commits)</td><td class="num text-green-700">16.3%</td><td class="num">5+</td><td>Healthy — document workflow</td></tr>
+            <tr style="background:rgba(22,163,74,.05)"><td><strong>Eugene Lyapustin</strong></td><td class="num">$5,378</td><td>Claude Code</td><td>cross-module (1.6k lifetime commits)</td><td class="num text-green-700">~17%</td><td class="num">healthy</td><td>Champion — interview &amp; publish</td></tr>
+            <tr style="background:rgba(22,163,74,.05)"><td><strong>Karim Shaban</strong></td><td class="num">~$700 lt</td><td>Cursor</td><td>hmnd_robot (44 commits/90d)</td><td class="num text-green-700">22.6%</td><td class="num">broad</td><td>Recognise + retain</td></tr>
           </tbody>
         </table></div>
       </details>
@@ -610,33 +607,7 @@
           <tr style="background:rgba(217,119,6,.05)"><td><strong>hmnd_update</strong></td><td class="num">3,270</td><td class="num">0</td><td class="num">7</td><td class="cross">✗</td><td class="check">✓</td><td class="num">7</td><td class="num">28.6%</td><td><strong>Tobias (83%)</strong></td></tr>
           <tr style="background:rgba(217,119,6,.05)"><td><strong>hmnd_agents</strong></td><td class="num">2,326</td><td class="num">0</td><td class="num text-red-700">2</td><td class="check">✓</td><td class="cross">✗</td><td class="num">6</td><td class="num">16.7%</td><td><strong>Atindra (100%)</strong></td></tr>
           <tr style="background:rgba(220,38,38,.05)"><td><strong>hmnd_firmware</strong></td><td class="num">233</td><td class="num">495</td><td class="num text-red-700"><strong>0 ⚠</strong></td><td class="check">✓</td><td class="cross">✗</td><td class="num">15</td><td class="num">26.7%</td><td>ntan-humanoid (36%)</td></tr>
-          <tr class="font-bold border-t-2 border-blue"><td>TOTAL</td><td class="num">~969k</td><td class="num">~2,269</td><td class="num">864</td><td>5/14</td><td>10/14</td><td class="num">1,450</td><td class="num">~17%</td><td>87 lifetime contributors</td></tr>
-        </tbody>
-      </table></div>
-    </details>
-
-    <!-- §2.10 — 16 PRIORITY ACTIONS (collapsed) -->
-    <details class="det-card mb-8">
-      <summary><span class="font-semibold text-navy"><span class="section-num">§2.8</span> 16 priority actions — full list, sequenced</span><span class="chev text-muted">▶</span></summary>
-      <div class="body scroll-x"><table class="dt">
-        <thead><tr><th>#</th><th>Horizon</th><th>Action</th><th>Repo</th><th>Owner</th><th>Effort</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td><span class="pill pill-bad">Now</span></td><td>Add CODEOWNERS to hmnd-cloud</td><td>hmnd-cloud</td><td>matakan</td><td>2 h</td></tr>
-          <tr><td>2</td><td><span class="pill pill-bad">Now</span></td><td>AGENTS.md for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + Eugene</td><td>1 day</td></tr>
-          <tr><td>3</td><td><span class="pill pill-bad">Now</span></td><td>READMEs for 4 missing hmnd modules</td><td>hmnd</td><td>module owners</td><td>2 h</td></tr>
-          <tr><td>4</td><td><span class="pill pill-warn">30d</span></td><td>PR-validation workflow for hmnd-cloud</td><td>hmnd-cloud</td><td>matakan + AI lead</td><td>3 days</td></tr>
-          <tr><td>5</td><td><span class="pill pill-warn">30d</span></td><td>Per-domain READMEs in hmnd-cloud</td><td>hmnd-cloud</td><td>IaC team</td><td>3 days</td></tr>
-          <tr><td>6</td><td><span class="pill pill-warn">30d</span></td><td>Per-module AGENTS.md (fleet/flywheel/wholebody/services)</td><td>hmnd</td><td>module owners</td><td>1 week</td></tr>
-          <tr><td>7</td><td><span class="pill pill-warn">30d</span></td><td>Test-floor enforcement (wholebody &amp; firmware)</td><td>hmnd</td><td>module owners</td><td>2 weeks</td></tr>
-          <tr><td>8</td><td><span class="pill pill-warn">30d</span></td><td>First 5 ADRs each repo</td><td>both</td><td>tech leads</td><td>1 week</td></tr>
-          <tr><td>9</td><td><span class="pill pill-warn">30d</span></td><td>Identity merge for hmnd-cloud contributors</td><td>hmnd-cloud</td><td>Data infra</td><td>1 day</td></tr>
-          <tr><td>10</td><td><span class="pill pill-warn">30d</span></td><td>AI-assist PR checkbox in templates</td><td>both</td><td>Eng Manager</td><td>1 h</td></tr>
-          <tr><td>11</td><td><span class="pill pill-blue">60–90d</span></td><td>Prompt-regression eval framework</td><td>both</td><td>AI lead</td><td>2 weeks</td></tr>
-          <tr><td>12</td><td><span class="pill pill-blue">60–90d</span></td><td>terratest for high-blast-radius modules</td><td>hmnd-cloud</td><td>IaC team</td><td>2 weeks</td></tr>
-          <tr><td>13</td><td><span class="pill pill-blue">60–90d</span></td><td>Audit policy for 21+-file commits</td><td>hmnd</td><td>Eng Manager</td><td>1 day</td></tr>
-          <tr><td>14</td><td><span class="pill pill-blue">60–90d</span></td><td>hmnd_firmware unit-test scaffold</td><td>hmnd</td><td>firmware team</td><td>1 week</td></tr>
-          <tr><td>15</td><td><span class="pill pill-blue">60–90d</span></td><td>10-PR qualitative audit of hmnd_fleet bug-fixes</td><td>hmnd</td><td>AI lead</td><td>2 days</td></tr>
-          <tr><td>16</td><td><span class="pill pill-blue">60–90d</span></td><td>Cross-train 4 single-person modules</td><td>hmnd</td><td>Eng Manager</td><td>30d elapsed</td></tr>
+          <tr class="font-bold border-t-2 border-blue"><td>TOTAL</td><td class="num">~969k</td><td class="num">~2,269</td><td class="num">864</td><td>5/14</td><td>10/14</td><td class="num">12,100</td><td class="num">~22%</td><td>193 lifetime contributors</td></tr>
         </tbody>
       </table></div>
     </details>
@@ -665,7 +636,7 @@
     <div class="mb-10 border-l-4 border-blue pl-4">
       <span class="text-xs font-bold text-blue uppercase tracking-widest">Part 3</span>
       <h2 class="text-3xl sm:text-4xl font-bold text-navy mt-1">90-Day Roadmap</h2>
-      <p class="text-muted mt-2 max-w-3xl">Week 1 sets up Jira + ROI measurement. Months 1–3 repeat a 4-week cycle: <strong>Spec → Test &amp; Dev → Refactor → Environment &amp; Monitoring</strong>. A parallel tool track runs throughout.</p>
+      <p class="text-muted mt-2 max-w-3xl">Week 1 sets up Jira + ROI measurement. Then 4-week cycle: <strong>Spec → Test &amp; Dev → Refactor → Monitoring</strong>. Then 2 month corporate training program. </p>
     </div>
 
     <!-- WEEK 1 -->
@@ -739,9 +710,9 @@
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
         <div class="gantt-row" style="min-width:920px">
-          <div class="lbl">W5 · Env &amp; Monitor<small>CI · dashboards · analytics</small></div>
+          <div class="lbl">W5 · Monitor<small>CI · dashboards · analytics</small></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
-          <div class="gantt-cell gc-navy">ENV+MON</div>
+          <div class="gantt-cell gc-navy">MON</div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
           <div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div><div class="gantt-cell"></div>
         </div>
@@ -768,7 +739,7 @@
 
       <!-- Legend -->
       <div class="flex flex-wrap gap-3 mt-4 text-xs text-muted">
-        <span class="flex items-center gap-1.5"><span class="gantt-cell gc-navy" style="width:22px;height:14px"></span>Setup / Env &amp; Monitor</span>
+        <span class="flex items-center gap-1.5"><span class="gantt-cell gc-navy" style="width:22px;height:14px"></span>Setup / Monitor</span>
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-blue" style="width:22px;height:14px"></span>Spec</span>
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-green" style="width:22px;height:14px"></span>Test &amp; Dev</span>
         <span class="flex items-center gap-1.5"><span class="gantt-cell gc-amber" style="width:22px;height:14px"></span>Refactor</span>
@@ -776,7 +747,7 @@
       </div>
       <div class="conclusion mt-4 mb-3">
         <div class="text-xs font-bold text-blue uppercase tracking-widest mb-2">Conclusion</div>
-        <p class="text-navy"><strong>W1</strong> is dedicated to connecting Jira — the data source that unlocks ROI measurement. <strong>W2–W5</strong> run a single 4-week <em>Environment Rollout</em> cycle (Spec → Test &amp; Dev → Refactor → Env &amp; Monitor). <strong>W6–W13</strong> are the <em>Education</em> stream — 8 weekly lectures L1–L8.</p>
+        <p class="text-navy"><strong>W1</strong> is dedicated to connecting Jira — the data source that unlocks ROI measurement. <strong>W2–W5</strong> run a single 4-week <em>Environment Rollout</em> cycle (Spec → Test &amp; Dev → Refactor → Monitor). <strong>W6–W13</strong> are the <em>Education</em> stream — 8 weekly lectures L1–L8.</p>
       </div>
     </div>
 
@@ -818,7 +789,7 @@
           </ul>
         </div>
         <div class="det-card p-5 border-t-4 border-t-navy">
-          <div class="text-xs font-bold text-navy uppercase tracking-widest">Week 5 · Env &amp; Monitor</div>
+          <div class="text-xs font-bold text-navy uppercase tracking-widest">Week 5 · Monitor</div>
           <h4 class="font-bold text-navy mt-1">Environment &amp; analytics</h4>
           <ul class="mt-3 text-xs space-y-1.5 text-muted">
             <li>• CI workflow updates</li>
@@ -937,6 +908,20 @@
 
 <script>
   lucide.createIcons();
+  // Tap-to-open tooltips for touch devices (CSS-only :hover doesn't trigger on tap).
+  (function(){
+    document.querySelectorAll('.tip').forEach(tip => {
+      tip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = tip.classList.contains('tip-open');
+        document.querySelectorAll('.tip.tip-open').forEach(t => t.classList.remove('tip-open'));
+        if (!wasOpen) tip.classList.add('tip-open');
+      });
+    });
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.tip.tip-open').forEach(t => t.classList.remove('tip-open'));
+    });
+  })();
   (function(){
     const links = document.querySelectorAll('nav a.nav-link');
     const map = {};
