@@ -107,7 +107,7 @@ def audit_topline_30d() -> None:
     _check("OpenAI users",                  7,        oai_u,           tol_pct=20)
     _check("OpenAI events",                 60501,    oai_c,           tol_pct=5)
     _check("Cursor spend ($)",              7593.00,  cur_s,           tol_pct=2)
-    _check("Cursor users",                  81,       cur_u,           tol_pct=10)
+    _check("Cursor users (30d active)",     59,       cur_u,           tol_pct=10)
 
     # Tool mix percentages
     sum_v = anth_s + oai_s + cur_s or 1
@@ -166,10 +166,10 @@ def audit_concentration() -> None:
 
     _check("Top-5 share (%)",   45.1, round(top5  / total * 100, 1), tol_pct=3)
     _check("Top-10 share (%)",  60.8, round(top10 / total * 100, 1), tol_pct=3)
-    _check("Top-25 share (%)",  84.0, round(top25 / total * 100, 1), tol_pct=4)
+    _check("Top-25 share (%)",  80.0, round(top25 / total * 100, 1), tol_pct=4)
     _check("Top-10 combined ($)", 25646, top10, tol_pct=3)
     _check("Users ≥ $1k/mo",    9,  n_1k,  tol_pct=15)
-    _check("Users ≥ $500/mo",   14, n_500, tol_pct=30)
+    _check("Users ≥ $500/mo",   18, n_500, tol_pct=10)
     _check("Users ≥ $200/mo (High spenders)", 37, n_200, tol_pct=15)
 
 
