@@ -284,7 +284,7 @@ with tab_overview:
             </div>
         """
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3 = st.columns(3, gap="medium")
     with c1:
         st.markdown(_tool_card(
             "#6366f1", "Claude", fmt_money(claude_v),
@@ -497,51 +497,70 @@ with tab_overview:
                         unsafe_allow_html=True,
                     )
 
-    # ---- Claude Code Users ----
+    # ---- Claude Code Users — KPI + pie chart visible; table in expander ----
     if _show_anthropic:
-        with st.expander("Claude Code Users", expanded=False):
-            from data.db import get_conn
-            from backend.analytics import api_key_clause as _api_key_clause
-            s_dt, e_dt = f.date_range()
-            k_clause, k_params = _api_key_clause(f.api_key_id, "ue")
-            sql_cc = f"""
-                SELECT u.full_name AS name,
-                       u.email      AS email,
-                       COUNT(*)     AS requests,
-                       ROUND(SUM(ue.cost_usd), 2) AS spend,
-                       SUM(ue.tokens_in)  AS tokens_in,
-                       SUM(ue.tokens_out) AS tokens_out
-                FROM usage_events ue
-                JOIN users u ON u.id = ue.user_id
-                JOIN providers p ON p.id = ue.provider_id
-                WHERE p.name = 'anthropic'
-                  AND ue.purpose = 'Agent'
-                  AND ue.occurred_at BETWEEN ? AND ?
-                  {k_clause}
-                GROUP BY u.id
-                ORDER BY spend DESC
-            """
-            with get_conn() as conn:
-                cc_rows = [dict(r) for r in conn.execute(
-                    sql_cc,
-                    [s_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                     e_dt.strftime("%Y-%m-%d %H:%M:%S")] + k_params,
-                ).fetchall()]
-            if not cc_rows:
-                st.caption(
-                    "No Claude Code (purpose='Agent') events in this window."
+        from data.db import get_conn
+        from backend.analytics import api_key_clause as _api_key_clause
+        s_dt, e_dt = f.date_range()
+        k_clause, k_params = _api_key_clause(f.api_key_id, "ue")
+        sql_cc = f"""
+            SELECT u.full_name AS name,
+                   u.email      AS email,
+                   COUNT(*)     AS requests,
+                   ROUND(SUM(ue.cost_usd), 2) AS spend,
+                   SUM(ue.tokens_in)  AS tokens_in,
+                   SUM(ue.tokens_out) AS tokens_out
+            FROM usage_events ue
+            JOIN users u ON u.id = ue.user_id
+            JOIN providers p ON p.id = ue.provider_id
+            WHERE p.name = 'anthropic'
+              AND ue.purpose = 'Agent'
+              AND ue.occurred_at BETWEEN ? AND ?
+              {k_clause}
+            GROUP BY u.id
+            ORDER BY spend DESC
+        """
+        with get_conn() as conn:
+            cc_rows = [dict(r) for r in conn.execute(
+                sql_cc,
+                [s_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                 e_dt.strftime("%Y-%m-%d %H:%M:%S")] + k_params,
+            ).fetchall()]
+        if cc_rows:
+            section("Claude Code Users")
+            total_reqs_cc = sum(r["requests"] for r in cc_rows)
+            total_spend_cc = sum(r["spend"] or 0 for r in cc_rows)
+            kpi_row([
+                {"label": "CC Requests", "value": _fmt_int(total_reqs_cc)},
+                {"label": "CC Spend",    "value": fmt_money(total_spend_cc)},
+                {"label": "Top spender", "value": fmt_money(cc_rows[0]['spend'])},
+                {"label": "Avg / user",  "value": fmt_money(total_spend_cc / max(len(cc_rows), 1))},
+            ])
+            # Pie chart — share of CC spend by top users
+            top_cc = cc_rows[:8]
+            other_cc = sum(r["spend"] or 0 for r in cc_rows[8:])
+            pie_rows = [{"name": r["name"], "spend": r["spend"] or 0} for r in top_cc]
+            if other_cc > 0:
+                pie_rows.append({"name": f"Other ({len(cc_rows) - 8})", "spend": other_cc})
+            df_pie_cc = pd.DataFrame(pie_rows)
+            df_pie_cc = df_pie_cc[df_pie_cc["spend"] > 0]
+            if not df_pie_cc.empty:
+                fig_pie_cc = px.pie(
+                    df_pie_cc, values="spend", names="name", hole=0.45,
+                    color_discrete_sequence=px.colors.sequential.Purples_r,
                 )
-            else:
-                total_reqs = sum(r["requests"] for r in cc_rows)
-                total_spend = sum(r["spend"] or 0 for r in cc_rows)
-                kpi_row([
-                    {"label": "CC Requests", "value": _fmt_int(total_reqs)},
-                    {"label": "CC Spend",    "value": fmt_money(total_spend)},
-                    {"label": "Top spender",
-                     "value": fmt_money(cc_rows[0]['spend']) if cc_rows else "—"},
-                    {"label": "Avg / user",
-                     "value": fmt_money(total_spend / max(len(cc_rows), 1))},
-                ])
+                fig_pie_cc.update_traces(
+                    textposition="inside", textinfo="percent+label",
+                    hovertemplate="%{label}<br>$%{value:,.2f} · %{percent}<extra></extra>",
+                )
+                fig_pie_cc.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    font=dict(family="Inter", color=NAVY),
+                    legend=dict(orientation="v", x=1.02, y=0.5),
+                    paper_bgcolor="white",
+                )
+                st.plotly_chart(fig_pie_cc, use_container_width=True)
+            with st.expander("Claude Code Users — full table", expanded=False):
                 df_cc = pd.DataFrame(cc_rows)
                 view_cc = df_cc[[
                     "name", "email", "requests", "spend",
@@ -569,55 +588,75 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-    # ---- ChatGPT Users ----
+    # ---- ChatGPT Users — KPI + pie chart visible; table in expander ----
     if _show_openai:
-        with st.expander("ChatGPT Users", expanded=False):
-            rows = get_users_for_provider("openai", period_days=f.period_days,
-                                          api_key_id=f.api_key_id)
-            # Honor organization filter (Artem vs Humanoid) — keep the same
-            # rebuild logic the old tab_gpt used so message/cost counts are
-            # org-scoped, not just user-list filtered.
-            if f.organization and f.organization != "all":
-                from data.db import get_conn as _gc_gpt
-                with _gc_gpt() as _conn_gpt:
-                    org_rows = _conn_gpt.execute(
-                        """SELECT u.full_name AS user_name,
-                                  COUNT(*)                          AS messages,
-                                  ROUND(SUM(ue.cost_usd), 2)        AS cost,
-                                  SUM(ue.tokens_in)                 AS tokens_in,
-                                  SUM(ue.tokens_out)                AS tokens_out
-                           FROM usage_events ue
-                           JOIN users u ON u.id = ue.user_id
-                           JOIN providers p ON p.id = ue.provider_id
-                           JOIN organizations o ON o.id = ue.organization_id
-                           WHERE p.name='openai' AND o.label = ?
-                             AND ue.occurred_at >= datetime('now', ?)
-                           GROUP BY u.id
-                           ORDER BY messages DESC""",
-                        (f.organization, f"-{f.period_days} days"),
-                    ).fetchall()
-                rows = [
-                    dict(r) | {
-                        "sessions": None, "lines_added": None, "commits": None,
-                        "tokens_in": int(r["tokens_in"] or 0),
-                        "tokens_out": int(r["tokens_out"] or 0),
-                        "cost": float(r["cost"] or 0),
-                        "messages": int(r["messages"]),
-                    }
-                    for r in org_rows
-                ]
-            if not rows:
-                st.caption("No OpenAI activity in the active window.")
-            else:
-                total_msgs = sum(r["messages"] for r in rows)
-                total_spend = sum(r["cost"] for r in rows)
-                high = [r for r in rows if r["cost"] >= 200]
-                kpi_row([
-                    {"label": "Active users",   "value": str(len(rows))},
-                    {"label": "Total messages", "value": _fmt_int(total_msgs)},
-                    {"label": "Total spend",    "value": fmt_money(total_spend)},
-                    {"label": "High (>= $200)", "value": str(len(high))},
-                ])
+        rows = get_users_for_provider("openai", period_days=f.period_days,
+                                      api_key_id=f.api_key_id)
+        # Honor organization filter (Artem vs Humanoid).
+        if f.organization and f.organization != "all":
+            from data.db import get_conn as _gc_gpt
+            with _gc_gpt() as _conn_gpt:
+                org_rows = _conn_gpt.execute(
+                    """SELECT u.full_name AS user_name,
+                              COUNT(*)                          AS messages,
+                              ROUND(SUM(ue.cost_usd), 2)        AS cost,
+                              SUM(ue.tokens_in)                 AS tokens_in,
+                              SUM(ue.tokens_out)                AS tokens_out
+                       FROM usage_events ue
+                       JOIN users u ON u.id = ue.user_id
+                       JOIN providers p ON p.id = ue.provider_id
+                       JOIN organizations o ON o.id = ue.organization_id
+                       WHERE p.name='openai' AND o.label = ?
+                         AND ue.occurred_at >= datetime('now', ?)
+                       GROUP BY u.id
+                       ORDER BY messages DESC""",
+                    (f.organization, f"-{f.period_days} days"),
+                ).fetchall()
+            rows = [
+                dict(r) | {
+                    "sessions": None, "lines_added": None, "commits": None,
+                    "tokens_in": int(r["tokens_in"] or 0),
+                    "tokens_out": int(r["tokens_out"] or 0),
+                    "cost": float(r["cost"] or 0),
+                    "messages": int(r["messages"]),
+                }
+                for r in org_rows
+            ]
+        if rows:
+            section("ChatGPT Users")
+            total_msgs_gpt = sum(r["messages"] for r in rows)
+            total_spend_gpt = sum(r["cost"] for r in rows)
+            high_gpt = [r for r in rows if r["cost"] >= 200]
+            kpi_row([
+                {"label": "Active users",    "value": str(len(rows))},
+                {"label": "Total messages",  "value": _fmt_int(total_msgs_gpt)},
+                {"label": "Total spend",     "value": fmt_money(total_spend_gpt)},
+                {"label": "High (>= $200)",  "value": str(len(high_gpt))},
+            ])
+            # Pie chart — share of OpenAI spend by user
+            top_gpt = sorted(rows, key=lambda r: r["cost"], reverse=True)[:8]
+            other_gpt = sum(r["cost"] for r in rows if r not in top_gpt)
+            pie_rows = [{"name": r["user_name"], "spend": r["cost"]} for r in top_gpt if r["cost"] > 0]
+            if other_gpt > 0:
+                pie_rows.append({"name": f"Other ({len(rows) - len(top_gpt)})", "spend": other_gpt})
+            df_pie_gpt = pd.DataFrame(pie_rows)
+            if not df_pie_gpt.empty:
+                fig_pie_gpt = px.pie(
+                    df_pie_gpt, values="spend", names="name", hole=0.45,
+                    color_discrete_sequence=px.colors.sequential.Tealgrn,
+                )
+                fig_pie_gpt.update_traces(
+                    textposition="inside", textinfo="percent+label",
+                    hovertemplate="%{label}<br>$%{value:,.2f} · %{percent}<extra></extra>",
+                )
+                fig_pie_gpt.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    font=dict(family="Inter", color=NAVY),
+                    legend=dict(orientation="v", x=1.02, y=0.5),
+                    paper_bgcolor="white",
+                )
+                st.plotly_chart(fig_pie_gpt, use_container_width=True)
+            with st.expander("ChatGPT Users — full table", expanded=False):
                 df_gpt = pd.DataFrame(rows).sort_values("messages", ascending=False)
                 df_gpt["spend_str"] = df_gpt["cost"].apply(
                     lambda v: fmt_money(v) if v else "—"
@@ -914,124 +953,6 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-    # ---- Model Landscape (kept at the very bottom by request) ----
-    with st.expander("Model Landscape", expanded=False):
-        from backend.services.models_svc import get_models_breakdown
-        from backend.services.cursor_analytics import model_usage_summary as _mus
-        rows_api = get_models_breakdown(f)
-        if f.provider and f.provider != "all":
-            rows_api = [r for r in rows_api if r["provider"] == f.provider]
-
-        _anth_in_scope = f.provider in ("all", "anthropic")
-        anthropic_rollup = (
-            get_anthropic_model_spend_from_json() if _anth_in_scope else []
-        )
-        if anthropic_rollup:
-            rows_api = [
-                r for r in rows_api
-                if not (r["provider"] == "anthropic"
-                        and r["model"] == "claude-generic")
-            ]
-            anth_total_events = next(
-                (r["spend"] for r in get_spend_by_model(
-                    "anthropic", period_days=f.period_days)
-                 if r["model"] == "claude-generic"),
-                None,
-            )
-            rollup_total = sum(m["spend"] for m in anthropic_rollup) or 1
-            scale = (anth_total_events / rollup_total) if anth_total_events else 1.0
-            for m in anthropic_rollup:
-                rows_api.append({
-                    "provider": "anthropic",
-                    "model": m["model"],
-                    "cost": round(m["spend"] * scale, 2),
-                    "requests": 0,
-                })
-
-        spend_by_provider: dict[str, float] = {}
-        for r in rows_api:
-            p = r["provider"]
-            spend_by_provider[p] = spend_by_provider.get(p, 0) + (r["cost"] or 0)
-
-        _cursor_in_scope = f.provider in ("all", "cursor")
-        cursor_rows_ml = _mus() if _cursor_in_scope else []
-        cursor_total_reqs = sum(m["requests"] for m in cursor_rows_ml)
-
-        items: list[dict[str, Any]] = []
-        for r in rows_api:
-            share = ((r["cost"] or 0) / spend_by_provider[r["provider"]] * 100
-                     if spend_by_provider.get(r["provider"]) else 0)
-            tool_label = {
-                "anthropic": "Chat + CC",
-                "openai":    "ChatGPT",
-                "cursor":    "Cursor",
-                "github":    "GitHub Copilot",
-            }.get(r["provider"], r["provider"].capitalize())
-            color_label = {
-                "anthropic": "claude",
-                "openai":    "chatgpt",
-                "cursor":    "cursor",
-            }.get(r["provider"], "cursor")
-            items.append({
-                "_color": color_label,
-                "model": r["model"],
-                "tool": tool_label,
-                "share": share,
-                "metric": fmt_money(r["cost"] or 0),
-                "metric_note": f"({share:.0f}%)",
-                "raw_value": r["cost"] or 0,
-            })
-        for m in cursor_rows_ml[:10]:
-            share = (m["requests"] / cursor_total_reqs * 100) if cursor_total_reqs else 0
-            is_claude = "claude" in m["model"].lower()
-            items.append({
-                "_color": "claude" if is_claude
-                          else ("chatgpt" if "gpt" in m["model"].lower() else "cursor"),
-                "model": m["model"],
-                "tool": "Cursor",
-                "share": share,
-                "metric": f"{fmt_int(m['requests'])} reqs",
-                "metric_note": f"({share:.0f}%)",
-                "raw_value": m["requests"],
-            })
-
-        def _status(it: dict[str, Any]) -> tuple[str, str]:
-            sh = it["share"]
-            if sh >= 40:
-                return ("DOMINANT", "high")
-            if sh >= 20:
-                return ("GROWING", "review")
-            return ("ACTIVE", "low")
-
-        items.sort(key=lambda x: (-(x["share"] if x["tool"] != "Cursor" else 0),
-                                  -x["raw_value"]))
-
-        if not items:
-            st.caption("No model activity in the scope.")
-        else:
-            html_rows = []
-            for it in items[:20]:
-                status_text, status_kind = _status(it)
-                dot_color = {"claude": "#6366f1", "chatgpt": "#10a37f",
-                             "cursor": "#f59e0b"}.get(it["_color"], "#94a3b8")
-                html_rows.append(
-                    f"<tr>"
-                    f"<td><span style='display:inline-block;width:8px;height:8px;"
-                    f"border-radius:50%;background:{dot_color};margin-right:8px'></span>"
-                    f"<code>{it['model']}</code></td>"
-                    f"<td>{it['tool']}</td>"
-                    f"<td>{badge(status_text, status_kind)}</td>"
-                    f"<td><b>{it['metric']}</b> "
-                    f"<span style='color:#64748b'>{it['metric_note']}</span></td>"
-                    f"</tr>"
-                )
-            st.markdown(
-                f"<table class='hmnd-table'>"
-                f"<thead><tr><th>Model</th><th>Tool</th><th>Status</th>"
-                f"<th>Spend / Volume</th></tr></thead>"
-                f"<tbody>{''.join(html_rows)}</tbody></table>",
-                unsafe_allow_html=True,
-            )
 
 
 # =============================================================================
@@ -1216,11 +1137,6 @@ with tab_engineering:
                 f"different repos."
             )
         if tq["commits"] > 0:
-            st.caption(
-                "Subject-line regex classification on commit messages "
-                "(`fix:`, `Revert \"…\"`, `feat:`, `refactor:`, …). Directional "
-                "signal — captures self-declared bug-fixes, not severity."
-            )
             kpi_row([
                 {"label": "Commits", "value": fmt_int(tq["commits"]),
                  "help": "Total commits across selected repos this period."},
@@ -1411,25 +1327,6 @@ with tab_engineering:
             churn = get_high_churn_files(
                 period_days=filters.period_days, repos=repo_arg, limit=15,
             )
-            if churn:
-                with st.expander("High-churn files (problem areas)", expanded=False):
-                    st.caption(
-                        "Files most often touched in the window — proxy for "
-                        "hot spots worth refactor attention or extra review."
-                    )
-                    cdf = pd.DataFrame(churn)
-                    view_c = pd.DataFrame({
-                        "File":      cdf["file"],
-                        "Commits":   cdf["commits"].map(lambda v: fmt_int(int(v))),
-                        "+lines":    cdf["additions"].map(lambda v: fmt_int(int(v))),
-                        "-lines":    cdf["deletions"].map(lambda v: fmt_int(int(v))),
-                        "Repos":     cdf["repos"],
-                    })
-                    st.markdown(
-                        view_c.to_html(escape=False, index=False, classes="hmnd-table"),
-                        unsafe_allow_html=True,
-                    )
-
         # ------------- Drill into segments -------------
         section(
             "Drill into segments",
