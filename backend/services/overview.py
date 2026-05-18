@@ -188,10 +188,21 @@ def get_overview_kpis(filters: Filters | None = None, now: datetime | None = Non
         or (f.organization and f.organization != "all")
         or (f.team and f.team != "all")
     )
+    # F-22 — when one provider has mixed orgs (e.g. OpenAI = Artem via API +
+    # Humanoid via JSON), provider_totals contains only the API-synced part
+    # because the JSON loader doesn't write into it. Using billing_api in that
+    # case under-reports the total. Detection: billing_api covers < 90% of
+    # what raw events show → fall back to events-sum.
+    events_total = float(cur["total_spend"] or 0)
+    billing_covers_events = (
+        reported_total is not None
+        and (events_total <= 0 or reported_total >= events_total * 0.9)
+    )
     use_billing_api = (
         reported_total is not None and reported_total > 0
         and not narrowed
         and (f.provider or "all") != "all"
+        and billing_covers_events
     )
     if use_billing_api:
         total_spend = reported_total
@@ -254,7 +265,41 @@ def get_daily_spend_series(filters: Filters | None = None, now: datetime | None 
         or (f.organization and f.organization != "all")
         or (f.team and f.team != "all")
     )
-    use_billing_api = not narrowed and (f.provider or "all") != "all"
+    # F-22 — same coverage check as in get_overview_kpis: skip billing_api
+    # when it covers < 90% of events (multi-org mixed mode case).
+    with get_conn() as conn:
+        p_clause_chk, p_params_chk = provider_clause(f.provider, "p")
+        ev_chk_sql = (
+            "SELECT COALESCE(SUM(ue.cost_usd), 0) AS s "
+            "FROM usage_events ue "
+            "JOIN providers p ON p.id = ue.provider_id "
+            "WHERE ue.occurred_at BETWEEN ? AND ? " + p_clause_chk
+        )
+        events_total_chk = float(
+            conn.execute(
+                ev_chk_sql,
+                [start.isoformat(sep=" "), end.isoformat(sep=" ")] + p_params_chk,
+            ).fetchone()["s"] or 0
+        )
+        provider_totals_chk = 0.0
+        if (f.provider or "all") != "all":
+            row_chk = conn.execute(
+                """SELECT COALESCE(SUM(pt.cost_usd), 0) AS s
+                   FROM provider_totals pt JOIN providers p ON p.id = pt.provider_id
+                   WHERE p.name = ? AND pt.day BETWEEN ? AND ?""",
+                (f.provider, start.date().isoformat(), end.date().isoformat()),
+            ).fetchone()
+            provider_totals_chk = float(row_chk["s"] or 0)
+    billing_covers_events_chart = (
+        provider_totals_chk == 0
+        or events_total_chk <= 0
+        or provider_totals_chk >= events_total_chk * 0.9
+    )
+    use_billing_api = (
+        not narrowed
+        and (f.provider or "all") != "all"
+        and billing_covers_events_chart
+    )
 
     with get_conn() as conn:
         # 1) Daily authoritative numbers from provider_totals (e.g. OpenAI /costs).
