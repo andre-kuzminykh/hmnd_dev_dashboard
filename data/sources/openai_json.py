@@ -132,27 +132,34 @@ def load_openai_json(path: Path | str, org_label: str = "Humanoid") -> dict[str,
 
     rollups = doc.get("rollups") or {}
     total_spend = float(rollups.get("totalSpend") or 0)
-    total_requests = int(rollups.get("totalRequests") or 0)
-    per_user_reqs = rollups.get("perUser") or {}     # user_id -> requests
 
     raw = doc.get("raw") or {}
     users_meta = {u.get("id"): u for u in (raw.get("users") or []) if u.get("id")}
 
-    # Compute per-user spend share = (user_requests / total_requests) * total_spend.
-    # This is the cleanest mapping when OpenAI's cost endpoint is
-    # project-scoped only.
-    per_user_spend: dict[str, float] = {}
-    if total_requests > 0 and total_spend > 0:
-        for uid_ext, reqs in per_user_reqs.items():
-            per_user_spend[uid_ext] = (int(reqs) / total_requests) * total_spend
+    # Per-day actual cost from raw.cost.data (OpenAI's billing daily totals).
+    # Previously we used `total_spend / total_requests` as a uniform per-request
+    # cost — that preserves lifetime sums byte-for-byte but smears spend across
+    # days, so any 30d window can drift by 5-10% when the period's model-mix
+    # differs from lifetime average. Using actual per-day cost eliminates the
+    # smear: sum per day = day_cost; sum across all days = total_spend.
+    day_cost_usd: dict[str, float] = {}
+    for bucket in (raw.get("cost") or {}).get("data") or []:
+        st = bucket.get("start_time")
+        if isinstance(st, (int, float)):
+            day_key = datetime.fromtimestamp(st, tz=timezone.utc).date().isoformat()
+        elif isinstance(st, str):
+            day_key = _parse_iso(st).date().isoformat()
+        else:
+            continue
+        day_cost_usd[day_key] = sum(
+            float((r.get("amount") or {}).get("value") or 0)
+            for r in (bucket.get("results") or [])
+        )
 
-    # Walk usage buckets to get per-day per-user per-model breakdown.
-    inserted = 0
-    user_ids_seen: set[int] = set()
+    # Per-day attributed request count from raw.usage.data — denominator for
+    # distributing day_cost across (user, model) events on that day.
     buckets = (raw.get("usage") or {}).get("data") or []
-
-    # First pass: total req-tokens per user (for token distribution by model).
-    # Second pass: emit one event per (bucket day, user, model).
+    day_total_reqs: dict[str, int] = {}
     for bucket in buckets:
         end_time = bucket.get("end_time") or bucket.get("end_time_iso")
         if isinstance(end_time, (int, float)):
@@ -161,6 +168,30 @@ def load_openai_json(path: Path | str, org_label: str = "Humanoid") -> dict[str,
             day_dt = _parse_iso(end_time) - timedelta(seconds=1)
         else:
             continue
+        day_key = day_dt.date().isoformat()
+        day_total_reqs[day_key] = day_total_reqs.get(day_key, 0) + sum(
+            max(int(r.get("num_model_requests") or 1), 1)
+            for r in (bucket.get("results") or [])
+            if r.get("user_id")
+        )
+
+    # Walk usage buckets, emit one event per (day, user, model).
+    inserted = 0
+    user_ids_seen: set[int] = set()
+    for bucket in buckets:
+        end_time = bucket.get("end_time") or bucket.get("end_time_iso")
+        if isinstance(end_time, (int, float)):
+            day_dt = datetime.fromtimestamp(end_time - 1, tz=timezone.utc)
+        elif isinstance(end_time, str):
+            day_dt = _parse_iso(end_time) - timedelta(seconds=1)
+        else:
+            continue
+        day_key = day_dt.date().isoformat()
+        # Per-request cost = (actual day cost) / (attributed requests that day).
+        # Zero if the day has no cost data (e.g. free-tier usage).
+        day_reqs = day_total_reqs.get(day_key, 0)
+        day_cost = day_cost_usd.get(day_key, 0.0)
+        per_request_cost = (day_cost / day_reqs) if day_reqs > 0 else 0.0
         results = bucket.get("results") or []
         with get_conn() as conn:
             rows: list[tuple] = []
@@ -179,13 +210,6 @@ def load_openai_json(path: Path | str, org_label: str = "Humanoid") -> dict[str,
                 tokens_out = int(r.get("output_tokens") or 0)
                 tokens_cached = int(r.get("input_cached_tokens") or 0)
                 n_reqs = max(int(r.get("num_model_requests") or 1), 1)
-                # Per-event cost: proportional share of the user's allocated
-                # spend. user_total_reqs comes from per_user_reqs.
-                user_total_reqs = int(per_user_reqs.get(user_id_ext) or 0)
-                if user_total_reqs > 0 and per_user_spend.get(user_id_ext, 0) > 0:
-                    per_request_cost = per_user_spend[user_id_ext] / user_total_reqs
-                else:
-                    per_request_cost = 0.0
                 cost = round(per_request_cost * n_reqs, 6)
                 rows.append((
                     uid, pid, mid, None, org_id,
