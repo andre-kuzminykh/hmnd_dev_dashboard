@@ -644,19 +644,44 @@ with tab_overview:
                 )
 
         # ---- Claude Top Models — bars + JSON-rollup table expander
+        # F-30 fix: scale the JSON-rollup model spend down to the active
+        # period. Rollup totalSpend is for the full JSON window (~90 days);
+        # without scaling, "Claude Opus 4.7 $23,662" displays the same value
+        # regardless of the user's Period filter, while the Claude tool card
+        # narrows correctly to $X for last 30d. Scale = anthropic spend in
+        # the active scope ÷ JSON rollup total.
         _anthropic_models = get_anthropic_model_spend_from_json()
         if _anthropic_models:
+            _rollup_total = sum(float(m.get("spend") or 0) for m in _anthropic_models) or 1.0
+            _period_anth_spend = float(claude_v or 0)   # already computed for tool card
+            _scale = (_period_anth_spend / _rollup_total) if _rollup_total else 1.0
             section(
                 "Claude Top Models",
-                help="Top 10 Anthropic models by spend, from the JSON rollup.",
+                help=(
+                    "Top 10 Anthropic models by spend, scaled to the active "
+                    "Period (JSON rollup × period/lifetime ratio). The full "
+                    "JSON rollup is also available in the expander below."
+                ),
             )
-            _top_anm = sorted(
-                _anthropic_models, key=lambda r: r.get("spend") or 0, reverse=True
-            )[:10]
-            _bar_list(
-                _top_anm, label_key="model", value_key="spend",
-                css_class="claude", value_formatter=fmt_money,
-            )
+            _top_anm = [
+                {
+                    "model": m["model"],
+                    "spend": round(float(m.get("spend") or 0) * _scale, 2),
+                }
+                for m in sorted(
+                    _anthropic_models,
+                    key=lambda r: r.get("spend") or 0,
+                    reverse=True,
+                )[:10]
+                if (float(m.get("spend") or 0) * _scale) > 0
+            ]
+            if _top_anm:
+                _bar_list(
+                    _top_anm, label_key="model", value_key="spend",
+                    css_class="claude", value_formatter=fmt_money,
+                )
+            else:
+                st.caption("No Anthropic spend in the active period.")
         with st.expander("Anthropic models — JSON rollup table", expanded=False):
             model_spend = get_anthropic_model_spend_from_json()
             if not model_spend:
@@ -752,6 +777,9 @@ with tab_overview:
         if f.organization and f.organization != "all":
             from data.db import get_conn as _gc_gpt
             with _gc_gpt() as _conn_gpt:
+                # F-30 fix: honour api_key_id filter in the org branch too,
+                # otherwise picking org=Artem + key=ceo_brain_prod drifts vs
+                # KPI Total spend (KPI uses both filters, this SQL ignored key).
                 org_rows = _conn_gpt.execute(
                     """SELECT u.full_name AS user_name,
                               COUNT(*)                          AS messages,
@@ -764,9 +792,11 @@ with tab_overview:
                        JOIN organizations o ON o.id = ue.organization_id
                        WHERE p.name='openai' AND o.label = ?
                          AND ue.occurred_at >= datetime('now', ?)
+                         AND (? IS NULL OR ue.api_key_id = ?)
                        GROUP BY u.id
                        ORDER BY messages DESC""",
-                    (f.organization, f"-{f.period_days} days"),
+                    (f.organization, f"-{f.period_days} days",
+                     f.api_key_id, f.api_key_id),
                 ).fetchall()
             rows = [
                 dict(r) | {
