@@ -58,7 +58,7 @@ def _check(category: str, label: str, expected: float, actual: float,
     exp_s = f"{expected:>14,.2f}"
     act_s = f"{actual:>14,.2f}"
     delta_s = f"{delta:+,.2f}"
-    print(f"  {mark}  {label:<58}  expected={exp_s}  actual={act_s}  Δ={delta_s:>+12s} {pct_str}")
+    print(f"  {mark}  {label:<58}  expected={exp_s}  actual={act_s}  Δ={delta_s:>12s} {pct_str}")
     return ok
 
 
