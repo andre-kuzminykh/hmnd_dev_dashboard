@@ -217,6 +217,54 @@ with tab_overview:
     gp = (gpt_v / total_v * 100) if total_v else 0
     crp = (cursor_v / total_v * 100) if total_v else 0
 
+    # =========================================================================
+    # 0.5 DAILY ACTIVE USERS — at the very top per user request (F-28)
+    # =========================================================================
+    _in_scope_provs_dau: list[str] = []
+    if _show_anthropic: _in_scope_provs_dau.append("anthropic")
+    if _show_openai:    _in_scope_provs_dau.append("openai")
+    if _show_cursor:    _in_scope_provs_dau.append("cursor")
+    if _in_scope_provs_dau:
+        section(
+            "Daily Active Users",
+            help="Distinct active users per day, per provider, within the "
+                 "current filter window. Only providers in scope are shown.",
+        )
+        with _gc() as _conn:
+            _ph_dau = ",".join(["?"] * len(_in_scope_provs_dau))
+            dau_rows = _conn.execute(
+                f"""SELECT date(ue.occurred_at) AS day, p.name AS provider,
+                           COUNT(DISTINCT ue.user_id) AS users
+                    FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+                    WHERE p.name IN ({_ph_dau})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      {_org_clause} {_key_clause}
+                    GROUP BY day, p.name
+                    ORDER BY day""",
+                _in_scope_provs_dau + [s_iso, e_iso] + _org_params + _key_params,
+            ).fetchall()
+        if not dau_rows:
+            st.caption("No data in window.")
+        else:
+            df_dau_all = pd.DataFrame([dict(r) for r in dau_rows])
+            df_dau_all["day"] = pd.to_datetime(df_dau_all["day"])
+            _color_map = {"anthropic": "#6366f1", "openai": "#10a37f", "cursor": "#f59e0b"}
+            fig_dau_all = px.bar(
+                df_dau_all, x="day", y="users", color="provider",
+                color_discrete_map=_color_map,
+                category_orders={"provider": ["anthropic", "openai", "cursor"]},
+            )
+            fig_dau_all.update_layout(
+                barmode="stack",
+                plot_bgcolor="white", paper_bgcolor="white",
+                margin=dict(l=10, r=10, t=10, b=10),
+                font=dict(family="Inter", color=NAVY),
+                xaxis=dict(showgrid=False, title=""),
+                yaxis=dict(gridcolor="#e8edf3", title="Distinct users"),
+                legend=dict(orientation="h", y=-0.18),
+            )
+            st.plotly_chart(fig_dau_all, use_container_width=True)
+
     # -------- 1. Spend Breakdown bar --------
     if total_v > 0:
         st.markdown(
@@ -297,7 +345,7 @@ with tab_overview:
             </div>
         """
 
-    c1, c2, c3 = st.columns(3, gap="medium")
+    c1, c2, c3 = st.columns(3, gap="large")
     with c1:
         st.markdown(_tool_card(
             "#6366f1", "Claude", fmt_money(claude_v),
@@ -418,60 +466,6 @@ with tab_overview:
                 )
             else:
                 st.caption("No notable anomalies detected.")
-
-    # =========================================================================
-    # 5. DAILY ACTIVE USERS — multi-line chart for all providers in scope
-    # =========================================================================
-    if _in_scope_provs:
-        section(
-            "Daily Active Users",
-            help="Distinct active users per day, per provider, within the "
-                 "current filter window. Only providers in scope are shown.",
-        )
-        with _gc() as _conn:
-            _ph_dau = ",".join(["?"] * len(_in_scope_provs))
-            dau_sql = f"""
-                SELECT date(ue.occurred_at) AS day, p.name AS provider,
-                       COUNT(DISTINCT ue.user_id) AS users
-                FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
-                WHERE p.name IN ({_ph_dau})
-                  AND ue.occurred_at BETWEEN ? AND ?
-                  {_org_clause} {_key_clause}
-                GROUP BY day, p.name
-                ORDER BY day
-            """
-            dau_rows = _conn.execute(
-                dau_sql,
-                _in_scope_provs + [s_iso, e_iso] + _org_params + _key_params,
-            ).fetchall()
-        if not dau_rows:
-            st.caption("No data in window.")
-        else:
-            df_dau_all = pd.DataFrame(
-                [dict(r) for r in dau_rows]
-            )
-            df_dau_all["day"] = pd.to_datetime(df_dau_all["day"])
-            _color_map = {
-                "anthropic": "#6366f1",
-                "openai":    "#10a37f",
-                "cursor":    "#f59e0b",
-            }
-            fig_dau_all = px.bar(
-                df_dau_all, x="day", y="users", color="provider",
-                color_discrete_map=_color_map,
-                category_orders={"provider": ["anthropic", "openai", "cursor"]},
-            )
-            fig_dau_all.update_layout(
-                barmode="stack",
-                plot_bgcolor="white", paper_bgcolor="white",
-                margin=dict(l=10, r=10, t=10, b=10),
-                font=dict(family="Inter", color=NAVY),
-                xaxis=dict(showgrid=False, title=""),
-                yaxis=dict(gridcolor="#e8edf3", title="Distinct users"),
-                legend=dict(orientation="h", y=-0.18),
-            )
-            st.plotly_chart(fig_dau_all, use_container_width=True)
-
     # =========================================================================
     # 6. CLAUDE block — only when Anthropic in scope
     # =========================================================================
@@ -493,7 +487,7 @@ with tab_overview:
                 g["users"] = max(g.get("users") or 0, p["users"] or 0)
             colors = {"Chat": "#a5b4fc", "Claude Code": "#6366f1",
                       "Cowork + Other": "#c7d2fe"}
-            pc1, pc2, pc3 = st.columns(3, gap="medium")
+            pc1, pc2, pc3 = st.columns(3, gap="large")
             for col, (label, g) in zip((pc1, pc2, pc3), grouped.items()):
                 with col:
                     st.markdown(
@@ -795,32 +789,23 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-        # ---- OpenAI Top Models — pie + full-table expander with Volume column
+        # ---- OpenAI Top Models — horizontal bars (matches Claude Top Models)
         _openai_models_for_pie = get_openai_top_models(period_days=f.period_days)
         if _openai_models_for_pie:
             section(
                 "OpenAI Top Models",
-                help="Share of OpenAI spend per model in the active window. "
-                     "Hover the legend to highlight one slice.",
+                help="Top OpenAI models by spend in the active window. "
+                     "Same horizontal-bar layout as Claude Top Models.",
             )
-            _df_pie = pd.DataFrame(_openai_models_for_pie)
-            _df_pie = _df_pie[_df_pie["spend"] > 0].copy()
-            if not _df_pie.empty:
-                fig_pie = px.pie(
-                    _df_pie, values="spend", names="model", hole=0.45,
-                    color_discrete_sequence=px.colors.sequential.Tealgrn,
+            _df_om_chart = [
+                {"model": r["model"], "spend": float(r["spend"] or 0)}
+                for r in _openai_models_for_pie if (r["spend"] or 0) > 0
+            ]
+            if _df_om_chart:
+                _bar_list(
+                    _df_om_chart[:10], label_key="model", value_key="spend",
+                    css_class="chatgpt", value_formatter=fmt_money,
                 )
-                fig_pie.update_traces(
-                    textposition="inside", textinfo="percent+label",
-                    hovertemplate="%{label}<br>$%{value:,.2f} · %{percent}<extra></extra>",
-                )
-                fig_pie.update_layout(
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    font=dict(family="Inter", color=NAVY),
-                    legend=dict(orientation="v", x=1.02, y=0.5),
-                    paper_bgcolor="white",
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
         with st.expander("OpenAI top models — full table", expanded=False):
             openai_models_full = get_openai_top_models(period_days=f.period_days)
             if not openai_models_full:
@@ -1268,7 +1253,7 @@ with tab_engineering:
                 )
 
             # $/fix debt indicator + AI vs human breakdown side-by-side
-            col_cost, col_breakdown = st.columns(2, gap="medium")
+            col_cost, col_breakdown = st.columns(2, gap="large")
             with col_cost:
                 section(
                     "AI spend per bug-fix",
@@ -1798,7 +1783,7 @@ with tab_people:
         else:
             st.caption("No events for this person in the active period.")
 
-        col_models, col_purpose = st.columns(2, gap="medium")
+        col_models, col_purpose = st.columns(2, gap="large")
         with col_models:
             section(
                 "Top models (this person)",
