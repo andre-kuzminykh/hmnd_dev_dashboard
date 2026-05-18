@@ -1332,3 +1332,72 @@ Logic preserved. Charts on top, tables in expanders.
 | `tests/test_f20_unified_layout.py::test_fr_20_6_people_profile_data_shape` | FR-20.6 |
 | `tests/test_f20_unified_layout.py::test_fr_20_7_people_ignores_source_filter` | FR-20.7 |
 
+---
+
+## F-27 — Overview layout: per-provider sections with charts visible, tables collapsed
+
+### Feature
+The Overview tab is reorganised so that everything **groups by tool**.
+Old free-floating sections ("Top Spenders — All Tools" + "Usage
+Summary") are replaced by a single **High Spenders** block at the
+top. Then comes a unified **Daily Active Users** chart (all providers
+in one Plotly). Then per-tool blocks (Claude / ChatGPT / Cursor) —
+each one hidden when its provider isn't in the active Source. Tables
+move under `st.expander(..., expanded=False)`.
+
+### User Flow
+
+1. Open the dashboard. Filter bar shows the current scope as a
+   caption ("Filters in use · Source: … · Organization: …").
+2. Spend Breakdown bar + KPI row + 3 tool cards on top (same as F-21).
+3. **High Spenders** block: threshold slider, KPI cards (count /
+   highest / combined / share), top-10 ranking horizontal bars, and a
+   collapsed expander "Notable high spend (per-user cards +
+   analysis)".
+4. **Daily Active Users** chart: distinct user count per day per
+   provider, stacked Plotly bar (anthropic = `#6366f1`, openai =
+   `#10a37f`, cursor = `#f59e0b`). Only providers currently in scope
+   appear.
+5. **Claude block** (only when `_show_anthropic`): Products Breakdown
+   3-card → Claude Users (KPI + pie + full-table expander) → Claude
+   Top Models (bars + JSON-rollup expander) → Cursor-leaderboard
+   Claude users expander.
+6. **ChatGPT block** (only when `_show_openai`): ChatGPT Users (KPI +
+   pie + full-table expander) → OpenAI Top Models pie + full-table
+   expander with Volume column.
+7. **Cursor block** (only when `_show_cursor`): Cursor Users pie chart
+   + full-leaderboard expander → Cursor Models bars + completion-split
+   caption + full-table expander.
+8. **All Users — cross-tool** expander (only when Source == "all"),
+   at the bottom.
+
+### Functional Requirements
+
+| ID | Requirement |
+|---|---|
+| FR-27.1 | The old "Top Spenders — All Tools" section header + caption + bars + "Usage Summary" right-column block MUST be removed from Overview. |
+| FR-27.2 | A "High Spenders" section MUST render directly under the 3 tool cards with: threshold slider, 4-card KPI row, top-10 ranking bars, expander "Notable high spend (per-user cards + analysis)". |
+| FR-27.3 | A "Daily Active Users" Plotly chart MUST render below High Spenders. It MUST contain ONLY providers currently in scope (`_show_anthropic`, `_show_openai`, `_show_cursor`) and colour them: anthropic `#6366f1`, openai `#10a37f`, cursor `#f59e0b`. |
+| FR-27.4 | Per-provider blocks MUST be gated by `_show_anthropic` / `_show_openai` / `_show_cursor` so that picking a single Source hides the other providers' blocks entirely. |
+| FR-27.5 | Every full data table MUST be inside `st.expander(..., expanded=False)`. Top-of-block always shows charts / KPIs / colour pies. |
+| FR-27.6 | All `st.columns(...)` calls in the Overview tab that render KPI/tool/sub-cards MUST pass `gap="medium"` (or larger) so cards don't visually touch. |
+| FR-27.7 | The `kpi_row()` helper in `frontend/components.py` MUST also pass `gap="medium"` to `st.columns(...)` so every KPI row across the app gets consistent spacing. |
+| FR-27.8 | The "Model Landscape" expander MUST be absent (removed in F-23). |
+
+### NFR
+
+- **NFR-27.1** UI MUST render under every Source value combination without exception.
+- **NFR-27.2** Loading the page MUST issue at most one `_compute_daily_product_weights`-style scan per provider per page render.
+
+### Tests
+
+| Test | Requirement |
+|------|-------------|
+| `tests/test_e2e_filter_propagation.py::test_top_spenders_panel_renders_under_any_source` (renamed-purpose) | FR-27.2 |
+| `tests/test_f27_overview_layout.py::test_fr_27_1_no_top_spenders_header` | FR-27.1 |
+| `tests/test_f27_overview_layout.py::test_fr_27_2_high_spenders_block_visible` | FR-27.2 |
+| `tests/test_f27_overview_layout.py::test_fr_27_3_dau_chart_present` | FR-27.3 |
+| `tests/test_f27_overview_layout.py::test_fr_27_5_tables_in_expanders` | FR-27.5 |
+| `tests/test_f27_overview_layout.py::test_fr_27_6_columns_have_gap` | FR-27.6 |
+| `tests/test_f27_overview_layout.py::test_fr_27_8_no_model_landscape` | FR-27.8 |
+

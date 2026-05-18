@@ -211,16 +211,17 @@ def test_period_monotone(tmp_db):
 
 @pytest.mark.parametrize("source", SOURCES)
 def test_top_spenders_panel_renders_under_any_source(tmp_db, source):
-    """F-19 — Top Spenders now follows the Source filter (used to be
-    hard-coded cross-tool). What we still guarantee is the panel renders
-    without exception for any source, and the title is present (the
-    title suffix adapts: "All Tools" / "Claude" / "ChatGPT" / "Cursor").
+    """F-27 — Overview now shows a "High Spenders" block instead of the
+    old "Top Spenders — All Tools" header. The block is cross-tool by
+    design, so we just verify it renders without exception under any
+    Source filter, with the High Spenders title present.
     """
     app = _run(source)
     assert not app.exception, str(app.exception)
     body = _markdown_text(app)
-    assert "Top Spenders" in body or "no spend recorded" in body.lower(), (
-        f"source={source}: 'Top Spenders' missing"
+    assert ("High Spenders" in body or "no spend recorded" in body.lower()
+            or "no users at or above" in body.lower()), (
+        f"source={source}: 'High Spenders' block missing"
     )
 
 

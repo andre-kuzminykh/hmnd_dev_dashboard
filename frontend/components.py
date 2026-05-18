@@ -235,7 +235,7 @@ def kpi_row(items: list[dict[str, Any]], cols: int = 4) -> None:
     """
     for i in range(0, len(items), cols):
         chunk = items[i:i + cols]
-        columns = st.columns(cols)
+        columns = st.columns(cols, gap="medium")
         for col, item in zip(columns, chunk):
             with col:
                 st.markdown(kpi_card(**item), unsafe_allow_html=True)

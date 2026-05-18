@@ -20,7 +20,7 @@ class _StCapture:
     def markdown(self, body: str, **kw):
         self.calls.append((body, kw))
 
-    def columns(self, n):  # used by kpi_row
+    def columns(self, n, gap=None):  # used by kpi_row (Streamlit signature: columns(spec, *, gap))
         return [self for _ in range(n)]
 
     # context-manager protocol (Streamlit uses `with col:`)
