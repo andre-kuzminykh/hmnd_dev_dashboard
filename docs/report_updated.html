@@ -21,9 +21,9 @@
   .rec-box{background:var(--bg-blue); border:1px solid rgba(73,83,216,.18); border-radius:12px; padding:1rem 1.25rem}
   /* Tooltip pattern */
   .tip{position:relative; display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; background:var(--bg-blue); color:var(--blue); border:1px solid rgba(73,83,216,.25); font-size:11px; font-weight:700; cursor:help; vertical-align:middle; margin-left:.25rem; flex-shrink:0}
-  .tip:hover,.tip:focus{background:var(--blue); color:#fff}
+  .tip:hover,.tip:focus,.tip.tip-open{background:var(--blue); color:#fff}
   .tip .tt{position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; border-radius:8px; padding:.6rem .75rem; font-size:.72rem; line-height:1.45; min-width:220px; max-width:300px; opacity:0; pointer-events:none; transition:opacity .15s; z-index:50; font-weight:400; text-align:left; box-shadow:0 12px 32px rgba(6,9,28,.25); white-space:normal}
-  .tip:hover .tt,.tip:focus .tt{opacity:1}
+  .tip:hover .tt,.tip:focus .tt,.tip.tip-open .tt{opacity:1; pointer-events:auto}
   @media (max-width:640px){.tip .tt{position:fixed; left:8px; right:8px; bottom:auto; top:auto; transform:none; max-width:none; min-width:0}}
   /* Details */
   details>summary{cursor:pointer; list-style:none; user-select:none; outline:none}
@@ -117,7 +117,7 @@
   <div class="max-w-7xl mx-auto flex items-center justify-between gap-3">
     <a href="#top" class="flex items-center gap-3 shrink-0">
       <img src="https://i.ibb.co/nsfMVMGM/1.png" alt="Humanoid Logo" class="w-8 h-8 object-contain">
-      <span class="font-bold text-navy tracking-widest text-sm sm:text-base">HUMANOID</span>
+      <span class="font-bold text-navy tracking-widest text-sm sm:text-base hidden sm:inline">HUMANOID</span>
     </a>
     <div class="flex items-center gap-1 overflow-x-auto flex-1 justify-end sm:justify-center">
       <a href="#business" class="nav-link">Business Analysis</a>
@@ -284,7 +284,7 @@
         <div class="qaxis" style="grid-row:2; grid-column:1; writing-mode:vertical-rl; transform:rotate(180deg); padding:1rem .5rem">HIGH AI spend</div>
 
         <div class="qcell qhilo" style="grid-row:2; grid-column:2">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q2">Q2 · Workflow review</span><span class="text-xs text-muted">7 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q2">Q2 · Workflow review</span><span class="text-xs text-muted">7 engineers</span></div>
           <div class="text-xs text-muted mb-2">High AI bill, near-zero Git commits. Validate one by one.</div>
           <ul class="text-sm space-y-1 text-navy">
             <li>• <strong>Richard</strong> — $3,625 Claude, 0 commits</li>
@@ -297,7 +297,7 @@
         </div>
 
         <div class="qcell qhihi" style="grid-row:2; grid-column:3">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q1">Q1 · Champions</span><span class="text-xs text-green-700 font-semibold">19 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q1">Q1 · Champions</span><span class="text-xs text-green-700 font-semibold">19 engineers</span></div>
           <div class="text-xs text-muted mb-2">AI-Native profile: HIGH AI spend AND HIGH Git output. Document and scale.</div>
           <ul class="text-sm space-y-1 text-navy">
             <li>• <strong>Eugene Lyapustin</strong> — $5,378 + 1.6k commits (cleanest)</li>
@@ -314,7 +314,7 @@
         <div class="qaxis" style="grid-row:3; grid-column:1; writing-mode:vertical-rl; transform:rotate(180deg); padding:1rem .5rem">LOW AI spend</div>
 
         <div class="qcell qlolo" style="grid-row:3; grid-column:2">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q4">Q4 · Mainstream</span><span class="text-xs text-muted">43 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q4">Q4 · Mainstream</span><span class="text-xs text-muted">43 engineers</span></div>
           <div class="text-xs text-muted mb-2">Healthy mid-AI mid-output cohort.</div>
           <ul class="text-sm space-y-1 text-navy">
             <li>• Mid-spend engineers ($25–200/mo)</li>
@@ -325,7 +325,7 @@
         </div>
 
         <div class="qcell qlohi" style="grid-row:3; grid-column:3">
-          <div class="flex items-center justify-between mb-2"><span class="pill badge-q3">Q3 · Hidden potential</span><span class="text-xs text-blue font-semibold">42 engineers</span></div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2"><span class="pill badge-q3">Q3 · Hidden potential</span><span class="text-xs text-blue font-semibold">42 engineers</span></div>
           <div class="text-xs text-muted mb-2">Productive engineers <strong>not yet on AI tools</strong>. Largest upside.</div>
           <ul class="text-sm space-y-1 text-navy">
             <li>• <strong>Anubhav Dogra</strong> — 62 commits hmnd_robot/90d, no AI</li>
@@ -908,6 +908,20 @@
 
 <script>
   lucide.createIcons();
+  // Tap-to-open tooltips for touch devices (CSS-only :hover doesn't trigger on tap).
+  (function(){
+    document.querySelectorAll('.tip').forEach(tip => {
+      tip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = tip.classList.contains('tip-open');
+        document.querySelectorAll('.tip.tip-open').forEach(t => t.classList.remove('tip-open'));
+        if (!wasOpen) tip.classList.add('tip-open');
+      });
+    });
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.tip.tip-open').forEach(t => t.classList.remove('tip-open'));
+    });
+  })();
   (function(){
     const links = document.querySelectorAll('nav a.nav-link');
     const map = {};
