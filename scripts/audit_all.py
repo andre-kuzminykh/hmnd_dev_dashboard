@@ -218,6 +218,111 @@ def audit_l1_cursor_source(tol: float) -> None:
            int(db["u"] or 0), tol_pct=20)
 
 
+# ── L1.5: WINDOW-MATCHED check (JSON last-30d ↔ DB same-window) ─────────────
+
+def _json_window_iso(rangeEnd_iso: str, days: int) -> tuple[str, str]:
+    """Return [end-days, end] ISO range matching JSON's rangeEnd."""
+    end = datetime.fromisoformat(rangeEnd_iso.replace("Z", "+00:00")).replace(tzinfo=None)
+    start = end - timedelta(days=days)
+    return (start.strftime("%Y-%m-%d %H:%M:%S"),
+            end.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+def audit_l15_window_match(tol: float) -> None:
+    """Sum the JSON's per-day data for the last 30 days of its rangeEnd
+    and compare against the DB's SUM(cost_usd) over the SAME window.
+    This eliminates the audit-time vs JSON-time skew that L1 has.
+
+    Cursor JSON has no per-day cost series (only per-member rollups), so
+    it's skipped here — its L1 lifetime check is already byte-perfect.
+    """
+    _section("L1.5 · JSON LAST-30D WINDOW ↔ DB SAME-WINDOW")
+
+    # ── Anthropic
+    f = _find_source("Anthropic")
+    if f:
+        d = _load_json(f)
+        rangeEnd = d["_meta"]["rangeEnd"]
+        end_dt = datetime.fromisoformat(rangeEnd.replace("Z", "+00:00")).replace(tzinfo=None)
+        start_dt = end_dt - timedelta(days=30)
+        s_iso, e_iso = _json_window_iso(rangeEnd, 30)
+        print(f"  Anthropic window: {s_iso[:10]} → {e_iso[:10]}")
+
+        # Sum JSON per-day per-product (cents → USD)
+        json_total = 0.0
+        json_by_prod: dict[str, float] = {}
+        for bucket in d["raw"].get("costByProduct", {}).get("data", []):
+            day = datetime.fromisoformat(bucket["starting_at"].replace("Z", "+00:00")).replace(tzinfo=None)
+            if not (start_dt <= day < end_dt):
+                continue
+            for r in bucket.get("results", []):
+                amt = float(r["amount"]) / 100.0
+                json_total += amt
+                json_by_prod[r["product"]] = json_by_prod.get(r["product"], 0.0) + amt
+
+        with get_conn() as c:
+            db_total = float(c.execute(
+                """SELECT ROUND(SUM(ue.cost_usd), 2) s FROM usage_events ue
+                   JOIN providers p ON p.id=ue.provider_id
+                   WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
+                (s_iso, e_iso),
+            ).fetchone()["s"] or 0)
+        _check("L1.5", "Anthropic total $ in JSON last-30d window",
+               round(json_total, 2), db_total, tol_pct=2)
+
+        purpose_map = {
+            "chat": "Chat", "claude_code": "Agent", "cowork": "Cowork",
+            "other": "Other", "claude_in_chrome": "Chrome", "claude_design": "Design",
+        }
+        for prod, exp in json_by_prod.items():
+            purpose = purpose_map.get(prod, prod)
+            with get_conn() as c:
+                row = c.execute(
+                    """SELECT ROUND(SUM(ue.cost_usd), 2) s FROM usage_events ue
+                       JOIN providers p ON p.id=ue.provider_id
+                       WHERE p.name='anthropic' AND ue.purpose=?
+                         AND ue.occurred_at BETWEEN ? AND ?""",
+                    (purpose, s_iso, e_iso),
+                ).fetchone()
+            prod_tol = 5.0 if exp < 500 else 2.0
+            _check("L1.5", f"Anthropic {prod} (purpose={purpose}) last-30d",
+                   round(exp, 2), float(row["s"] or 0), tol_pct=prod_tol)
+    print()
+
+    # ── OpenAI (Humanoid org)
+    f = _find_source("OpenAI")
+    if f:
+        d = _load_json(f)
+        rangeEnd = d["_meta"]["rangeEnd"]
+        end_dt = datetime.fromisoformat(rangeEnd.replace("Z", "+00:00")).replace(tzinfo=None)
+        start_dt = end_dt - timedelta(days=30)
+        s_iso, e_iso = _json_window_iso(rangeEnd, 30)
+        print(f"  OpenAI window:    {s_iso[:10]} → {e_iso[:10]}")
+
+        json_total = 0.0
+        for bucket in d["raw"].get("cost", {}).get("data", []):
+            day = datetime.fromtimestamp(bucket["start_time"])
+            if not (start_dt <= day < end_dt):
+                continue
+            for r in bucket.get("results", []):
+                json_total += float(r["amount"]["value"])
+
+        with get_conn() as c:
+            db_total = float(c.execute(
+                """SELECT ROUND(SUM(ue.cost_usd), 2) s FROM usage_events ue
+                   JOIN providers p ON p.id=ue.provider_id
+                   LEFT JOIN organizations o ON o.id=ue.organization_id
+                   WHERE p.name='openai' AND (o.label='Humanoid' OR o.label IS NULL)
+                     AND ue.occurred_at BETWEEN ? AND ?""",
+                (s_iso, e_iso),
+            ).fetchone()["s"] or 0)
+        _check("L1.5", "OpenAI · Humanoid total $ in JSON last-30d window",
+               round(json_total, 2), db_total, tol_pct=3)
+
+    # ── Cursor: skip (no per-day cost series in JSON)
+    print("  Cursor: skipped — JSON has no per-day cost series (subscription model)")
+
+
 # ── L2: SERVICE layer ───────────────────────────────────────────────────────
 
 def audit_l2_services(period: int, tol: float) -> None:
@@ -380,6 +485,7 @@ def main() -> int:
     audit_l1_anthropic_source(args.tol)
     audit_l1_openai_source(args.tol)
     audit_l1_cursor_source(args.tol)
+    audit_l15_window_match(args.tol)
     audit_l2_services(args.period, args.tol)
     audit_l3_cross_tool(args.period, args.tol)
     audit_l4_org_scope(args.period, args.tol)
