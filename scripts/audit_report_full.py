@@ -388,25 +388,95 @@ def audit_anomalies() -> None:
 
 def audit_lifetime_git() -> None:
     _section("§2 · LIFETIME vs PERIOD (Git)")
+    bot_pattern = (
+        "name LIKE '%[bot]%' OR name LIKE '%-bot%' "
+        "OR name LIKE 'github-actions%' OR name LIKE 'dependabot%' "
+        "OR name LIKE 'renovate%' OR name LIKE 'codecov%' "
+        "OR name LIKE '%-ci' OR name LIKE 'ci-%' "
+        "OR name LIKE '%automation%' OR name LIKE '%[automated]%'"
+    )
     with get_conn() as c:
         total_commits = int(c.execute(
             "SELECT COUNT(*) n FROM git_commits"
         ).fetchone()["n"] or 0)
         total_humans = int(c.execute(
-            """SELECT COUNT(*) n FROM git_authors WHERE name NOT LIKE '%[bot]%'
-               AND name NOT LIKE '%-bot%' AND name NOT LIKE 'github-actions%'"""
+            f"SELECT COUNT(*) n FROM git_authors WHERE NOT ({bot_pattern})"
         ).fetchone()["n"] or 0)
         total_bots = int(c.execute(
-            """SELECT COUNT(*) n FROM git_authors WHERE name LIKE '%[bot]%'
-               OR name LIKE '%-bot%' OR name LIKE 'github-actions%'"""
+            f"SELECT COUNT(*) n FROM git_authors WHERE ({bot_pattern})"
         ).fetchone()["n"] or 0)
+        # Also count bots via the same definition the dashboard uses
+        # (any commit flagged is_bot in git_commits).
+        commits_is_bot = c.execute(
+            "SELECT COUNT(DISTINCT author_name) n FROM git_commits "
+            "WHERE is_bot = 1"
+        ).fetchone()
+        dashboard_bots = int(commits_is_bot["n"] or 0) if commits_is_bot else 0
     # Snapshot card values
     _check("Snapshot · commits ingested (lifetime)", 23044, total_commits, tol_pct=10)
     _check("Snapshot · humans (lifetime)",           213,   total_humans,  tol_pct=10)
-    _check("Snapshot · bots (lifetime)",             13,    total_bots,    tol_pct=20)
+    _check("Snapshot · bots (lifetime, regex)",      13,    total_bots,    tol_pct=20)
+    _check("Snapshot · bots (lifetime, is_bot flag)", 13, dashboard_bots,  tol_pct=20,
+           comment="(uses git_commits.is_bot — same as §2 ENGINEERING)")
 
 
-# ─── 9. UNVERIFIABLE — list with provenance ───────────────────────────────
+# ─── 9. MATT KLINGENSMITH DEEP-DIVE ───────────────────────────────────────
+
+def audit_matt_klingensmith() -> None:
+    _section("MATT KLINGENSMITH · DEEP DIVE (multi-window, name variants)")
+    s_iso, e_iso = _last_30d_iso()
+    from datetime import datetime as dt, timedelta as td
+    e_90 = dt.utcnow()
+    s_90 = e_90 - td(days=90)
+    s_90s, e_90s = (s_90.strftime("%Y-%m-%d %H:%M:%S"),
+                    e_90.strftime("%Y-%m-%d %H:%M:%S"))
+
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT id, full_name, email FROM users "
+            "WHERE LOWER(full_name) LIKE '%matt%klin%' "
+            "OR LOWER(email) LIKE '%klingen%' "
+            "OR LOWER(full_name) LIKE '%klingen%'"
+        ).fetchall()
+        if not rows:
+            print("  ???  No user record matching 'matt klin*' / 'klingen*'")
+            print("       The $790/34msg figure in §1.6 cannot be backed")
+            print("       by a current DB user — likely from prior heuristic")
+            print("       attribution. Recommend removing specific msg-count")
+            print("       claim and keeping qualitative anomaly note.")
+            return
+        for u in rows:
+            print(f"  USER  id={u['id']} name='{u['full_name']}' "
+                  f"email='{u['email']}'")
+            for label, window in (("30d",      (s_iso, e_iso)),
+                                  ("90d",      (s_90s, e_90s)),
+                                  ("lifetime", None)):
+                if window:
+                    res = c.execute(
+                        "SELECT p.name prov, COUNT(*) c, "
+                        "ROUND(SUM(ue.cost_usd),2) s FROM usage_events ue "
+                        "JOIN providers p ON p.id=ue.provider_id "
+                        "WHERE ue.user_id=? AND ue.occurred_at BETWEEN ? AND ? "
+                        "GROUP BY p.name",
+                        (u["id"], *window),
+                    ).fetchall()
+                else:
+                    res = c.execute(
+                        "SELECT p.name prov, COUNT(*) c, "
+                        "ROUND(SUM(ue.cost_usd),2) s FROM usage_events ue "
+                        "JOIN providers p ON p.id=ue.provider_id "
+                        "WHERE ue.user_id=? GROUP BY p.name",
+                        (u["id"],),
+                    ).fetchall()
+                if not res:
+                    print(f"        {label:<10}  no usage events")
+                    continue
+                for r in res:
+                    print(f"        {label:<10}  {r['prov']:<10}"
+                          f"  {r['c']:>6} events  ${float(r['s'] or 0):>8.2f}")
+
+
+# ─── 10. UNVERIFIABLE — list with provenance ──────────────────────────────
 
 def list_unverifiable() -> None:
     _section("UNVERIFIABLE FROM DASHBOARD DB — provenance noted")
@@ -452,6 +522,7 @@ def main() -> int:
     audit_anomalies()
     audit_engineering()
     audit_lifetime_git()
+    audit_matt_klingensmith()
     list_unverifiable()
     print(f"\n  {'═' * 110}")
     print(f"  SUMMARY:  {TOTAL_PASS} PASS  ·  {TOTAL_FAIL} DRIFT")
