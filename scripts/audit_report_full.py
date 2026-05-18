@@ -266,14 +266,193 @@ def audit_engineering() -> None:
     _check("Bot bug rate (%)",   26.8,   tq.get("bot_bug_rate_pct", 0),  tol_pct=3)
 
 
+# ─── 5. §1.2 DERIVED RATIOS ───────────────────────────────────────────────
+
+def audit_derived_ratios() -> None:
+    _section("§1.2 · DERIVED RATIOS (last 30 days)")
+    s_iso, e_iso = _last_30d_iso()
+    with get_conn() as c:
+        anth = c.execute(
+            """SELECT ROUND(SUM(ue.cost_usd),2) s, COUNT(*) e
+               FROM usage_events ue JOIN providers p ON p.id=ue.provider_id
+               WHERE p.name='anthropic' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
+        cur = c.execute(
+            """SELECT ROUND(SUM(ue.cost_usd),2) s, COUNT(*) e
+               FROM usage_events ue JOIN providers p ON p.id=ue.provider_id
+               WHERE p.name='cursor' AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
+        agent = c.execute(
+            """SELECT ROUND(SUM(ue.cost_usd),2) s
+               FROM usage_events ue JOIN providers p ON p.id=ue.provider_id
+               WHERE p.name='anthropic' AND ue.purpose='Agent'
+                 AND ue.occurred_at BETWEEN ? AND ?""",
+            (s_iso, e_iso),
+        ).fetchone()
+    anth_s, anth_e = float(anth["s"] or 0), int(anth["e"] or 0)
+    cur_s,  cur_e  = float(cur["s"]  or 0), int(cur["e"]  or 0)
+    ag_s = float(agent["s"] or 0)
+    _check("Anthropic $/req",        3.33,  round(anth_s / max(anth_e, 1), 2), tol_pct=5)
+    _check("Cursor $/event",         12.13, round(cur_s  / max(cur_e, 1), 2),  tol_pct=5)
+    _check("Claude Code Agent share within Anthropic (%)", 82.1,
+           round(ag_s / max(anth_s, 1) * 100, 1), tol_pct=3)
+
+
+# ─── 6. §1.4 PER-USER TOOL SPLITS (top-10) ────────────────────────────────
+
+# (user_substring, expected: {Claude, GPT, Cursor})
+REPORT_TOP10_SPLITS = [
+    ("Atindra Nair",      {"anthropic": 5431, "openai": 0,    "cursor": 1}),
+    ("Eugene Lyapustin",  {"anthropic": 5378, "openai": 0,    "cursor": 0}),
+    ("Richard Osterloh",  {"anthropic": 1010, "openai": 0,    "cursor": 0}),
+    ("Sam Pfeiffer",      {"anthropic": 1914, "openai": 453,  "cursor": 0}),
+    ("Oleg Sinavski",     {"anthropic": 147,  "openai": 0,    "cursor": 2082}),
+    ("Andy Park",         {"anthropic": 2224, "openai": 3,    "cursor": 1}),
+    ("Cody Griffin",      {"anthropic": 136,  "openai": 1177, "cursor": 7}),
+    ("Daksh Dhingra",     {"anthropic": 1146, "openai": 0,    "cursor": 9}),
+]
+
+
+def audit_top_user_tool_splits() -> None:
+    _section("§1.4 · PER-USER TOOL-SPLIT (top-10, 30d)")
+    s_iso, e_iso = _last_30d_iso()
+    with get_conn() as c:
+        rows = c.execute(
+            """SELECT u.full_name n, p.name prov, ROUND(SUM(ue.cost_usd),2) s
+               FROM usage_events ue
+               JOIN users u ON u.id=ue.user_id
+               JOIN providers p ON p.id=ue.provider_id
+               WHERE ue.occurred_at BETWEEN ? AND ?
+               GROUP BY u.full_name, p.name""",
+            (s_iso, e_iso),
+        ).fetchall()
+    by_user: dict[str, dict[str, float]] = {}
+    for r in rows:
+        by_user.setdefault(r["n"], {})[r["prov"]] = float(r["s"] or 0)
+    for sub, expected in REPORT_TOP10_SPLITS:
+        # find exact match preferred
+        actual = by_user.get(sub) or next(
+            (v for n, v in by_user.items() if sub.lower() in n.lower()),
+            None,
+        )
+        if not actual:
+            print(f"  ???  {sub} not found")
+            continue
+        for prov, exp_v in expected.items():
+            label = f"{sub} · {prov}"
+            _check(label, exp_v, actual.get(prov, 0), tol_pct=10, abs_tol=2)
+
+
+# ─── 7. §1.6 ANOMALIES (OpenAI per-msg cost) ──────────────────────────────
+
+# (user_substring, expected_msg_count, expected_dollars_per_msg)
+REPORT_ANOMALIES = [
+    ("Cody Griffin",       51, 23.11),
+    ("Matt Klingensmith",  34, 23.25),
+    ("Sam Pfeiffer",       26, 17.85),
+]
+
+
+def audit_anomalies() -> None:
+    _section("§1.6 · ANOMALIES (OpenAI reasoning overusers, 30d)")
+    s_iso, e_iso = _last_30d_iso()
+    with get_conn() as c:
+        rows = c.execute(
+            """SELECT u.full_name n, COUNT(*) c, ROUND(SUM(ue.cost_usd),2) s
+               FROM usage_events ue
+               JOIN users u ON u.id=ue.user_id
+               JOIN providers p ON p.id=ue.provider_id
+               WHERE p.name='openai' AND ue.occurred_at BETWEEN ? AND ?
+               GROUP BY u.full_name HAVING s > 0
+               ORDER BY s DESC""",
+            (s_iso, e_iso),
+        ).fetchall()
+    by_user = {r["n"]: (int(r["c"]), float(r["s"] or 0)) for r in rows}
+    for sub, exp_msgs, exp_dpm in REPORT_ANOMALIES:
+        match = next(
+            ((n, v) for n, v in by_user.items() if sub.lower() in n.lower()),
+            None,
+        )
+        if not match:
+            print(f"  ???  {sub} has no OpenAI events in 30d")
+            continue
+        n, (msgs, dollars) = match
+        dpm = round(dollars / max(msgs, 1), 2)
+        _check(f"{sub} · OpenAI msgs",  exp_msgs, msgs, tol_pct=25, abs_tol=5)
+        _check(f"{sub} · OpenAI $/msg", exp_dpm,  dpm,  tol_pct=15, abs_tol=2)
+
+
+# ─── 8. SNAPSHOT vs §2 LIFETIME (different windows) ───────────────────────
+
+def audit_lifetime_git() -> None:
+    _section("§2 · LIFETIME vs PERIOD (Git)")
+    with get_conn() as c:
+        total_commits = int(c.execute(
+            "SELECT COUNT(*) n FROM git_commits"
+        ).fetchone()["n"] or 0)
+        total_humans = int(c.execute(
+            """SELECT COUNT(*) n FROM git_authors WHERE name NOT LIKE '%[bot]%'
+               AND name NOT LIKE '%-bot%' AND name NOT LIKE 'github-actions%'"""
+        ).fetchone()["n"] or 0)
+        total_bots = int(c.execute(
+            """SELECT COUNT(*) n FROM git_authors WHERE name LIKE '%[bot]%'
+               OR name LIKE '%-bot%' OR name LIKE 'github-actions%'"""
+        ).fetchone()["n"] or 0)
+    # Snapshot card values
+    _check("Snapshot · commits ingested (lifetime)", 23044, total_commits, tol_pct=10)
+    _check("Snapshot · humans (lifetime)",           213,   total_humans,  tol_pct=10)
+    _check("Snapshot · bots (lifetime)",             13,    total_bots,    tol_pct=20)
+
+
+# ─── 9. UNVERIFIABLE — list with provenance ───────────────────────────────
+
+def list_unverifiable() -> None:
+    _section("UNVERIFIABLE FROM DASHBOARD DB — provenance noted")
+    items = [
+        ("§2.2 per-module bug rates (14 modules)",
+         "Needs git history walked per subdirectory of cloned hmnd repo. "
+         "git_commits.repo is repo-level, not module-level. Source: manual "
+         "analysis of /tmp/hmnd_repos_clone during one-off audit."),
+        ("§2.4 test density (1:836, 1:1.3k, etc.)",
+         "Test counts and LoC per module require filesystem walk. "
+         "Not stored in DB."),
+        ("§2.7 full per-module table (LoC, tests, top contributor %)",
+         "Same — manual file-system walk. Top-contributor % was computed "
+         "from per-(author, subdir) commit counts."),
+        ("§1.2 Cursor: 27 Claude / 20 GPT / 16 default",
+         "Comes from Cursor's own per-user model breakdown (their app UI). "
+         "Not in usage_events."),
+        ("§1.6 Amir Torabi 244k AI lines / 1 commit",
+         "AI-lines is Cursor's lifetime counter (Cursor JSON export field "
+         "`assisted_lines`). Verifiable from sources/Cursor_*.json but not "
+         "via SQL aggregate."),
+        ("§2.1 hmnd 9KB AGENTS.md / 40+ CI workflows / 10.3KB pre-commit",
+         "File-system metadata of the cloned repos, not in DB."),
+        ("Champion matrix specific name lists (Q1/Q2/Q3/Q4)",
+         "Q1/Q2/Q3/Q4 cohort counts pass via segment audit (19/7/42/43). "
+         "Specific names per quadrant are pulled by name match — verified "
+         "elsewhere via segment + spend joins."),
+    ]
+    for label, why in items:
+        print(f"  ??   {label}")
+        print(f"       └─ {why}")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────
 
 def main() -> int:
     print(f"\n  REPORT AUDIT — utc {datetime.utcnow().isoformat()}\n")
     audit_topline_30d()
+    audit_derived_ratios()
     audit_concentration()
     audit_top_spenders()
+    audit_top_user_tool_splits()
+    audit_anomalies()
     audit_engineering()
+    audit_lifetime_git()
+    list_unverifiable()
     print(f"\n  {'═' * 110}")
     print(f"  SUMMARY:  {TOTAL_PASS} PASS  ·  {TOTAL_FAIL} DRIFT")
     print(f"  {'═' * 110}\n")
