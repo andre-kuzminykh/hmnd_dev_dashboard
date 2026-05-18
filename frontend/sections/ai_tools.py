@@ -232,6 +232,46 @@ with tab_overview:
             unsafe_allow_html=True,
         )
 
+    # -------- 1.5  Top-level KPI row (always visible, F-21) --------
+    # Active users (distinct across scope), Total messages (events count),
+    # Total spend ($), High Spenders count (≥$200 in scope).
+    _in_scope_provs: list[str] = []
+    if _show_anthropic: _in_scope_provs.append("anthropic")
+    if _show_openai:    _in_scope_provs.append("openai")
+    if _show_cursor:    _in_scope_provs.append("cursor")
+    if _in_scope_provs:
+        with _gc() as _conn:
+            _ph = ",".join(["?"] * len(_in_scope_provs))
+            _au = _conn.execute(
+                f"""SELECT COUNT(DISTINCT ue.user_id) AS u, COUNT(*) AS c
+                    FROM usage_events ue JOIN providers p ON p.id = ue.provider_id
+                    WHERE p.name IN ({_ph})
+                      AND ue.occurred_at BETWEEN ? AND ?
+                      {_org_clause} {_key_clause}""",
+                _in_scope_provs + [s_iso, e_iso] + _org_params + _key_params,
+            ).fetchone()
+        _active_users_scope = int(_au["u"] or 0)
+        _total_msgs_scope   = int(_au["c"] or 0)
+    else:
+        _active_users_scope = 0
+        _total_msgs_scope   = 0
+
+    _hs_count_200 = sum(
+        1 for r in get_high_spenders(
+            period_days=f.period_days, threshold_usd=200,
+            api_key_id=f.api_key_id, provider=_scope,
+            organization=(f.organization or "all"),
+            date_from=f.date_from, date_to=f.date_to,
+        )
+    )
+
+    kpi_row([
+        {"label": "Active users",    "value": str(_active_users_scope)},
+        {"label": "Total messages",  "value": fmt_int(_total_msgs_scope)},
+        {"label": "Total spend",     "value": fmt_money(total_v)},
+        {"label": "High (>= $200)",  "value": str(_hs_count_200)},
+    ])
+
     # -------- 2. Three tool cards (Claude / ChatGPT / Cursor) --------
     def _tool_card(color: str, label: str, value: str, note: str) -> str:
         return f"""
@@ -386,28 +426,14 @@ with tab_overview:
 
     # ================ Expanders (tables, collapsed by default) ================
 
-    # ---- All Users — cross-tool ----
-    with st.expander("All Users — cross-tool", expanded=False):
-        per_provider = get_high_spenders_per_provider(period_days=f.period_days)
-        if not per_provider:
-            st.caption("No cross-tool user spend in the active window.")
-        else:
-            # Scope filter — drop rows that have $0 in the active scope.
-            def _in_scope(r: dict) -> bool:
-                if _scope == "all":
-                    return True
-                if _scope == "anthropic":
-                    return (r.get("cost_anthropic") or 0) > 0
-                if _scope == "openai":
-                    return (r.get("cost_openai") or 0) > 0
-                if _scope == "cursor":
-                    return (r.get("cost_cursor") or 0) > 0
-                return True
-            scoped = [r for r in per_provider if _in_scope(r)]
-            if not scoped:
-                st.caption(f"No users with spend in scope '{_scope}'.")
+    # ---- All Users — cross-tool (only when Source = All sources) ----
+    if _scope == "all":
+        with st.expander("All Users — cross-tool", expanded=False):
+            per_provider = get_high_spenders_per_provider(period_days=f.period_days)
+            if not per_provider:
+                st.caption("No cross-tool user spend in the active window.")
             else:
-                df_au = pd.DataFrame(scoped)
+                df_au = pd.DataFrame(per_provider)
                 df_au = df_au[["user_name", "messages",
                                "cost_openai", "cost_anthropic",
                                "cost_cursor", "cost_total"]].copy()
@@ -645,46 +671,59 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-    # ---- High Spenders detail (cards) ----
-    with st.expander("High Spenders detail (cards)", expanded=False):
-        # Cross-tool view by design — ignore scope so we can rank everyone.
-        threshold = st.slider(
-            "High-spender threshold ($)", 200, 5000, 1000, 100,
-            key="hs_threshold",
-        )
-        all_spenders = get_high_spenders(
-            period_days=f.period_days,
-            threshold_usd=0,
-            api_key_id=None,
-        )
-        high = [r for r in all_spenders if r["spend"] >= threshold]
-        combined = sum(r["spend"] for r in high)
-        top = high[0] if high else None
-        total_users = len(all_spenders)
-        share_high = (len(high) / total_users * 100) if total_users else 0
+    # ---- High Spenders — KPI + chart visible, cards inside expander (F-21) ----
+    # Cross-tool by design — rank everyone across all 3 tools.
+    section(
+        "High Spenders",
+        help="People above the threshold (slider) ranked by combined spend "
+             "across all tools. Cross-tool by design — ignores Source filter.",
+    )
+    threshold = st.slider(
+        "High-spender threshold ($)", 200, 5000, 1000, 100,
+        key="hs_threshold",
+    )
+    all_spenders = get_high_spenders(
+        period_days=f.period_days,
+        threshold_usd=0,
+        api_key_id=None,
+    )
+    high = [r for r in all_spenders if r["spend"] >= threshold]
+    combined = sum(r["spend"] for r in high)
+    top = high[0] if high else None
+    total_users = len(all_spenders)
+    share_high = (len(high) / total_users * 100) if total_users else 0
 
-        kpi_row([
-            {"label": "High spenders",  "value": f"{len(high)} / {total_users}"},
-            {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—"},
-            {"label": "Combined spend", "value": fmt_money(combined)},
-            {"label": "Share of users", "value": f"{share_high:.0f}%"},
-        ])
+    kpi_row([
+        {"label": "High spenders",  "value": f"{len(high)} / {total_users}"},
+        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—"},
+        {"label": "Combined spend", "value": fmt_money(combined)},
+        {"label": "Share of users", "value": f"{share_high:.0f}%"},
+    ])
 
-        if not high:
-            st.info(
-                f"No users at or above {fmt_money(threshold)} in the period."
+    if not high:
+        st.info(f"No users at or above {fmt_money(threshold)} in the period.")
+    else:
+        # Top 10 cross-tool ranking bars — visible directly
+        ranked_top10 = sorted(
+            all_spenders, key=lambda r: r["spend"] or 0, reverse=True
+        )[:10]
+        if ranked_top10:
+            max_spend_r = max((r["spend"] or 0) for r in ranked_top10) or 1
+            _bar_list(
+                ranked_top10, label_key="user_name", value_key="spend",
+                css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
+                max_value=max_spend_r,
+                value_formatter=fmt_money,
             )
-        else:
+
+        # Notable high spend cards + analysis — inside the expander
+        with st.expander("Notable high spend (per-user cards + analysis)",
+                         expanded=False):
             per_provider_full = get_high_spenders_per_provider(
                 period_days=f.period_days
             )
             split_by_user = {r["user_name"]: r for r in per_provider_full}
 
-            section(
-                "Notable high spend",
-                help="Top 15 high-spenders with per-tool split (GPT + CC + "
-                     "Cursor). Border colour = risk level.",
-            )
             cards_html = []
             for s in high[:15]:
                 spend_v = s["spend"] or 0
@@ -722,33 +761,18 @@ with tab_overview:
                 )
             st.markdown("".join(cards_html), unsafe_allow_html=True)
 
-            col_anal, col_rank = st.columns(2)
-            with col_anal:
-                section("High spend analysis")
-                findings = _hs_findings(high)
-                if findings:
-                    st.markdown(
-                        "<ul style='margin:0; padding-left:18px; color:#475569; "
-                        "font-size:13px; line-height:1.7'>"
-                        + "".join(f"<li>{fnd}</li>" for fnd in findings)
-                        + "</ul>",
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.caption("No notable anomalies detected.")
-            with col_rank:
-                section("Cross-tool spend ranking")
-                ranked = sorted(
-                    all_spenders, key=lambda r: r["spend"] or 0, reverse=True
-                )[:10]
-                if ranked:
-                    max_spend_r = max((r["spend"] or 0) for r in ranked) or 1
-                    _bar_list(
-                        ranked, label_key="user_name", value_key="spend",
-                        css_class=lambda r: f"risk-{classify_risk(r['spend']) or 'low'}",
-                        max_value=max_spend_r,
-                        value_formatter=fmt_money,
-                    )
+            section("High spend analysis")
+            findings = _hs_findings(high)
+            if findings:
+                st.markdown(
+                    "<ul style='margin:0; padding-left:18px; color:#475569; "
+                    "font-size:13px; line-height:1.7'>"
+                    + "".join(f"<li>{fnd}</li>" for fnd in findings)
+                    + "</ul>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.caption("No notable anomalies detected.")
 
     # ---- Anthropic models — JSON rollup ----
     if _show_anthropic:
@@ -797,29 +821,72 @@ with tab_overview:
                     unsafe_allow_html=True,
                 )
 
-    # ---- OpenAI top models — full table ----
+    # ---- OpenAI top models — pie chart + full table ----
     if _show_openai:
+        _openai_models_for_pie = get_openai_top_models(period_days=f.period_days)
+        if _openai_models_for_pie:
+            section(
+                "OpenAI model mix",
+                help="Share of OpenAI spend per model in the active window. "
+                     "Hover the legend to highlight one slice.",
+            )
+            _df_pie = pd.DataFrame(_openai_models_for_pie)
+            _df_pie = _df_pie[_df_pie["spend"] > 0].copy()
+            if not _df_pie.empty:
+                fig_pie = px.pie(
+                    _df_pie, values="spend", names="model", hole=0.45,
+                    color_discrete_sequence=px.colors.sequential.Tealgrn,
+                )
+                fig_pie.update_traces(
+                    textposition="inside", textinfo="percent+label",
+                    hovertemplate="%{label}<br>$%{value:,.2f} · %{percent}<extra></extra>",
+                )
+                fig_pie.update_layout(
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    font=dict(family="Inter", color=NAVY),
+                    legend=dict(orientation="v", x=1.02, y=0.5),
+                    paper_bgcolor="white",
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+
         with st.expander("OpenAI top models — full table", expanded=False):
             openai_models_full = get_openai_top_models(period_days=f.period_days)
             if not openai_models_full:
                 st.caption("No OpenAI events in the window.")
             else:
                 df_om = pd.DataFrame(openai_models_full)
-                # get_spend_by_model returns {model, spend, requests, users}
-                df_om["spend_str"] = df_om["spend"].apply(
+                # get_spend_by_model returns {model, spend, requests, users}.
+                # F-21: add a Volume column (requests + tokens proxy via users).
+                df_om["volume_raw"] = df_om["requests"]
+                df_om["spend_str"]   = df_om["spend"].apply(
                     lambda v: fmt_money(v) if v else "—"
                 )
-                df_om["requests"] = df_om["requests"].apply(
+                df_om["requests_str"] = df_om["requests"].apply(
                     lambda v: fmt_int(int(v))
                 )
-                view_om = df_om[["model", "requests", "spend_str", "users"]].rename(
-                    columns={
-                        "model": "Model",
-                        "requests": "Requests",
-                        "spend_str": "Spend",
-                        "users": "Users",
-                    }
-                )
+                # Volume = requests with a thin progress bar so the share is
+                # readable at a glance.
+                _max_vol = max((int(r) for r in df_om["volume_raw"]), default=1) or 1
+                def _vol_html(v: int) -> str:
+                    pct = max(2, min(100, int((v / _max_vol) * 100)))
+                    return (
+                        f"<div style='display:flex;align-items:center;gap:8px;'>"
+                        f"<div style='flex:1;background:#f1f5f9;height:8px;"
+                        f"border-radius:3px;overflow:hidden;min-width:60px;'>"
+                        f"<div style='background:#10a37f;height:100%;width:{pct}%;'></div></div>"
+                        f"<div style='font-variant-numeric:tabular-nums;color:#475569;font-size:12px;'>"
+                        f"{fmt_int(int(v))}</div></div>"
+                    )
+                df_om["volume_html"] = df_om["volume_raw"].apply(_vol_html)
+                view_om = df_om[
+                    ["model", "requests_str", "volume_html", "spend_str", "users"]
+                ].rename(columns={
+                    "model": "Model",
+                    "requests_str": "Requests",
+                    "volume_html": "Volume",
+                    "spend_str": "Spend",
+                    "users": "Users",
+                })
                 st.markdown(
                     view_om.to_html(escape=False, index=False, classes="hmnd-table"),
                     unsafe_allow_html=True,
@@ -889,12 +956,6 @@ with tab_overview:
         _cursor_in_scope = f.provider in ("all", "cursor")
         cursor_rows_ml = _mus() if _cursor_in_scope else []
         cursor_total_reqs = sum(m["requests"] for m in cursor_rows_ml)
-
-        st.caption(
-            f"Model landscape — {f.date_range()[0].date()} → "
-            f"{f.date_range()[1].date()}. Statuses: DOMINANT (>= 40% of "
-            "scope), GROWING (20-40%), ACTIVE (else)."
-        )
 
         items: list[dict[str, Any]] = []
         for r in rows_api:
@@ -1461,15 +1522,20 @@ with tab_people:
     s_iso = f.date_range()[0].strftime("%Y-%m-%d %H:%M:%S")
     e_iso = f.date_range()[1].strftime("%Y-%m-%d %H:%M:%S")
 
-    # ── 1. Dropdown (every user, ordered by lifetime total spend) ──────────
+    # ── 1. Dropdown (every user, ordered by spend IN THE ACTIVE PERIOD) ────
+    # Period-aware so the dollar value in the label matches the "Period spend"
+    # on the profile card after selection.
     with _gc_p() as _conn_p:
         people_rows = _conn_p.execute(
             """SELECT u.id, u.full_name, u.email,
-                      COALESCE(ROUND(SUM(ue.cost_usd), 2), 0) AS total_spend
+                      COALESCE(ROUND(SUM(
+                          CASE WHEN ue.occurred_at BETWEEN ? AND ?
+                               THEN ue.cost_usd ELSE 0 END), 2), 0) AS total_spend
                FROM users u
                LEFT JOIN usage_events ue ON ue.user_id = u.id
                GROUP BY u.id
-               ORDER BY total_spend DESC, u.full_name"""
+               ORDER BY total_spend DESC, u.full_name""",
+            (s_iso, e_iso),
         ).fetchall()
     people = [dict(r) for r in people_rows]
 
@@ -1612,10 +1678,12 @@ with tab_people:
                     </div>
                 </div>
             """
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3 = st.columns(3, gap="medium")
         with c1: st.markdown(_sub_card("#6366f1", "Claude",  "anthropic"), unsafe_allow_html=True)
         with c2: st.markdown(_sub_card("#10a37f", "ChatGPT", "openai"),    unsafe_allow_html=True)
         with c3: st.markdown(_sub_card("#f59e0b", "Cursor",  "cursor"),    unsafe_allow_html=True)
+        # vertical gap between sub-cards and the next section
+        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
         # ── 4. Charts ─────────────────────────────────────────────────────
         section(
