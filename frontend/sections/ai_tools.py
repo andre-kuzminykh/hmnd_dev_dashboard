@@ -327,19 +327,33 @@ with tab_overview:
     )
 
     kpi_row([
-        {"label": "Active users",    "value": str(_active_users_scope)},
-        {"label": "Total messages",  "value": fmt_int(_total_msgs_scope)},
-        {"label": "Total spend",     "value": fmt_money(total_v)},
-        {"label": "High (>= $200)",  "value": str(_hs_count_200)},
+        {"label": "Active users",    "value": str(_active_users_scope),
+         "help": "Unique people who used any of the in-scope AI tools at "
+                 "least once in the active period. Headcount answer to "
+                 "'how broad is AI adoption?'"},
+        {"label": "Total messages",  "value": fmt_int(_total_msgs_scope),
+         "help": "Volume of API calls / messages / completions across all "
+                 "in-scope tools. Pure engagement metric — does NOT correlate "
+                 "with dollars (cheap models can rack up huge counts)."},
+        {"label": "Total spend",     "value": fmt_money(total_v),
+         "help": "Combined AI spend across in-scope tools (Claude + ChatGPT "
+                 "+ Cursor) in the active period. This is the headline number "
+                 "for the CFO."},
+        {"label": "High (>= $200)",  "value": str(_hs_count_200),
+         "help": "How many individual users spent ≥ $200 on AI in this "
+                 "period — they're the right targets for a 1-on-1 budget "
+                 "review or champion-cohort interview."},
     ])
 
     # -------- 2. Three tool cards (Claude / ChatGPT / Cursor) --------
-    def _tool_card(color: str, label: str, value: str, note: str) -> str:
+    def _tool_card(color: str, label: str, value: str, note: str,
+                   help_text: str = "") -> str:
+        from frontend.components import _help_icon
         return f"""
             <div style="border:1px solid #e8edf3;border-top:3px solid {color};border-radius:18px;
                         padding:18px 20px;background:linear-gradient(180deg,#fff 0%,#fcfdff 100%);
                         box-shadow:0 14px 32px -24px rgba(6,9,28,.14);height:100%;">
-                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;">{label}</div>
+                <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;">{label}{_help_icon(help_text)}</div>
                 <div style="font-size:28px;line-height:1;font-weight:300;color:#06091c;">{value}</div>
                 <div style="font-size:12px;color:#475569;margin-top:10px;">{note}</div>
             </div>
@@ -350,16 +364,25 @@ with tab_overview:
         st.markdown(_tool_card(
             "#6366f1", "Claude", fmt_money(claude_v),
             f"{_claude_spend['u']} users · {_claude_spend['c']:,} reqs",
+            help_text="Anthropic Claude spend in the active period — covers "
+                      "Chat, Claude Code (agentic CLI) and Cowork. The dominant "
+                      "AI tool by spend for engineering work.",
         ), unsafe_allow_html=True)
     with c2:
         st.markdown(_tool_card(
             "#10a37f", "ChatGPT", fmt_money(gpt_v),
             f"{_gpt_spend['u']} users · {_gpt_spend['c']:,} reqs",
+            help_text="OpenAI API spend across all organisations (Artem + "
+                      "Humanoid). Includes ChatGPT, GPT-5, o-series and "
+                      "automation accounts.",
         ), unsafe_allow_html=True)
     with c3:
         st.markdown(_tool_card(
             "#f59e0b", "Cursor", fmt_money(cursor_v),
             f"{_cursor_devs} devs · {_cursor_completions:,} completions · {fmt_int(_cursor_ai_lines)} AI lines",
+            help_text="Cursor IDE team subscription spend — covers seat fees + "
+                      "any overage. Cursor is paid per-seat, so the dollar "
+                      "value is fixed but you can see which devs actually use it.",
         ), unsafe_allow_html=True)
 
     # =========================================================================
@@ -387,10 +410,22 @@ with tab_overview:
     share_high = (len(high) / total_users * 100) if total_users else 0
 
     kpi_row([
-        {"label": "High spenders",  "value": f"{len(high)} / {total_users}"},
-        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—"},
-        {"label": "Combined spend", "value": fmt_money(combined)},
-        {"label": "Share of users", "value": f"{share_high:.0f}%"},
+        {"label": "High spenders",  "value": f"{len(high)} / {total_users}",
+         "help": "Users at or above the slider threshold, out of total active "
+                 "users in the period. If 10+ people clear $1k/month, "
+                 "consider per-user caps or a budget-review process."},
+        {"label": "Highest single", "value": fmt_money(top["spend"]) if top else "—",
+         "help": "Single biggest spender across all tools. If they're a "
+                 "human engineer — possibly worth a champion interview. "
+                 "If they're an automation account — verify the budget intent."},
+        {"label": "Combined spend", "value": fmt_money(combined),
+         "help": "Total spend of every user above the threshold. Usually "
+                 "60–80% of the entire company AI budget concentrates here "
+                 "(Pareto distribution)."},
+        {"label": "Share of users", "value": f"{share_high:.0f}%",
+         "help": "Percentage of active users who are high-spenders. "
+                 "Typical AI-mature team: 5–15%. Higher = heavy concentration "
+                 "in a few power users; lower = broad adoption."},
     ])
 
     if not high:
@@ -540,10 +575,21 @@ with tab_overview:
             total_reqs_cc = sum(r["requests"] for r in cc_rows)
             total_spend_cc = sum(r["spend"] or 0 for r in cc_rows)
             kpi_row([
-                {"label": "CC Requests", "value": _fmt_int(total_reqs_cc)},
-                {"label": "CC Spend",    "value": fmt_money(total_spend_cc)},
-                {"label": "Top spender", "value": fmt_money(cc_rows[0]['spend'])},
-                {"label": "Avg / user",  "value": fmt_money(total_spend_cc / max(len(cc_rows), 1))},
+                {"label": "CC Requests", "value": _fmt_int(total_reqs_cc),
+                 "help": "Claude Code (purpose='Agent') events — every "
+                         "agentic action: write a function, read a file, "
+                         "run a command. One session is tens-to-hundreds."},
+                {"label": "CC Spend",    "value": fmt_money(total_spend_cc),
+                 "help": "Dollar cost of Claude Code in the active period. "
+                         "Sub-set of total Anthropic — excludes Chat and "
+                         "Cowork. Usually the dominant Anthropic line item."},
+                {"label": "Top spender", "value": fmt_money(cc_rows[0]['spend']),
+                 "help": "Heaviest individual Claude Code user. Worth "
+                         "interviewing — they've moved to a fully agentic "
+                         "workflow and may have lessons to share."},
+                {"label": "Avg / user",  "value": fmt_money(total_spend_cc / max(len(cc_rows), 1)),
+                 "help": "Mean Claude Code spend per active user. Use it to "
+                         "project costs as the team grows."},
             ])
             # Pie chart — share of CC spend by top users
             top_cc = cc_rows[:8]
@@ -738,10 +784,22 @@ with tab_overview:
             total_spend_gpt = sum(r["cost"] for r in rows)
             high_gpt = [r for r in rows if r["cost"] >= 200]
             kpi_row([
-                {"label": "Active users",    "value": str(len(rows))},
-                {"label": "Total messages",  "value": _fmt_int(total_msgs_gpt)},
-                {"label": "Total spend",     "value": fmt_money(total_spend_gpt)},
-                {"label": "High (>= $200)",  "value": str(len(high_gpt))},
+                {"label": "Active users",    "value": str(len(rows)),
+                 "help": "Unique people who hit any OpenAI endpoint (ChatGPT, "
+                         "GPT-5, o-series, embeddings, etc.) at least once "
+                         "this period."},
+                {"label": "Total messages",  "value": _fmt_int(total_msgs_gpt),
+                 "help": "Number of OpenAI API requests in scope. Includes "
+                         "all endpoint types — chat completions, embeddings, "
+                         "fine-tuning calls. Cheap mini models dominate count."},
+                {"label": "Total spend",     "value": fmt_money(total_spend_gpt),
+                 "help": "OpenAI spend in dollars. May drift ±5% from the "
+                         "official Platform UI due to batch / cached pricing — "
+                         "use as a working estimate, not exact billing."},
+                {"label": "High (>= $200)",  "value": str(len(high_gpt)),
+                 "help": "Users with OpenAI spend ≥ $200 this period — usual "
+                         "trigger for a coaching call to check model-routing "
+                         "(default mini, reserve o-series for hard work)."},
             ])
             # Pie chart — share of OpenAI spend by user
             top_gpt = sorted(rows, key=lambda r: r["cost"], reverse=True)[:8]

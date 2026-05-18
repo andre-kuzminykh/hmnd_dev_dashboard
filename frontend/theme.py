@@ -283,6 +283,47 @@ button,
 a {
     cursor: pointer !important;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+   F-29 · Mobile-friendly rules (≤ 768 px viewport)
+   - shrink KPI value font
+   - stack column rows (already handled by Streamlit at < 640 px;
+     we just adjust paddings & gaps)
+   - horizontal scroll on .hmnd-table so wide tables don't overflow
+   - tighten hero / section padding
+   ────────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .block-container { padding-left: 12px !important; padding-right: 12px !important; }
+    .hmnd-kpi { padding: 14px 16px; border-radius: 14px; }
+    .hmnd-kpi .value { font-size: 22px; }
+    .hmnd-kpi .label { font-size: 10px; letter-spacing: .10em; }
+    .hmnd-hero { padding: 18px 18px; border-radius: 18px; }
+    .hmnd-hero h1 { font-size: 26px; }
+    .hmnd-section h2 { font-size: 18px; }
+    .hmnd-bar-row { grid-template-columns: 100px 1fr 60px; gap: 8px; font-size: 12px; }
+    .hmnd-bar-row .name { font-size: 12px; }
+    .hmnd-bar-row .value { font-size: 12px; }
+    /* Tables — keep scrollable */
+    table.hmnd-table { display: block; overflow-x: auto; white-space: nowrap; }
+    /* st.columns on Streamlit stacks vertically below ~640 px automatically.
+       Add visible vertical breathing room so cards don't visually fuse: */
+    [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        margin-bottom: 8px;
+    }
+    /* Plotly charts shrink height slightly */
+    .stPlotlyChart > div { height: auto !important; min-height: 220px; }
+    /* Help tooltip pinned to bottom-left so it doesn't clip on phones */
+    .hmnd-help[data-tip]::after {
+        left: 0 !important; transform: none !important;
+        max-width: calc(100vw - 32px);
+    }
+}
+
+@media (max-width: 480px) {
+    .hmnd-kpi .value { font-size: 18px; }
+    .hmnd-hero h1 { font-size: 22px; }
+    .hmnd-bar-row { grid-template-columns: 80px 1fr 50px; }
+}
 </style>
 """
 
