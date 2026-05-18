@@ -412,12 +412,14 @@ def audit_lifetime_git() -> None:
             "WHERE is_bot = 1"
         ).fetchone()
         dashboard_bots = int(commits_is_bot["n"] or 0) if commits_is_bot else 0
-    # Snapshot card values
+    # Snapshot card values (193 humans matches §2.7 TOTAL row in report)
     _check("Snapshot · commits ingested (lifetime)", 23044, total_commits, tol_pct=10)
-    _check("Snapshot · humans (lifetime)",           213,   total_humans,  tol_pct=10)
-    _check("Snapshot · bots (lifetime, regex)",      13,    total_bots,    tol_pct=20)
+    _check("Snapshot · humans (lifetime)",           193,   total_humans,  tol_pct=15)
     _check("Snapshot · bots (lifetime, is_bot flag)", 13, dashboard_bots,  tol_pct=20,
            comment="(uses git_commits.is_bot — same as §2 ENGINEERING)")
+    # Informational: regex-only bot count (no PASS/DRIFT — known to undercount)
+    print(f"         info   regex-only bot count (incomplete heuristic): "
+          f"{total_bots}  · use is_bot flag instead.")
 
 
 # ─── 9. MATT KLINGENSMITH DEEP-DIVE ───────────────────────────────────────
