@@ -24,7 +24,17 @@
   .tip:hover,.tip:focus,.tip.tip-open{background:var(--blue); color:#fff}
   .tip .tt{position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; border-radius:8px; padding:.6rem .75rem; font-size:.72rem; line-height:1.45; min-width:220px; max-width:300px; opacity:0; pointer-events:none; transition:opacity .15s; z-index:50; font-weight:400; text-align:left; box-shadow:0 12px 32px rgba(6,9,28,.25); white-space:normal}
   .tip:hover .tt,.tip:focus .tt,.tip.tip-open .tt{opacity:1; pointer-events:auto}
-  @media (max-width:640px){.tip .tt{position:fixed; left:8px; right:8px; bottom:auto; top:auto; transform:none; max-width:none; min-width:0}}
+  /* Mobile: tooltip becomes a centred modal-style sheet (CSS-only positioning
+     was unreliable when opened via tap; now uses transform-centre + backdrop). */
+  @media (max-width:640px){
+    .tip .tt{position:fixed; left:50%; top:50%; right:auto; bottom:auto;
+             transform:translate(-50%,-50%); max-width:88vw; min-width:0;
+             width:88vw; padding:1rem 1.1rem; font-size:.85rem;
+             line-height:1.5; z-index:1001}
+    .tip.tip-open::before{content:""; position:fixed; inset:0;
+                          background:rgba(6,9,28,.55); z-index:1000;
+                          backdrop-filter:blur(2px)}
+  }
   /* Details */
   details>summary{cursor:pointer; list-style:none; user-select:none; outline:none}
   details>summary::-webkit-details-marker{display:none}
@@ -120,8 +130,8 @@
       <span class="font-bold text-navy tracking-widest text-sm sm:text-base hidden sm:inline">HUMANOID</span>
     </a>
     <div class="flex items-center gap-1 overflow-x-auto flex-1 justify-end sm:justify-center">
-      <a href="#business" class="nav-link">Business Analysis</a>
-      <a href="#technical" class="nav-link">Technical Analysis</a>
+      <a href="#business" class="nav-link"><span class="sm:hidden">Business</span><span class="hidden sm:inline">Business Analysis</span></a>
+      <a href="#technical" class="nav-link"><span class="sm:hidden">Technical</span><span class="hidden sm:inline">Technical Analysis</span></a>
       <a href="#roadmap" class="nav-link">Roadmap</a>
     </div>
     <a href="https://hmnd.34.62.139.101.nip.io/" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 bg-navy text-white font-semibold text-xs sm:text-sm px-2.5 sm:px-4 py-2 rounded-lg hover:bg-blue transition-colors shrink-0" title="Open HMND Dashboard">
