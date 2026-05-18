@@ -1245,3 +1245,90 @@ provider.
 - `frontend/sections/ai_tools.py:263` — replace the `get_high_spenders(...)` call with the full filter set; update the caption text per FR-19.6.
 - `tests/test_e2e_filter_propagation.py:212-224` — relax the cross-tool invariant to "panel still renders".
 
+---
+
+## F-20 — Unified AI Tools layout: Overview / Engineering / People
+
+### Feature
+Collapse the eight AI-Tools tabs (Overview, Claude Users, Claude Code,
+ChatGPT, Cursor, Models, Devs Git × AI, ⚠ High Spenders) into **three**:
+**Overview**, **Engineering**, **People**. Every chart in every tab
+reacts to the global Source + Period + API key filter. Tables move
+under `st.expander(..., expanded=False)` so the page reads as
+"graphs on top, tables one click away". The legacy `section("AI Tools")`
+header is removed — tabs sit directly under the page-level Spend
+Over Time chart.
+
+### User Flow
+1. CEO picks a **Source** (`All sources` / `OpenAI · Artem` / …) and a
+   **Period** at the top of the page.
+2. The KPIs, Spend Over Time chart and the **Overview** tab below narrow
+   to that scope.
+3. CEO switches to **Engineering** to see git × AI correlation for the
+   whole team (cross-source by design).
+4. CEO opens **People**, picks a name from the dropdown, sees that
+   person's full AI profile: cost per tool, top models, daily activity,
+   tables underneath.
+5. Every chart is visible by default; every table is collapsed by
+   default and opens with one click on the expander caret.
+
+### Tabs
+
+#### Overview (consolidated)
+Order of content (top to bottom):
+1. **Spend Breakdown** horizontal 3-color bar (Claude / ChatGPT / Cursor) — reactive to scope.
+2. **3 tool cards** — Claude / ChatGPT / Cursor (cost + users + reqs each).
+3. **Top Spenders** horizontal bars (uses `get_high_spenders(...)` with full filter set per F-19). Title adapts ("All Tools" / "Claude" / "ChatGPT" / "Cursor").
+4. **Claude Products Breakdown** (Chat / Claude Code / Cowork+Other cards) — visible when scope includes Anthropic.
+5. **OpenAI Top Models** bars — visible when scope includes OpenAI.
+6. **Cursor DAU** Plotly bar chart — visible when scope includes Cursor.
+7. **Model Landscape** chart + table — at the very bottom (per user's "Models ниже всего поставь").
+
+Expanders (collapsed by default): "All Users — cross-tool", "Claude Users (Cursor leaderboard)", "Claude Code Users", "ChatGPT Users", "Cursor Users (full leaderboard)", "High Spenders detail (cards)", "Model Landscape", "Anthropic models — JSON rollup", "OpenAI top models — full table", "Cursor models".
+
+#### Engineering (renamed from `Devs (Git × AI)`)
+Logic preserved. Charts on top, tables in expanders.
+
+#### People (new)
+- `st.selectbox` with every user known to the dashboard. Label format: `"<Name> — $<TotalSpend>"` (or `"<Name>"` when no spend). Default selection: top spender.
+- Profile card (Name, email, team, big-number KPIs: Total spend, Total reqs, Top tool, Days active).
+- 3 sub-cards (Claude / ChatGPT / Cursor) showing this person's share.
+- Charts:
+  - Daily spend over time stacked-by-provider (Plotly).
+  - Spend by model (horizontal bars).
+  - Activity by purpose (Chat / Agent / API / Tab).
+- Expanders: "All events" (last 100), "Daily activity", "Cursor leaderboard row" (when present).
+- Reactivity: respects Period and api_key. Source filter is INTENTIONALLY ignored on this tab — the point is to see the person across ALL tools.
+
+### Functional Requirements
+
+| ID | Requirement |
+|---|---|
+| FR-20.1 | `frontend/sections/ai_tools.py` MUST declare exactly 3 tabs via `st.tabs(["Overview", "Engineering", "People"])`. The `section("AI Tools")` call MUST be removed. |
+| FR-20.2 | Every chart in the Overview tab MUST react to `filters.provider`, `filters.organization`, `filters.period_days` / `filters.date_from` / `filters.date_to`, `filters.api_key_id`. |
+| FR-20.3 | Every data table in the Overview and Engineering tabs MUST be wrapped in `st.expander(label, expanded=False)`. |
+| FR-20.4 | When `filters.provider == 'all'`, the Spend Breakdown / tool cards / Top Spenders MUST show cross-tool numbers. When narrowed to one provider, the bar / cards / spenders MUST narrow to that provider (cards for the others display $0 / 0 users in the same place). |
+| FR-20.5 | The People tab MUST list every user from the `users` table, ordered by total spend DESC; the dropdown label MUST be `"<Name> — <$total spend>"` or `"<Name>"` when no spend exists. |
+| FR-20.6 | When a person is picked, the page MUST query `usage_events WHERE user_id = ?` for the selected period and render: per-tool spend split, top models, daily spend stacked bar, activity by purpose. |
+| FR-20.7 | The People tab MUST NOT apply `filters.provider` / `filters.organization` to the selected person. Period and api_key_id DO apply. |
+| FR-20.8 | The Engineering tab logic from old `tab_devs` MUST be preserved: segment distribution bar, code-quality KPIs, AI Spend per Fix, High Churn Files, per-segment dev tables. All tables MUST be inside `st.expander(..., expanded=False)`. |
+| FR-20.9 | The legacy 8-tab structure MUST be removed. No old tab variables (`tab_claude`, `tab_cc`, `tab_gpt`, `tab_cursor`, `tab_models`, `tab_high`, `tab_devs`) may remain in the file. |
+
+### NFR
+
+- **NFR-20.1** UI MUST render without exception for every Source value, including providers with zero events in scope.
+- **NFR-20.2** Picking a person and switching periods MUST recompute the profile under 800 ms on a 100k-event DB (uses indexed `usage_events.user_id, occurred_at`).
+- **NFR-20.3** Each `st.expander` opens / closes via Streamlit's standard caret — no custom JS.
+
+### Tests
+
+| Test | Requirement |
+|------|-------------|
+| `tests/test_f20_unified_layout.py::test_fr_20_1_three_tabs_declared` | FR-20.1 |
+| `tests/test_f20_unified_layout.py::test_fr_20_1_no_ai_tools_section_header` | FR-20.1 |
+| `tests/test_f20_unified_layout.py::test_fr_20_9_no_legacy_tab_variables` | FR-20.9 |
+| `tests/test_f20_unified_layout.py::test_fr_20_3_overview_tables_wrapped_in_expanders` | FR-20.3 |
+| `tests/test_f20_unified_layout.py::test_fr_20_5_people_dropdown_lists_users` | FR-20.5 |
+| `tests/test_f20_unified_layout.py::test_fr_20_6_people_profile_data_shape` | FR-20.6 |
+| `tests/test_f20_unified_layout.py::test_fr_20_7_people_ignores_source_filter` | FR-20.7 |
+
