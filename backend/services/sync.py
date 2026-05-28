@@ -39,13 +39,17 @@ def _sync_anthropic(cfg, period_days: int) -> dict[str, Any]:
     3. HMND_ANTHROPIC_MOCK=true  → synthetic random demo data
     4. real Admin API            → AnthropicConnector
     """
-    # 1. JSON sources win
-    from data.sources.anthropic_json import latest_anthropic_file, load_anthropic_json
-    anthro_file = latest_anthropic_file()
-    if anthro_file is not None:
+    # 1. JSON sources win. Load ALL Anthropic JSON drops oldest-first so weekly
+    #    incremental exports accumulate: each loader DELETEs only its own
+    #    _meta period before insert, so non-overlapping weeks coexist and a
+    #    newer file (loaded last) supersedes any period it re-covers.
+    from data.sources.anthropic_json import find_anthropic_files, load_anthropic_json
+    anthro_files = find_anthropic_files()  # sorted oldest-first
+    if anthro_files:
         from data.anthropic_mock import purge_anthropic_mock
         purge_anthropic_mock()
-        return load_anthropic_json(anthro_file.path)
+        reports = [load_anthropic_json(f.path) for f in anthro_files]
+        return reports[0] if len(reports) == 1 else reports
 
     # 2. Cursor-derived
     from backend.services.cursor_analytics import claude_users as _cu
@@ -121,9 +125,9 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
         # JSON drop in sources/OpenAI_*.json → loaded as the 'Humanoid' org by
         # default. Override with HMND_OPENAI_JSON_ORG_LABEL if you need a
         # different label.
-        from data.sources.openai_json import latest_openai_file, load_openai_json
-        oai_file = latest_openai_file()
-        if oai_file is not None:
+        from data.sources.openai_json import find_openai_files, load_openai_json
+        oai_files = find_openai_files()  # sorted oldest-first
+        if oai_files:
             json_label = os.environ.get("HMND_OPENAI_JSON_ORG_LABEL", "Humanoid")
             # Skip JSON if an org with the same label already synced via API —
             # avoids double-counting if user moves a key from JSON to API.
@@ -135,8 +139,12 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
                     "reason": f"org '{json_label}' already synced via API",
                 })
             else:
+                # Load every drop oldest-first into the same org; each loader
+                # scopes its DELETE to (org, its own _meta period), so weekly
+                # incremental files accumulate without wiping prior weeks.
                 _ensure_organization(provider="openai", label=json_label)
-                org_reports.append(load_openai_json(oai_file.path, org_label=json_label))
+                for f in oai_files:
+                    org_reports.append(load_openai_json(f.path, org_label=json_label))
 
         if not org_reports:
             # Last-resort fallback: legacy single-key path.
@@ -149,11 +157,13 @@ def run_sync(period_days: int = 7, providers: tuple[str, ...] = ("openai", "anth
         out["reports"]["anthropic"] = _sync_anthropic(cfg, period_days)
 
     if "cursor" in providers or "cursor" not in providers:
-        # Cursor is JSON-only — always try it if a Cursor_*.json file is present.
-        from data.sources.cursor_json import latest_cursor_file, load_cursor_json
-        cur_file = latest_cursor_file()
-        if cur_file is not None:
-            out["reports"]["cursor"] = load_cursor_json(cur_file.path)
+        # Cursor is JSON-only — load every Cursor_*.json oldest-first so weekly
+        # incremental drops accumulate (per-file DELETE scoped to its _meta period).
+        from data.sources.cursor_json import find_cursor_files, load_cursor_json
+        cur_files = find_cursor_files()  # sorted oldest-first
+        if cur_files:
+            reports = [load_cursor_json(f.path) for f in cur_files]
+            out["reports"]["cursor"] = reports[0] if len(reports) == 1 else reports
 
     if "github" in providers and cfg.github_enabled:
         c = GitHubConnector(api_key=cfg.github_token, mock=not cfg.github_token)

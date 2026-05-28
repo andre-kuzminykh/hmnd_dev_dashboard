@@ -1,8 +1,10 @@
 # JSON sources schema
 
 Drop files into `sources/` at the repo root (or set `HMND_SOURCES_DIR`).
-Filename encodes the date: `<Provider>_YYYYMMDD.json`. When multiple
-files exist for the same provider, the latest by filename date wins.
+Filename encodes the date: `<Provider>_YYYYMMDD.json`. When multiple files
+exist for the same provider they are **all loaded, oldest-first**; each is
+idempotent over its own `_meta` period, so weekly drops accumulate and a
+newer file wins on any days it re-covers (see Discovery rules below).
 
 ## Anthropic_YYYYMMDD.json
 
@@ -113,6 +115,9 @@ container. Same shape conventions: users with messages and spend.
 ## Discovery rules
 
 1. Files matched by glob `*_YYYYMMDD.json` inside `HMND_SOURCES_DIR` (default `sources/` at repo root and inside the container `/app/sources`).
-2. For each provider the **latest by `YYYYMMDD`** wins.
-3. JSON loader is **idempotent** — re-loading the same file does not duplicate rows. The loader drops the period it covers and re-inserts.
+2. For each provider **all matching files are loaded, oldest-first** (by `YYYYMMDD` in the filename). Combined with rule 3 this means:
+   - **Cumulative pulls** (every file starts at the same `_meta.rangeStart`): the newest file supersedes the older ones — drop the new file and you're done.
+   - **Incremental / week-only pulls** (each file covers just its own new week): non-overlapping weeks accumulate, so old weeks are preserved and the new week is added. Keep the older files in place.
+   - If two files cover the **same** days, the one with the later filename date (loaded last) wins for those days. To avoid wiping a boundary day with an incremental drop, make its `_meta.rangeStart` the day **after** the previous file's `rangeEnd`.
+3. JSON loader is **idempotent** — re-loading the same file does not duplicate rows. The loader drops the period it covers (`_meta.rangeStart..rangeEnd`, scoped to the provider — and to the org for OpenAI) and re-inserts.
 4. Sync flow: JSON > Cursor-derived > Real API > Mock. First non-empty wins.
