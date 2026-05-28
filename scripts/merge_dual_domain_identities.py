@@ -74,10 +74,32 @@ def find_dual_domain_groups() -> list[list[dict]]:
     return groups
 
 
+def _best_full_name(rows: list[dict]) -> str:
+    """Pick the most human-readable full_name in the group.
+
+    Prefer a name that (a) contains a space (First Last), (b) isn't just
+    the email local-part, (c) is longest. So 'Cody Griffin' beats 'codg'.
+    """
+    def score(name: str) -> tuple:
+        n = (name or "").strip()
+        has_space = 1 if " " in n else 0
+        # Penalise names that look like an email local-part (all lowercase,
+        # no space, ≤ 8 chars — e.g. 'codg', 'anai').
+        looks_like_handle = 1 if (n and n.islower() and " " not in n and len(n) <= 8) else 0
+        return (has_space, -looks_like_handle, len(n))
+    return max((r["full_name"] for r in rows), key=score, default="")
+
+
 def merge_group(group: list[dict], dry_run: bool) -> dict:
-    """Merge a group: canonical (lowest id) absorbs others' FKs + emails."""
+    """Merge a group: canonical (lowest id) absorbs others' FKs + emails.
+
+    The canonical keeps the lowest id (stable FK target) but adopts the
+    BEST full_name in the group so the dashboard shows 'Cody Griffin'
+    not 'codg'.
+    """
     canonical = group[0]
     dupes = group[1:]
+    best_name = _best_full_name(group)
     moved = {tbl: 0 for tbl, _ in USER_FK_TABLES}
     deleted = 0
 
@@ -99,12 +121,18 @@ def merge_group(group: list[dict], dry_run: bool) -> dict:
             if not dry_run:
                 conn.execute("DELETE FROM users WHERE id = ?", (dup["id"],))
                 deleted += 1
+        if not dry_run and best_name and best_name != canonical["full_name"]:
+            conn.execute(
+                "UPDATE users SET full_name = ? WHERE id = ?",
+                (best_name, canonical["id"]),
+            )
         if not dry_run:
             conn.commit()
 
     return {
         "canonical": canonical,
         "dupes": dupes,
+        "best_name": best_name,
         "would_delete": len(dupes) if dry_run else deleted,
         "fks_to_rewrite": moved,
     }
