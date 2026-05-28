@@ -1,0 +1,13 @@
+Repo Name,Total Commits,Total Lines Added,Total Lines Deleted,Ai Lines Added,Ai Lines Deleted,Ai Impact Percentage,Tab Lines Added,Tab Lines Deleted,Composer Lines Added,Composer Lines Deleted,Non Ai Lines Added,Non Ai Lines Deleted
+HumanoidTeam/hmnd,502,160693,22066,134359,18240,83.5,2104,451,132255,17789,26334,3826
+SaeidSamadi/motra,42,13214,3311,13106,3301,99.29,0,0,13106,3301,108,10
+,22,7349,1837,5575,1590,78,96,25,5479,1565,1774,247
+mirkow/daily-sunset-show,4,3022,1653,2994,1653,99.4,0,0,2994,1653,28,0
+niaoloyede/practice,3,2952,17,1216,17,41.53,0,0,1216,17,1736,0
+NVIDIA/soma-retargeter,1,1322,0,868,0,65.66,0,0,868,0,454,0
+HumanoidTeam/navigation-ml,2,1495,35,811,35,55.29,0,0,811,35,684,0
+HumanoidTeam/hmnd-cloud,11,476,132,464,130,97.7,0,0,464,130,12,2
+HumanoidTeam/safety_prototyping,3,356,256,183,91,44.77,183,91,0,0,173,165
+NVlabs/GEM-X,2,730,10,66,10,10.27,1,0,65,10,664,0
+HumanoidTeam/beta-morphology-analysis-tools,1,94,66,27,3,18.75,27,3,0,0,67,63
+HumanoidTeam/flow-qp-generator,1,16,2,16,2,100,0,0,16,2,0,0

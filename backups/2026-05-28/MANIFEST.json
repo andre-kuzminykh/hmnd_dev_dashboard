@@ -1,0 +1,85 @@
+{
+  "created_at": "2026-05-28T22:18:58.406332+00:00",
+  "backup_label": "2026-05-28",
+  "description": "Full backup of dashboard source data before the new week's JSON drop.",
+  "note": "The DB is rebuildable from these sources; hmnd_snapshot.sql.gz is the materialized baseline.",
+  "snapshot_db_uncompressed_bytes": 3792896,
+  "files": {
+    "data_ne/Agent_Leaderboard_Agents_2026-04-30_2026-05-06 (1).csv": {
+      "bytes": 414,
+      "sha256": "aebbb885a01e3fac3670811478630c29469e46161965327fd6dcef42f0ea0b8f"
+    },
+    "data_ne/Agent_Leaderboard_Agents_2026-04-30_2026-05-06.csv": {
+      "bytes": 414,
+      "sha256": "aebbb885a01e3fac3670811478630c29469e46161965327fd6dcef42f0ea0b8f"
+    },
+    "data_ne/Agent_Usage_by_Repository_2026-04-30_2026-05-06.csv": {
+      "bytes": 101,
+      "sha256": "03c89c383d9159e622174167e4dc0e2bc8fc72bbb7c72b8292d365d9ef960c31"
+    },
+    "data_ne/Agents_by_Source_2026-04-30_2026-05-06.csv": {
+      "bytes": 755,
+      "sha256": "74506cbf140e14a77d6e8ceb7b6c214b9defed2e8876cb9cf58568e21cb6d072"
+    },
+    "data_ne/Analytics_Team_2026-04-30_2026-05-06.csv": {
+      "bytes": 25563,
+      "sha256": "ca816f19ff5e4a75de83cf087417532d653b600c04fa77797191a9ad7e38d3b8"
+    },
+    "data_ne/Contribution_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 1391,
+      "sha256": "75e1b8c486b6e420351437f209e98792b40f601175d1b733efcbf8c99f8b93da"
+    },
+    "data_ne/Team_Client_Versions_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 3114,
+      "sha256": "3c6cf0afd3debfa1eaed976e32d4514872af27210122b9ccfa2ed26f3befa9b0"
+    },
+    "data_ne/Team_DAU_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 189,
+      "sha256": "f9e3f03056426bc8f3a86ed791700a03a7e6bb7fba7390e6f0db27619c12e0a8"
+    },
+    "data_ne/Team_Repository_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 1029,
+      "sha256": "1002f7c507f13121c97bc760f46df9a36637f1d7772e9fdfaa88c05cb8e4ab05"
+    },
+    "data_ne/User_Leaderboard_2026-04-30_2026-05-06.csv": {
+      "bytes": 3102,
+      "sha256": "94e078532ccb2884d068407406b1f98e3d97187985bedf99b7e64793117648ac"
+    },
+    "hmnd_snapshot.sql.gz": {
+      "bytes": 326715,
+      "sha256": "32b501ac36bd3bf5f67eabece45cb549f3d591317b52c8ed51f3948c60afc345"
+    },
+    "root_csv/Analytics_Team_2026-04-30_2026-05-06.csv": {
+      "bytes": 25563,
+      "sha256": "ca816f19ff5e4a75de83cf087417532d653b600c04fa77797191a9ad7e38d3b8"
+    },
+    "root_csv/Contribution_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 1391,
+      "sha256": "75e1b8c486b6e420351437f209e98792b40f601175d1b733efcbf8c99f8b93da"
+    },
+    "root_csv/Team_DAU_Analytics_2026-04-30_2026-05-06.csv": {
+      "bytes": 189,
+      "sha256": "f9e3f03056426bc8f3a86ed791700a03a7e6bb7fba7390e6f0db27619c12e0a8"
+    },
+    "root_csv/User_Leaderboard_2026-04-30_2026-05-06.csv": {
+      "bytes": 3102,
+      "sha256": "94e078532ccb2884d068407406b1f98e3d97187985bedf99b7e64793117648ac"
+    },
+    "sources/Anthropics_20260515.json": {
+      "bytes": 7944820,
+      "sha256": "080b690009be44d6dfd6afaa654aaaaa74b31faf121a203958fcad0513466893"
+    },
+    "sources/Cursor_20260515.json": {
+      "bytes": 4919443,
+      "sha256": "4c5292141224fe0f41063580976eea255f26fb39fb2fe7ebffcd0dbf3b290563"
+    },
+    "sources/OpenAI_20260515.json": {
+      "bytes": 932439,
+      "sha256": "201f003f72e2e86fb2f2aa97e3404767698bbcc6d342baf5b232202edb8aaf72"
+    },
+    "sources/git_repos.txt": {
+      "bytes": 1864,
+      "sha256": "e88d85bdfd318903aafdc1e6541dc1a62ebbc84e4b3087379023164e899bb1cc"
+    }
+  }
+}
