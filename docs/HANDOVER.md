@@ -259,9 +259,9 @@ Each failing test line names the `FR-XX.Y.Z.N` requirement it covers; the matchi
 
 ---
 
-## Diagnostics
+## Operations reference
 
-Common commands when something behaves unexpectedly:
+Standard commands for inspecting state:
 
 ```bash
 # Container status
@@ -272,33 +272,32 @@ docker logs hmnd-dashboard --tail 50
 docker logs hmnd-sync --tail 50
 docker logs hmnd-snapshotter --tail 50
 
-# Force-rebuild after pulling new code
+# Rebuild after pulling new code
 docker compose up -d --build
 
-# Inspect DB from inside the container (sqlite3 CLI is installed)
+# Inspect the DB from inside the container (sqlite3 CLI is installed)
 docker compose exec dashboard sqlite3 data/hmnd.db
-# Or via Python:
+# …or via Python:
 docker compose exec -T dashboard python -c "import sqlite3; …"
 
-# Re-run a single sync
+# Run sync on demand (sync sidecar also runs this every 15 min)
 docker compose exec -T dashboard python -m scripts.sync
 
-# Force a hard browser refresh after sync if numbers look stale
-# (Streamlit per-tab cache)
+# Streamlit caches per-tab; hard refresh applies new render
 Ctrl-Shift-R
 ```
 
-Behaviour cross-reference:
+Behaviour reference — how the system surfaces its state:
 
 | Behaviour | Where it comes from |
 |-----------|---------------------|
-| Dashboard shows $0 for "Today" with a specific API key | `usage_events` filtered by `(occurred_at, api_key_id)` returns 0 rows — verify with `audit_identity_collisions` / direct SQL |
-| Dashboard at `http://localhost:7501` returns HTML, public HTTPS URL returns `ERR_SSL_PROTOCOL_ERROR` | Dashboard binds plain HTTP on `127.0.0.1:7501`. Public HTTPS is terminated by a separate reverse proxy outside this repo |
-| `audit_etl` ends with `✗` for a single provider | The check line names the source and shows `expected=$X actual=$Y Δ=±Z` |
-| Container shows `unhealthy` | Healthchecks: dashboard hits `/_stcore/health`; sync checks `mtime` on `/tmp/sync.heartbeat`; snapshotter checks `/tmp/snapshotter.heartbeat` |
-| `No module named scripts.xxx` after pulling new code | Image not rebuilt — `docker compose up -d --build dashboard` |
-| `cannot attach stdin to a TTY-enabled container` | `docker compose exec` needs `-T` for non-interactive use |
-| New JSON dropped but loader didn't pick up | Filename must match `Anthropics_*.json` / `Cursor_*.json` / `OpenAI_*.json` literally; loader takes the most recent by name date |
+| Dashboard shows $0 for "Today" with a specific API key | `usage_events` filtered by `(occurred_at, api_key_id)` returns 0 rows for that scope |
+| Local URL `http://localhost:7501` serves HTML; public HTTPS URL is HTTPS | Dashboard binds plain HTTP on `127.0.0.1:7501`; any public HTTPS endpoint is terminated by a separate reverse proxy outside this repo |
+| `audit_etl` ends with one or more `✗` rows | Each line names the source and shows `expected=$X actual=$Y Δ=±Z`; investigate that source |
+| Container reports `(healthy)` / `(unhealthy)` | Healthchecks: dashboard hits `/_stcore/health`; sync checks `mtime` on `/tmp/sync.heartbeat`; snapshotter checks `/tmp/snapshotter.heartbeat` |
+| `No module named scripts.xxx` after pulling new code | Image not rebuilt yet — `docker compose up -d --build dashboard` |
+| `cannot attach stdin to a TTY-enabled container` on `docker compose exec` | `docker compose exec` needs `-T` for non-interactive (piped/heredoc) input |
+| Loader doesn't pick up a new JSON | Filename must match `Anthropics_*.json` / `Cursor_*.json` / `OpenAI_*.json` literally; loader uses the most recent by filename date |
 
 ---
 

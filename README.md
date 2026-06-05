@@ -1,80 +1,93 @@
 # HMND AIOps Dashboard
 
-Streamlit-дашборд для мониторинга расходов на OpenAI и Anthropic, утилизации сидений, активности разработчиков и доли AI-кода в репозиториях.
+Streamlit dashboard at `http://localhost:7501` that consolidates AI tool spend (OpenAI / Anthropic / Cursor) and Git activity (3 HMND repositories) into a single leadership view.
 
-## Локальный запуск (для проверки)
+> **Start here:** [`docs/HANDOVER.md`](docs/HANDOVER.md) — single-file operations reference (architecture, env vars, weekly refresh, scripts inventory, tests).
 
-```bash
-python3.11 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env                 # заполнить ключи
-export $(grep -v '^#' .env | xargs)  # подгрузить env-переменные
+---
 
-# Создать схему БД
-python -m scripts.init_db
-
-# (Опционально) подтянуть реальные данные за 7 дней
-python -m scripts.sync --days 7
-
-# Запустить
-streamlit run frontend/main.py --server.port 7501
-```
-
-Откроется на http://localhost:7501.
-
-## Переменные окружения
-
-| Переменная | Описание |
-|---|---|
-| `OPENAI_API_KEY` | OpenAI Organization Admin key (`sk-admin-...`) |
-| `ANTHROPIC_API_KEY` | Anthropic Admin key (для `/v1/organizations/...`) |
-| `GITHUB_TOKEN` | GitHub PAT (только если `HMND_GITHUB_ENABLED=true`) |
-| `HMND_GITHUB_ENABLED` | `true/false` — показывать страницы Repositories/PR Quality и AI code share KPI |
-| `HMND_DEMO_DATA` | `true` — засеять демо-данные (для разработки) |
-| `HMND_DB_PATH` | путь к SQLite (по умолчанию `./data/hmnd.db`) |
-
-## Деплой
-
-Полные шаги — в [`docs/DEPLOY.md`](docs/DEPLOY.md). Кратко два варианта:
-
-### Docker (рекомендуется, изолированно от хоста)
+## Quick start
 
 ```bash
-git clone <repo> hmnd_dev_dashboard && cd hmnd_dev_dashboard
-git checkout claude/token-monitoring-dashboard-aDaNV
-cp .env.example .env && nano .env       # OPENAI_API_KEY, ANTHROPIC_API_KEY
-chmod 600 .env
+# 1. Configure
+cp .env.example .env && nano .env
+
+# 2. Drop the latest JSON exports into sources/
+#    Anthropics_YYYYMMDD.json
+#    Cursor_YYYYMMDD.json
+#    OpenAI_YYYYMMDD.json
+
+# 3. Build + start (3 containers: dashboard, sync, snapshotter)
 docker compose up -d --build
+
+# 4. Verify
+docker compose ps
+docker compose exec -T dashboard python -m scripts.audit_etl | tail -25
+
+# 5. Open http://localhost:7501
 ```
 
-UI слушает `127.0.0.1:7501` — поставь свой reverse-proxy перед ним.
-Sync крутится в сайдкаре `hmnd-sync` каждый час.
+---
 
-### systemd на хост
+## Repository layout
+
+```
+frontend/main.py             — entry point; renders Overview + AI Tools
+frontend/sections/           — page sections (overview.py, ai_tools.py rendered;
+                               others are legacy backends still usable)
+frontend/theme.py            — palette + CSS
+frontend/components.py       — KPI cards, badges, filters, tooltip helper
+
+backend/services/            — business logic per feature
+                               (ai_tools, git_quality, git_correlation,
+                                cursor_analytics, overview, sync, …)
+backend/config.py            — .env loader
+backend/analytics.py         — shared SQL helpers
+
+data/schema.sql              — SQLite DDL
+data/db.py                   — connection helper, schema migration
+data/sources/                — JSON / CSV loaders + _identity.py
+data/connectors/openai.py    — live OpenAI Admin API
+data/cursor_to_anthropic.py  — synthesise Anthropic Agent events from Cursor
+
+scripts/sync.py              — refresh DB from all sources (sync sidecar runs this)
+scripts/audit_etl.py         — 17-check audit (raw → DB → service formulas)
+scripts/audit_identity_collisions.py
+scripts/merge_dup_emails.py / merge_dual_domain_identities.py
+scripts/report_i_data.py     — dump 30d KPIs as plain text
+scripts/extract_git_stats.py — clone 3 repos → git_commit_file_stats_*.csv
+scripts/audit_repos_ai_readiness.py
+scripts/make_handover_archive.sh — build a colleague-ready tar.gz
+
+tests/                       — pytest suites, ID-aligned with docs/SPEC.md
+
+docs/HANDOVER.md             — operations reference (START HERE)
+docs/SPEC.md                 — living spec (F-01 … F-27)
+docs/archive/                — archived legacy multi-page feature specs
+docs/REPORT_I.md             — leadership report: AI usage / adoption / economics
+docs/REPORT_II.md            — leadership report: repo AI-codegen readiness
+docs/VERIFY.md               — pre-demo verification runbook
+docs/DEPLOY.md               — VM deployment steps
+docs/SOURCES_SCHEMA.md       — JSON drop schema reference
+CEO_BRIEF.html               — mobile-friendly leadership snapshot
+
+sources/                     — JSON / CSV drops (replace weekly)
+data/hmnd.db                 — SQLite database
+snapshots/                   — daily auto-snapshots of report_i_data output
+```
+
+---
+
+## Tests
 
 ```bash
-git clone <repo> hmnd_dev_dashboard && cd hmnd_dev_dashboard
-bash deploy/install.sh
-nano .env && sudo systemctl restart hmnd-dashboard
-sudo htpasswd -c /etc/nginx/.htpasswd andrey
+docker compose exec -T dashboard python -m pytest
 ```
 
-## Структура
-
-```
-docs/SPEC.md         — Спецификация: Feature → US → BDD → FR/NFR → Tests
-docs/DEPLOY.md       — Пошаговый деплой
-data/                — Слой данных (schema, models, seed, коннекторы)
-backend/             — Слой сервисов (KPI, costs, seats, alerts, sync, …)
-frontend/            — Streamlit UI (theme + pages)
-tests/               — Тесты по ID требований
-scripts/init_db.py   — создать/пересоздать схему
-scripts/sync.py      — pull данных из OpenAI/Anthropic/GitHub
-deploy/              — systemd units + install.sh
-```
-
-## Тесты
+## Pre-demo verification
 
 ```bash
-pytest -q
+docker compose exec -T dashboard python -m scripts.audit_etl | tail -25
 ```
+
+See [`docs/VERIFY.md`](docs/VERIFY.md) for the full 5-step pre-demo checklist.
