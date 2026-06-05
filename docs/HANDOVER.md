@@ -21,12 +21,12 @@
 git clone <repo-url> hmnd_dev_dashboard
 cd hmnd_dev_dashboard
 git checkout claude/token-monitoring-dashboard-aDaNV   # current main work branch
-cp .env.example .env && nano .env                      # set OPENAI_ADMIN_KEY, GITHUB_TOKEN
+cp .env.example .env && nano .env                      # see ".env variables" below
 
-# 2. Drop the latest JSON exports into sources/
-#    Anthropics_YYYYMMDD.json   - from Anthropic admin export
-#    Cursor_YYYYMMDD.json        - from Cursor team admin export
-#    OpenAI_YYYYMMDD.json        - from openai_admin_dump tool
+# 2. Drop the latest JSON exports into sources/ (see "Where to get exports")
+#    Anthropics_YYYYMMDD.json
+#    Cursor_YYYYMMDD.json
+#    OpenAI_YYYYMMDD.json
 
 # 3. Build + start (3 containers: dashboard, sync, snapshotter)
 docker compose up -d --build
@@ -38,6 +38,39 @@ docker compose exec -T dashboard python -m scripts.audit_etl | tail -25
 
 # 5. Open http://localhost:7501 (or via reverse proxy)
 ```
+
+### `.env` variables
+
+Required for the dashboard / sync / snapshotter to work:
+
+| Variable | What | Required for |
+|----------|------|--------------|
+| `OPENAI_ADMIN_KEY` | OpenAI admin API key (NOT a user key — admin scope for `/v1/organization/*` endpoints) | OpenAI Artem live sync. Get from [platform.openai.com → Settings → Organization → Admin Keys](https://platform.openai.com/settings/organization/admin-keys) |
+| `ANTHROPIC_API_KEY` | Anthropic API key | (currently optional — Anthropic is JSON-drop only) |
+| `GITHUB_TOKEN` (or `HMND_GITHUB_TOKEN`) | GitHub PAT, **`repo:read` scope** on `HumanoidTeam/hmnd*` repos | `scripts/extract_git_stats.py`, `scripts/audit_repos_ai_readiness.py --clone` |
+| `HMND_GITHUB_ENABLED` | `true`/`false` | Toggle Git-side features in UI |
+| `HMND_DB_PATH` | Path to SQLite file (default `/app/data/hmnd.db` in container) | Override only if you move the DB |
+
+Optional / advanced:
+
+| Variable | What |
+|----------|------|
+| `HMND_OPENAI_JSON_ORG_LABEL` | Org label for the JSON drop (default `Humanoid`); use if you ingest a JSON for a different org |
+| `HMND_SOURCES_DIR` | Override `sources/` location |
+| `HMND_ANTHROPIC_MOCK` | `true` for mock data (testing only — keep `false` in prod) |
+| `HMND_GITHUB_ORG` | GitHub org (default `HumanoidTeam`) |
+
+### Where to get the JSON exports
+
+| File pattern | Source | Frequency |
+|--------------|--------|-----------|
+| `Anthropics_YYYYMMDD.json` | Anthropic console → org admin → usage export (or internal `anthropic_admin_dump` tool if you've built one) | weekly |
+| `Cursor_YYYYMMDD.json` | Cursor team admin → analytics → JSON export (or use their Team API) | weekly |
+| `OpenAI_YYYYMMDD.json` | Internal `openai_admin_dump` tool — pulls `/v1/organization/*` for the Humanoid org (the one we don't have a live admin key for) | weekly |
+| `git_authors_YYYYMMDD.csv` + `git_commit_file_stats_YYYYMMDD.csv` | `scripts/extract_git_stats.py` — clones 3 repos via PAT | monthly |
+| `User_Leaderboard_*.csv` (optional) | Cursor team admin CSV export — used by `cursor_to_anthropic.py` to synthesise Claude Code events | weekly |
+
+**Pattern matters**: loaders match `Anthropics_*.json` / `Cursor_*.json` / `OpenAI_*.json` literally. Latest-by-date filename wins. Old files stay as history (don't delete — `audit_etl` may reference earlier dates).
 
 ---
 
@@ -63,6 +96,71 @@ Streamlit frontend reads from SQLite, no separate API layer. Loaders (`data/sour
 | Streamlit pages | `frontend/main.py` → `frontend/sections/*.py` |
 | Theme / components | `frontend/theme.py`, `frontend/components.py` |
 | Living spec | `docs/SPEC.md` (F-01 … F-16) |
+
+---
+
+## Cross-domain identity: `_identity.py`
+
+HMND people use **two email domains** for the same human:
+- `@thehumanoid.ai` — engineering work email (primary in Anthropic, Git, OpenAI)
+- `@skl.vc` — Sycamore corporate email (primary in Cursor sometimes)
+
+Without help, `INSERT INTO users(email) VALUES('atin@thehumanoid.ai')` and another `INSERT … VALUES('atin@skl.vc')` make **two user_id rows** for the same person. Per-spender ranks, segment classification, and Top spenders all break.
+
+`data/sources/_identity.py:resolve_canonical_user_id(email, name)` solves this **at insert time**:
+1. Lowercase + strip email.
+2. Compute `local_part(email)` (before `@`).
+3. Find any existing user with the same `LOWER(local_part)` across either domain.
+4. If found → return that user_id, optionally update `full_name` if the new name is better (longer, has a space).
+5. If not → insert a new user with the lowercased email; return new id.
+
+All loaders (`anthropic_json.py`, `cursor_json.py`, `openai_json.py`, `cursor_to_anthropic.py`) go through this. So weekly JSON drops can't re-introduce dual-domain splits.
+
+If you ever change the domain list (e.g. add a third corporate domain), update the matcher in `_identity.py` and re-run `scripts/merge_dual_domain_identities.py` to clean up historical splits.
+
+**Verify it's working**: `audit_identity_collisions` must return `"No dual-domain identity collisions"` after every sync.
+
+---
+
+## Test inventory
+
+`docker compose exec -T dashboard python -m pytest` runs everything. Target: ≥ 50 green.
+
+| Test file | What it covers | Count |
+|-----------|----------------|-------|
+| `tests/test_git_quality.py` | F-15 Code Quality (Git × AI) — subject regex, team rollup, per-author dedup, $/fix safety, churn rollup | 15 |
+| `tests/test_ux_help.py` | F-16 help tooltips — section() + kpi_row() help= param, HTML escape, a11y | 5 |
+| `tests/test_ai_tools.py` | F-12 AI Tools tabs — freshness, user shapes, ChatGPT flag, high-spender ranking | ~10 |
+| `tests/test_git_correlation.py` | Git × AI segments, bot detection, alias dedup, repo filter | 11 |
+| `tests/test_pages_smoke.py` | All Streamlit pages render without crashing | ~5 |
+| `tests/test_sources_anthropic.py` | Anthropic JSON loader — shape, idempotency, filename pattern | ~5 |
+| `tests/test_sources_cursor.py` | Cursor JSON loader — shape, JSON-over-CSV priority | ~3 |
+| `tests/test_cursor_to_anthropic.py` | Cursor → Anthropic synth — idempotency, empty CSV case | 3 |
+| `tests/test_overview.py` | F-01 Overview — KPI keys, zero-user case, perf, delta calc | ~5 |
+| `tests/test_filters.py` | F-13 filters — date presets, API-key drill-down, project filter | ~10 |
+| `tests/test_costs.py`, `test_devs.py`, `test_seats.py`, `test_models.py`, `test_alerts.py`, `test_repos.py`, `test_pr_quality.py`, `test_insights.py` | Legacy feature suites (F-02 … F-08) | ~30 |
+| `tests/test_filters_matrix.py`, `test_e2e_filter_propagation.py` | Filter propagation across all tabs | ~10 |
+| `tests/test_sources_etl_real.py` | Hits real source files (smoke test for production data) | ~5 |
+
+If any test goes red after changes, the failing line tells you which `FR-XX.Y.Z.N` requirement broke — that ID also exists in `docs/SPEC.md` so you can read the original spec.
+
+---
+
+## Snapshots — using the daily audit trail
+
+The `snapshotter` sidecar writes `snapshots/$(date -u +%F).txt` once per day:
+1. Full `report_i_data` dump (10 sections: total spend, per-org, Anthropic-by-purpose, top spenders, top models, ChatGPT outliers, Cursor leaderboard, Claude Code top, Git × AI segments, summary KPIs).
+2. `audit_identity_collisions` output (catch any regression where loaders missed a cross-domain merge).
+3. Retention: last 30 days, older files auto-deleted by `find -mtime`.
+
+**When to use:**
+- "Did we have these numbers 3 days ago?" → `cat snapshots/2026-05-13.txt`
+- "Did our Top 5 spenders change this week?" → `diff snapshots/2026-05-09.txt snapshots/2026-05-16.txt | grep "Top 15"`
+- "Did a new dual-domain person sneak in?" → tail any recent snapshot for `audit_identity_collisions` block
+
+**If snapshotter is unhealthy:**
+- `docker logs hmnd-snapshotter --tail 50` — usually a sync failure or schema drift
+- Manual snapshot any time: `docker compose exec -T dashboard python -m scripts.report_i_data > snapshots/manual.txt`
 
 ---
 
