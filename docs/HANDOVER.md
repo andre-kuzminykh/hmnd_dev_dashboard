@@ -159,11 +159,12 @@ docker compose exec -T dashboard python -m scripts.sync
 
 | Artefact | File | Audience |
 |----------|------|----------|
-| Living spec | `docs/SPEC.md` | engineering |
+| Living spec (active features) | `docs/SPEC.md` | engineering |
+| Archived legacy specs (F-02 … F-09 multi-page) | `docs/archive/SPEC_legacy_features.md` | reference |
 | Verify runbook | `docs/VERIFY.md` | maintainer |
 | Report I — AI Usage / Adoption / Economics | `docs/REPORT_I.md` | leadership |
 | CEO-mobile mirror | `CEO_BRIEF.html` | leadership |
-| Report II prep | `scripts/audit_repos_ai_readiness.py` | future maintainer |
+| Report II — Technical Repository Audit | `docs/REPORT_II.md` | leadership |
 
 Regenerate Report I numbers with a fresh 30d window:
 

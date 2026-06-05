@@ -2,10 +2,14 @@
 
 > Источник правды для разработки. Иерархия: **Feature → User Flow → Use Case → Requirements (FR/NFR) → Tests by layer**.
 >
+> **Active features in the live UI:** F-01 (Executive Overview, `frontend/sections/overview.py`), F-12 … F-27 (AI Tools tabs, `frontend/sections/ai_tools.py`), plus filters/ingestion/code-quality/tooltips/layout iterations. Renderer: `frontend/main.py` execs `overview.py` + `ai_tools.py`.
+>
+> **Archived multi-page features** (F-02 … F-09): see [`archive/SPEC_legacy_features.md`](archive/SPEC_legacy_features.md). Their backend services and tests still exist and pass; they're not reachable from the live UI.
+>
 > **Documentation migration policy (введено 2026-05-16, lazy):**
 > - Features F-01 … F-16 — старый формат `Feature → US → BDD → FR/NFR → Tests`. Не переписываются массово.
 > - Features F-17 + — новый формат `Feature → UF → UC → FR/NFR → Tests-by-layer` (см. F-17 как образец).
-> - Любая фича, которую трогаем после 2026-05-16, **переписывается** в новый формат в том же PR. Это даёт постепенную миграцию без big-bang rewrite.
+> - Любая фича, которую трогаем после 2026-05-16, **переписывается** в новый формат в том же PR.
 > - Тесты раскладываются на 4 уровня: **T-INFRA** (env/files/auth) · **T-DATA** (format/parsing/schema) · **T-SVC** (business logic) · **T-AI** (prompts/agents).
 
 ## Условные обозначения ID
@@ -70,225 +74,13 @@ And total_spend не превышает значения "All" из предыд
 
 ---
 
-## F-02 — Costs by People
+## F-02 … F-09 — Legacy multi-page features (archived)
 
-### US-02.1 — Таблица расходов по пользователям
+Specs for **F-02 Costs by People**, **F-03 Seats & Licenses**, **F-04 Developer AI Usage**, **F-05 Repositories & AI Code %**, **F-06 PR Quality**, **F-07 Models**, **F-08 Alerts**, **F-09 Settings & Connectors** describe pages from the original multi-page architecture. `frontend/main.py` no longer renders them — the live UI is Executive Overview (F-01) + AI Tools (F-12).
 
-> *As a* Finance/Ops lead
-> *I want* видеть таблицу с расходом по людям, разбитым по провайдеру, и графики поверх неё
-> *so that* находить аутлаеров и считать unit-economics на разработчика.
+Their backend services and test files still exist and pass; they're just not reachable from the live UI. The Models capability migrated into the AI Tools `Models` tab (F-12); the Anthropic / OpenAI / GitHub credentials moved from an in-UI Settings page to `.env`.
 
-#### SC-02.1.1 — Таблица с данными за период
-
-```gherkin
-Given выбран период 7d
-When пользователь открывает "Costs by People"
-Then отрисовывается таблица со столбцами: User, Team, OpenAI $, Anthropic $, Tokens in, Tokens out, Models, Last activity, Limit status
-And строки отсортированы по убыванию суммы (OpenAI $ + Anthropic $)
-And таблица содержит ровно по одной строке на пользователя с активностью в периоде
-```
-
-**Требования:**
-
-- **FR-02.1.1.1** — Сервис `get_costs_by_user(period, provider, team)` возвращает список dict-ов с полями: `user_id`, `user_name`, `team`, `cost_openai`, `cost_anthropic`, `tokens_in`, `tokens_out`, `models` (list[str]), `last_activity` (datetime), `limit_status` (`ok|warn|breach`).
-- **FR-02.1.1.2** — `limit_status` рассчитывается как: `ok` если `cost < 0.8 * monthly_limit`, `warn` если `0.8 ≤ cost < 1.0`, `breach` если `cost ≥ monthly_limit`.
-- **FR-02.1.1.3** — Bar chart показывает сумму расходов по людям; stacked bar — OpenAI vs Anthropic.
-- **FR-02.1.1.4** — Heatmap day×user показывает активность за период (значение = `tokens_in + tokens_out`).
-- **NFR-02.1.1.1** — Таблица поддерживает сортировку по любому числовому столбцу (Streamlit dataframe).
-
-#### SC-02.1.2 — Detect spend anomaly
-
-```gherkin
-Given пользователь "Ivan" имеет средний дневной расход $5 в последние 30 дней
-And сегодня его расход $80
-When алгоритм аномалий запускается
-Then "Ivan" попадает в список suspicious_users
-And под его строкой в таблице рисуется бейдж "spike"
-```
-
-**Требования:**
-
-- **FR-02.1.2.1** — Алгоритм аномалий: пользователь помечается `spike`, если `today_cost > 3 × mean(last_30d)` И `today_cost > 20 USD`.
-- **FR-02.1.2.2** — Список suspicious пишется в таблицу `alerts` с типом `spend_spike`.
-- **NFR-02.1.2.1** — Алгоритм работает по pre-агрегированной view `daily_costs`, не сканирует raw `usage_events`.
-
----
-
-## F-03 — Seats & Licenses
-
-### US-03.1 — Видимость утилизации платных мест
-
-> *As an* Ops manager
-> *I want* видеть, кто из выданных сидений реально используется
-> *so that* отзывать неиспользуемые места и считать экономию.
-
-#### SC-03.1.1 — Сводка сидений
-
-```gherkin
-Given в БД 50 seats куплено, 42 назначено, 31 активен за 30d
-When пользователь открывает "Seats & Licenses"
-Then отображаются числа: Bought=50, Assigned=42, Active 30d=31, Inactive paid=11
-And потенциальная waste = Inactive paid × средняя цена сидения
-```
-
-**Требования:**
-
-- **FR-03.1.1.1** — Сервис `get_seats_summary()` возвращает: `bought`, `assigned`, `active_30d`, `inactive_paid`, `potential_waste_usd`.
-- **FR-03.1.1.2** — `inactive_paid` = seats со статусом `assigned` И `last_used_at < now() - 30d` (или `NULL`).
-- **FR-03.1.1.3** — Таблица сидений содержит: User, Seat type, Provider, Assigned (bool), Last used, Usage 30d, Recommendation (`keep|review|revoke`).
-- **FR-03.1.1.4** — Recommendation: `revoke` если `last_used_at < now() - 30d`, `review` если `last_used_at в [14d, 30d]`, иначе `keep`.
-
----
-
-## F-04 — Developer AI Usage
-
-### US-04.1 — Карта использования по разработчикам
-
-> *As an* Engineering manager
-> *I want* видеть, сколько каждый разработчик тратит токенов и денег, какую долю AI-кода даёт
-> *so that* понимать ROI и подсвечивать гиперактивных/недоиспользующих.
-
-#### SC-04.1.1 — Таблица + графики
-
-```gherkin
-Given фильтр team=Backend, period=30d
-When пользователь открывает "Developer Usage"
-Then таблица показывает: Developer, AI requests, Tokens, Cost, Repos touched, PRs, AI code %, Review issues
-And есть график "Cost vs AI code %" — точечная диаграмма для поиска корреляции
-```
-
-**Требования:**
-
-- **FR-04.1.1.1** — Сервис `get_developer_usage(period, team)` объединяет данные из `usage_events`, `pull_requests`, `commits`, `ai_code_attribution`.
-- **FR-04.1.1.2** — `ai_code_pct = sum(ai_lines) / sum(total_lines)` за период по разработчику; при `total_lines == 0` возвращает `None` и в UI рисуется тире.
-- **FR-04.1.1.3** — В UI есть кликабельная ссылка с разработчика на drill-down (его модели, PR, репо).
-- **NFR-04.1.1.1** — Drill-down открывается на той же странице через `st.session_state["drilldown_user"]` без full reload.
-
----
-
-## F-05 — Repositories & AI Code %
-
-### US-05.1 — Доля AI-кода в репозиториях
-
-> *As a* CTO
-> *I want* видеть, сколько % кода в каждом репозитории создано ИИ
-> *so that* контролировать качество и риск критических компонентов.
-
-#### SC-05.1.1 — Таблица репозиториев
-
-```gherkin
-Given в БД есть данные по 5 репозиториям с метками AI-attribution
-When пользователь открывает "Repositories"
-Then таблица показывает: Repo, Commits, PRs, Lines added, AI-attributed lines, AI code %, Risk
-And Risk = "high" для критических repo с AI% > 60
-```
-
-**Требования:**
-
-- **FR-05.1.1.1** — Сервис `get_repos_overview(period)` возвращает агрегаты по `repositories` и `commits`, `pull_requests`, `ai_code_attribution`.
-- **FR-05.1.1.2** — Источники AI-attribution (в порядке доверия): `commit_message_marker` ("AI-assisted: yes"), `pr_template_flag`, `agent_metadata` (commit trailer `Co-authored-by: claude`/`copilot`/`cursor`/`codex`), `heuristic_block_size` (≥ 40 строк за один коммит).
-- **FR-05.1.1.3** — Risk-классификация: `high` если репо помечен `is_critical=True` И `ai_code_pct > 60`; `medium` если `ai_code_pct > 40`; иначе `low`.
-- **NFR-05.1.1.1** — Источник AI-attribution и confidence сохраняются в таблицу `ai_code_attribution` для аудита.
-
----
-
-## F-06 — PR Quality
-
-### US-06.1 — Качество AI-кода через призму PR
-
-> *As a* Tech lead
-> *I want* видеть PR'ы с долей AI-кода, ревью-комментарии, баги после мержа, флаги rollback
-> *so that* находить рискованные PR и улучшать процессы ревью.
-
-#### SC-06.1.1 — Таблица и risk score
-
-```gherkin
-Given PR #123 имеет AI%=80, 2 review comments, 1 баг после мержа, changed 3 critical files
-When открывается "PR Quality"
-Then в строке PR #123 risk_score рассчитан по формуле и виден бейдж "high"
-```
-
-**Требования:**
-
-- **FR-06.1.1.1** — `risk_score = ai_code_pct/100 × (1 + critical_files_changed) × max(1, review_comments) × (1 + bug_count)` с округлением до 2 знаков.
-- **FR-06.1.1.2** — Бейдж: `high` ≥ 5.0, `medium` ≥ 2.0, иначе `low`.
-- **FR-06.1.1.3** — Сервис `get_pr_quality(period, repo)` возвращает PR'ы, отсортированные по `risk_score desc`.
-
----
-
-## F-07 — Models
-
-### US-07.1 — Сравнение моделей по стоимости и ошибкам
-
-> *As an* Architect
-> *I want* видеть какие модели сколько стоят и кто их основной потребитель
-> *so that* находить возможности заменить модель на дешевле.
-
-#### SC-07.1.1 — Таблица моделей
-
-```gherkin
-Given за 30d использовалось 6 разных моделей
-When открыта вкладка "Models"
-Then таблица: Provider, Model, Requests, Tokens, Cost, Avg latency, Error rate, Main users (top-3)
-And строки отсортированы по Cost desc
-```
-
-**Требования:**
-
-- **FR-07.1.1.1** — Сервис `get_models_breakdown(period)` возвращает таблицу по моделям + top-3 пользователей по `cost desc`.
-- **FR-07.1.1.2** — `error_rate = failed_requests / total_requests`, при `total_requests == 0` возвращает `None`.
-- **FR-07.1.1.3** — Цены моделей берутся из таблицы `model_prices`, версионируются по дате.
-
----
-
-## F-08 — Alerts
-
-### US-08.1 — Управление алертами
-
-> *As an* Ops manager
-> *I want* видеть и настраивать правила алертов и получать уведомления
-> *so that* реагировать на риски и переборы бюджета быстро.
-
-#### SC-08.1.1 — Таблица алертов
-
-```gherkin
-Given в БД есть 3 активных алерта разной severity
-When открыта вкладка "Alerts"
-Then таблица: Created, Type, Severity, Subject, Message, Status (new|ack|resolved)
-And есть фильтры по severity и status
-```
-
-**Требования:**
-
-- **FR-08.1.1.1** — Engine `evaluate_alert_rules()` запускает все активные правила и пишет новые алерты в таблицу `alerts`, не дублируя по уникальному `dedup_key`.
-- **FR-08.1.1.2** — Поддерживаемые правила (минимум): `user_daily_spend > 50`, `team_monthly_budget_exceed > 80%`, `inactive_paid_seat > 14d`, `ai_code_pct_in_critical > 60`, `pr_ai_code_pct > 80 AND no_human_review`, `provider_usage_spike > 3x_avg`.
-- **FR-08.1.1.3** — Severity: `critical|high|medium|low` зашиты в правиле.
-- **FR-08.1.1.4** — UI поддерживает изменение статуса алерта `new → ack → resolved`.
-
----
-
-## F-09 — Settings & Connectors
-
-### US-09.1 — Подключение источников
-
-> *As an* Admin
-> *I want* подключить ключи OpenAI / Anthropic / GitHub в одном месте
-> *so that* запустить синк без редактирования файлов вручную.
-
-#### SC-09.1.1 — Сохранение credentials
-
-```gherkin
-Given открыта страница "Settings"
-When пользователь вводит OpenAI API key и нажимает "Save"
-Then ключ сохраняется в .streamlit/secrets.toml путь, валидируется через ping-запрос
-And в UI отображается статус "connected"
-```
-
-**Требования:**
-
-- **FR-09.1.1.1** — Поддержка трёх коннекторов с интерфейсом `Connector(test_connection() → bool, sync(period) → SyncReport)`.
-- **FR-09.1.1.2** — Секреты не сохраняются в БД и не логируются.
-- **NFR-09.1.1.1** — При отсутствии ключа коннектор работает в режиме `mock=True` и читает seed-данные.
+→ Full specs preserved at **[`docs/archive/SPEC_legacy_features.md`](archive/SPEC_legacy_features.md)** along with the matching test-trace rows.
 
 ---
 
@@ -996,17 +788,7 @@ And `git_commits.repo` column в CSV содержит short_name, не full org/
 | `tests/test_overview.py::test_nfr_01_1_1_1_perf_100k` | NFR-01.1.1.1 |
 | `tests/test_overview.py::test_fr_01_1_2_1_provider_filter` | FR-01.1.2.1 |
 | `tests/test_overview.py::test_fr_01_1_2_2_team_filter` | FR-01.1.2.2 |
-| `tests/test_costs.py::test_fr_02_1_1_1_user_costs_shape` | FR-02.1.1.1 |
-| `tests/test_costs.py::test_fr_02_1_1_2_limit_status` | FR-02.1.1.2 |
-| `tests/test_costs.py::test_fr_02_1_2_1_spike_detection` | FR-02.1.2.1 |
-| `tests/test_seats.py::test_fr_03_1_1_1_summary_keys` | FR-03.1.1.1 |
-| `tests/test_seats.py::test_fr_03_1_1_4_recommendation` | FR-03.1.1.4 |
-| `tests/test_devs.py::test_fr_04_1_1_2_ai_code_pct` | FR-04.1.1.2 |
-| `tests/test_repos.py::test_fr_05_1_1_3_risk` | FR-05.1.1.3 |
-| `tests/test_pr_quality.py::test_fr_06_1_1_1_risk_score` | FR-06.1.1.1 |
-| `tests/test_models.py::test_fr_07_1_1_2_error_rate` | FR-07.1.1.2 |
-| `tests/test_alerts.py::test_fr_08_1_1_1_dedup` | FR-08.1.1.1 |
-| `tests/test_alerts.py::test_fr_08_1_1_2_rules_set` | FR-08.1.1.2 |
+| (F-02 … F-08 test rows moved to [`archive/SPEC_legacy_features.md`](archive/SPEC_legacy_features.md)) | FR-02 … FR-08 |
 | `tests/test_ai_tools.py::test_fr_12_1_1_1_freshness` | FR-12.1.1.1 |
 | `tests/test_ai_tools.py::test_fr_12_1_1_2_overview_keys` | FR-12.1.1.2 |
 | `tests/test_ai_tools.py::test_fr_12_1_1_3_source_mock` | FR-12.1.1.3 |
@@ -1081,26 +863,34 @@ And `git_commits.repo` column в CSV содержит short_name, не full org/
 ### Data layer (`/data`)
 - `schema.sql` — DDL для всех таблиц
 - `db.py` — connection helper, миграции
-- `models.py` — typed dataclasses
+- `schema.sql` — DDL для всех таблиц
 - `seed.py` — генератор демо-данных
-- `connectors/openai.py`, `anthropic.py`, `github.py` — коннекторы с mock-режимом
+- `sources/_identity.py` — cross-domain identity resolver (`@thehumanoid.ai` ↔ `@skl.vc`)
+- `sources/anthropic_json.py`, `cursor_json.py`, `openai_json.py`, `git_csv.py` — JSON / CSV loaders
+- `sources/_common.py` — `latest_match()`, `find_all()` helpers
+- `connectors/openai.py` — live OpenAI Admin API connector
+- `cursor_to_anthropic.py` — synthesise Anthropic Agent events from Cursor `agent_completions`
 
 ### Backend layer (`/backend`)
-- `services/overview.py` (FR-01.*)
-- `services/costs.py` (FR-02.*)
-- `services/seats.py` (FR-03.*)
-- `services/developers.py` (FR-04.*)
-- `services/repos.py` (FR-05.*)
-- `services/pr_quality.py` (FR-06.*)
-- `services/models_svc.py` (FR-07.*)
-- `services/alerts.py` (FR-08.*)
-- `analytics.py` — общие aggregations и helpers
+- `config.py` — `.env` loader
+- `analytics.py` — общие SQL helpers, `api_key_clause`
+- `services/sync.py` + `scripts/sync.py` — sync orchestrator
+- `services/overview.py` (FR-01) — Executive Overview KPIs / spend chart
+- `services/ai_tools.py` (FR-12) — AI Tools tabs (Claude / ChatGPT / Cursor / Models / High Spenders)
+- `services/cursor_analytics.py` — Cursor leaderboard / DAU / contribution / models
+- `services/git_correlation.py` — Git × AI per-dev segments + team AI share
+- `services/git_quality.py` (FR-15) — Code Quality (bug-fix rate, $/fix, churn)
+- `services/models_svc.py` — `get_models_breakdown()` used by AI Tools Models tab
+- `services/api_keys.py`, `openai_projects.py` — F-13 API-key / project drill-downs
+- `services/costs.py`, `seats.py`, `developers.py`, `repos.py`, `pr_quality.py`, `alerts.py`, `insights.py` — legacy (see `archive/SPEC_legacy_features.md`)
 
 ### Frontend layer (`/frontend`)
-- `app.py` — entry point, роутинг и общие стили (Overview)
-- `theme.py` — палитра, CSS-инъекция в стиле HUMANOID
-- `components.py` — KPI-карточки, бейджи, фильтры
-- `pages/` — отдельные экраны (multi-page)
+- `main.py` — entry point; execs `overview.py` + `ai_tools.py` into a shared globals dict
+- `theme.py` — palette, CSS injection
+- `components.py` — `kpi_card`, `kpi_row`, `section`, `badge`, `hero`, `filters_bar`, `_help_icon`
+- `sections/overview.py` — Executive Overview block (hero + freshness chips + filters bar + KPI cards + spend-over-time chart)
+- `sections/ai_tools.py` — 8 tabs: Overview / Claude Users / Claude Code / ChatGPT / Cursor / Models / Devs (Git × AI) / ⚠ High Spenders
+- `sections/{costs,seats,developers,repositories,pr_quality,models,alerts,settings,api_keys,insights,projects}.py` — legacy section files (not loaded by `main.py`)
 
 ---
 
